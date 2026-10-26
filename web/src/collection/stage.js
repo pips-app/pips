@@ -25,7 +25,6 @@ import { grid, feedRect, feedWidth, runs, groupKey } from './layout.js';
  *   collapse: null | {t0: number, dur: number},
  *   flying: null | {at: (now: number) => {x: number, y: number, w: number, cap: number}},
  *   rr: null | {x: number, y: number, w: number, h: number, cap: number, o: number, z: number},
- *   dragged?: boolean,
  * }} Item
  */
 

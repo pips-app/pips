@@ -333,6 +333,25 @@ test('on a computer, a mouse and the keys reach every level', async () => {
   await p.keyboard.up('Control');
   await settle();
   assert.equal(await level(), 2, 'ctrl + a wheel notch: one level closer');
+
+  // Pulled down, the card flies to the archive; its neighbour takes the
+  // middle in one glide — the pull is not handed over to it on landing.
+  await p.evaluate(() => {
+    const c = document.querySelector('.stage-host .on-stage.centre');
+    const next = /** @type {HTMLElement} */ (c.nextElementSibling);
+    const ys = (window.__ys = []);
+    const t0 = performance.now();
+    const f = () => { ys.push(Number(next.style.transform.split(',')[1]?.replace('px', ''))); if (performance.now() - t0 < 1600) requestAnimationFrame(f); };
+    requestAnimationFrame(f);
+  });
+  const box = await p.$eval('.stage-host .on-stage.centre', (e) => { const b = e.getBoundingClientRect(); return { x: b.x + b.width / 2, y: b.y + b.height / 2 }; });
+  await p.mouse.move(box.x, box.y);
+  await p.mouse.down();
+  for (let i = 1; i <= 12; i++) await p.mouse.move(box.x, box.y + i * 30);
+  await p.mouse.up();
+  await p.waitForTimeout(1800);
+  const ys = await p.evaluate(() => window.__ys);
+  assert.ok(Math.max(...ys) <= ys[0] + 1, `the neighbour never drops below where it was (${ys[0]} → max ${Math.max(...ys)})`);
   await p.context().close();
 });
 

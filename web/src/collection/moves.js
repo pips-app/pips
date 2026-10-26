@@ -115,9 +115,11 @@ export function createMoves(o) {
         drawStrip(0, c.id, to);
       }, t0 + dur - now);
     });
+    // The pull belonged to the card that now flies (from where the finger
+    // left it); kept on, it would move whichever card comes to the middle.
+    stage.dragY.set(0);
     stage.kick();
     setTimeout(() => {
-      stage.dragY.set(0);
       o.busy.n--;
       o.selection.stop();
       o.sync();
