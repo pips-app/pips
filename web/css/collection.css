@@ -40,6 +40,8 @@
 .turn-flip > .face { position: absolute; inset: 0; backface-visibility: hidden; -webkit-backface-visibility: hidden; background: none; box-shadow: none; }
 .turn-flip > .front-face .frame .face { box-shadow: 0 30px 60px -30px #000, 0 2px 4px #0006; }
 .turn-flip > .back-face { transform: rotateY(180deg); }
+.turn-flip.flat { transform-style: flat; }
+.turn-flip.flat > .back-face { transform: none; }
 .turn-flip > .back-face.live { pointer-events: auto; }
 .turn-flip > .back-face:not(.live) * { pointer-events: none !important; }
 

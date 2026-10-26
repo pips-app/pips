@@ -208,7 +208,7 @@ test('the collection: tags, search, archive and the bin, all without gestures', 
   await p.waitForTimeout(800);
   assert.equal(await sub(), 'карточка');
   // A press on the card's left half turns it the other way.
-  const flip = async () => Math.round(Number(/rotateY\((-?[\d.]+)deg/.exec(await p.$eval('.turn-flip', (e) => e.style.transform))?.[1]) / 180) * 180;
+  const flip = async () => Math.round(Number(await p.$eval('.turn-flip', (e) => e.dataset.angle)) / 180) * 180;
   const before = await flip();
   const card = await p.locator('.turn').boundingBox();
   await p.mouse.click(card.x + card.width * 0.2, card.y + card.height * 0.9);

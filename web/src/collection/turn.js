@@ -70,7 +70,13 @@ export function createTurn(o) {
       back.style.fontSize = `${Math.max(9, w * 0.037 * fit)}px`;
       const inner = /** @type {HTMLElement|null} */ (back.firstElementChild);
       if (inner && fit > 0.8 && inner.scrollHeight > inner.clientHeight + 1) { fit -= 0.04; loop.kick(); }
-      flip.style.transform = `rotateX(${rotX.v}deg) rotateY(${rotY.v}deg)`;
+      // 3D only while it moves. At rest the card lies flat: no 3D layer to
+      // keep up to date while the back is edited (Firefox on Android left
+      // stale stripes there), crisp text, and presses land where they look.
+      const resting = rotY.v === rotY.to && rotX.v === 0 && rotX.to === 0 && rotY.v % 180 === 0;
+      flip.classList.toggle('flat', resting);
+      flip.dataset.angle = String(Math.round(rotY.v)); // which way it lies, for tests and tools
+      flip.style.transform = resting ? '' : `rotateX(${rotX.v}deg) rotateY(${rotY.v}deg)`;
       // Each face is hidden outright when turned away: backface-visibility
       // alone shows a mirrored front on some engines (Firefox).
       const b = showsBack();
