@@ -89,8 +89,12 @@ input.tag.add::placeholder { color: var(--shade-dim); }
    is the limit. */
 .back-in textarea { flex: 1 1 auto; width: 100%; min-height: calc(5 * 1.45em + 1.1em); line-height: 1.45em; overflow: hidden; resize: none; border: 0;
   border-radius: .5em; padding: .55em .7em; font: inherit; color: var(--shade-ink); -webkit-user-select: text; user-select: text; touch-action: pan-y;
-  background: color-mix(in srgb, var(--shade-ink) 6%, transparent) repeating-linear-gradient(transparent 0 calc(1.45em - 1px),
-    color-mix(in srgb, var(--shade-ink) 10%, transparent) calc(1.45em - 1px) 1.45em) content-box; }
+  /* One ruled line per text line: a 1 px line at the foot of a tile one
+     line tall, repeated. (A repeating gradient with stops at fractions of
+     a pixel draws thick bands in Firefox.) */
+  background-color: color-mix(in srgb, var(--shade-ink) 6%, transparent);
+  background-image: linear-gradient(to top, color-mix(in srgb, var(--shade-ink) 12%, transparent) 1px, transparent 1px);
+  background-size: 100% 1.45em; background-origin: content-box; background-clip: padding-box; }
 .back-in textarea::placeholder { color: var(--shade-dim); }
 .back-in textarea[readonly] { pointer-events: none; }
 .back-in textarea:focus-visible { outline: 2px solid color-mix(in srgb, var(--shade-ink) 30%, transparent); outline-offset: 0; }

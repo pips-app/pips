@@ -65,7 +65,9 @@ export const hasIdentity = () => app.identity != null;
 export async function setIdentity(identity) {
   await store.setMeta('seed', identity.seed());
   app.identity = identity;
-  await store.persist();
+  // Asked, not awaited: Firefox answers only after the person replies to its
+  // prompt, and the app must not wait on that to start.
+  store.persist().catch(() => {});
   changed();
 }
 
