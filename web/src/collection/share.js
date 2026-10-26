@@ -9,6 +9,8 @@ import { app, subscribe } from '../state.js';
 import { qrFor, keepAwake } from '../ui/qr.js';
 import { editionPanel } from '../ui/edition.js';
 import { segmented } from '../kit/segmented.js';
+import { topSheet } from '../kit/top-sheet.js';
+import { FRAME_SHADES } from '../ui/card.js';
 
 /**
  * Fills `body` and returns a function that stops what keeps running
@@ -59,4 +61,50 @@ export function fillShare(body, entry) {
     showCode(app.identity.sealAsSender(entry.rec.payload, app.profile.nick || 'pips'), t('give.copy-of', entry.card.author ? `@${entry.card.author}` : '—'));
   }
   return () => { stop(); release(); };
+}
+
+/**
+ * The sheet itself: filled as soon as a card is lifted (so the code is
+ * ready when it comes down), opened for good, or let go.
+ * @param {{busy: {n: number}, closed: () => void}} o
+ * busy: held while the sheet is open; closed: after it went away.
+ */
+export function createShareSheet(o) {
+  /** @type {null | (() => void)} */
+  let stop = null;
+  /** @type {string|null} */
+  let of = null;
+  const sheet = topSheet({ label: t('share.title'), onClose: () => { stop?.(); stop = null; of = null; o.busy.n = Math.max(0, o.busy.n - 1); o.closed(); } });
+  const api = {
+    els: sheet.els,
+    get open() { return sheet.open; },
+    /** @param {number} f @param {boolean} [anim] */
+    follow: (f, anim) => sheet.follow(f, anim),
+    close: () => sheet.close(),
+    /** @param {string} id */
+    prepare(id) {
+      if (of === id) return;
+      const e = app.cards.get(id);
+      if (!e) return;
+      api.drop();
+      of = id;
+      sheet.paint(FRAME_SHADES[e.card.frame] ?? FRAME_SHADES[0]);
+      stop = fillShare(sheet.body, e);
+    },
+    /** Lets go of a code that was only being looked at. */
+    drop() {
+      if (sheet.open) return;
+      stop?.();
+      stop = null;
+      of = null;
+    },
+    /** @param {string} id */
+    show(id) {
+      if (sheet.open) return;
+      api.prepare(id);
+      o.busy.n++;
+      sheet.show();
+    },
+  };
+  return api;
 }

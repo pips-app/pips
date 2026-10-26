@@ -58,11 +58,14 @@ thing, with one way of fitting together:
      the touch arbiter: one owner per touch, everything else waits; a second
      finger anywhere makes a pinch. Plain logic, no app knowledge.
   3. `collection/layout.js`, `collection/query.js` — pure functions (cards in,
-     rectangles or lists out), tested under node in `tests/unit/`.
+     rectangles or lists out), tested under node in `tests/unit/`, as is the
+     touch arbiter.
   4. `kit/*` controls — icon button, segmented switch, chips, search field,
      top sheet, strip, action bar, identicon.
   5. Screen parts — `collection/stage.js` (the zoom axis), `turn.js` (the card
-     that turns over), `back.js`, `share.js`.
+     that turns over), `back.js`, `share.js` (the share sheet), `moves.js`
+     (sending cards between places, the strip, undo), `selection.js`,
+     `first-run.js`.
   6. Screens — `collection/view.js` only puts parts together and decides
      what gestures mean.
 - **Every gesture has a button.** Pull up / down in the feed is the action bar's
