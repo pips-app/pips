@@ -43,8 +43,9 @@ import { weekLabel, monthLabel } from './dates.js';
 
 /** The room the bar takes above the cards, and the tabs or the card's actions below. */
 const TOP = 76, BOTTOM = 84;
-/** A mouse here, rather than a finger: the buttons for what a pinch or a swipe does show. */
-const MOUSE = typeof matchMedia === 'function' && matchMedia('(hover: hover) and (pointer: fine)').matches;
+/** Not a finger here (a mouse, or nothing known): the buttons for what a
+ * pinch or a swipe does show. Headless browsers report no pointer at all. */
+const MOUSE = !(typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches);
 
 /** @param {{draw: () => void}} o what the first-run "draw" button does */
 export function collectionView(o) {
