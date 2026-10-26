@@ -65,7 +65,7 @@ jobs:
         run: npx --yes -p typescript@5.9.3 tsc -p web/jsconfig.json
       # The interface's plain parts (layout, filters, springs), without a browser.
       - name: Unit tests of the app
-        run: node --test tests/unit/*.test.mjs
+        run: node --test --test-reporter=spec --test-reporter-destination=stdout --test-reporter=./tests/gh-annotate.mjs --test-reporter-destination=stdout tests/unit/*.test.mjs
       # The app's journeys in a real browser, with the core just built:
       # import, exchange by QR, refusals, numbered copies, backups.
       - uses: actions/setup-node@v4
@@ -75,15 +75,20 @@ jobs:
           cache-dependency-path: tests/e2e/package-lock.json
       - name: Browser tests
         working-directory: tests/e2e
+        env:
+          # Failures as annotations, readable without the logs.
+          ANNOTATE: --test-reporter=spec --test-reporter-destination=stdout --test-reporter=../gh-annotate.mjs --test-reporter-destination=stdout
         run: |
           npm ci
           npx playwright install --with-deps chromium firefox
-          npm test
+          npm test -- $ANNOTATE
       # The same journeys in Firefox: it draws and schedules differently,
       # and has caught bugs Chromium did not show.
       - name: Browser tests in Firefox
         working-directory: tests/e2e
-        run: BROWSER=firefox npm test
+        env:
+          ANNOTATE: --test-reporter=spec --test-reporter-destination=stdout --test-reporter=../gh-annotate.mjs --test-reporter-destination=stdout
+        run: BROWSER=firefox npm test -- $ANNOTATE
       - run: scripts/build-site.sh
       - uses: actions/upload-pages-artifact@v3
         with:
