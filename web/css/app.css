@@ -10,7 +10,9 @@
 @import url(kit/top-sheet.css);
 @import url(kit/strip.css);
 @import url(kit/action-bar.css);
+@import url(kit/bottom-sheet.css);
 @import url(collection.css);
+@import url(editor.css);
 
 @font-face { font-family: "Literata"; font-style: normal; font-weight: 200 900; font-display: swap;
   src: url(../fonts/literata-cyrillic-opsz-normal.woff2) format("woff2");
@@ -99,6 +101,7 @@ svg.i { width: 22px; height: 22px; stroke: currentColor; fill: none; stroke-widt
 .btn:disabled { opacity: .45; cursor: default; }
 .row-btns { display: flex; gap: 8px; }
 .row-btns .btn { flex: 1; }
+.pill { border: 0; border-radius: 99px; padding: 8px 14px; font-size: 14px; font-weight: 500; background: var(--raise2); color: var(--text); flex: none; }
 .text-btn { border: 0; background: none; color: var(--cobalt-hi); font-weight: 500; padding: 10px; border-radius: 10px; }
 .field { display: flex; align-items: center; gap: 10px; background: var(--raise); border-radius: 12px; min-height: 48px;
   padding: 0 12px; box-shadow: inset 0 0 0 1px var(--line); margin-bottom: 8px; }
@@ -116,11 +119,10 @@ textarea.words { width: 100%; min-height: 120px; resize: vertical; border: 0; bo
 .group h2 { margin: 0 0 8px; font-size: 12px; font-weight: 500; color: var(--text3); letter-spacing: .02em; }
 .error { color: var(--warn); font-size: 13px; margin: 8px 2px 0; min-height: 1em; }
 
-.toast { position: fixed; left: max(14px, calc((100% - 460px) / 2)); right: max(14px, calc((100% - 460px) / 2)); bottom: calc(var(--tabs) + var(--safe-b) + 12px); z-index: 1500;
+.toast { position: fixed; left: max(14px, calc((100% - 460px) / 2)); right: max(14px, calc((100% - 460px) / 2)); top: calc(64px + var(--safe-t)); z-index: 1500;
   display: flex; align-items: center; gap: 10px; background: #2e313b; border-radius: 13px; padding: 6px 6px 6px 16px;
   min-height: 48px; font-size: 14px; box-shadow: 0 14px 30px -12px #000; transition: opacity .2s, transform .2s; }
-.toast.high { bottom: auto; top: calc(64px + var(--safe-t)); }
-.toast[hidden] { display: flex !important; opacity: 0; transform: translateY(12px); pointer-events: none; }
+.toast[hidden] { display: flex !important; opacity: 0; transform: translateY(-12px); pointer-events: none; }
 .toast span { flex: 1; }
 
 /* ----------------------------------------------------------------- cards -- */
@@ -241,5 +243,5 @@ a.btn { text-decoration: none; }
    the size of what they say instead of crossing the screen. */
 .view:not(.collection-view) > .scroll, .view > .import-body, .overlay > .scroll, .onb {
   padding-left: max(16px, calc((100% - 560px) / 2)); padding-right: max(16px, calc((100% - 560px) / 2)); }
-.view:not(.collection-view) > .bar, .overlay > .bar {
+.view:not(.collection-view, .ed-view) > .bar, .overlay > .bar {
   padding-left: max(20px, calc((100% - 560px) / 2 + 4px)); padding-right: max(10px, calc((100% - 560px) / 2 - 6px)); }

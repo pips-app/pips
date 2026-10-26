@@ -76,9 +76,9 @@ export function toast(text, action) {
     toastEl.hidden = true;
     action?.run();
   };
-  // Over an open card, or where the bottom belongs to the card's own bar
-  // and the strip (the tab bar is away), the toast moves up.
-  toastEl.classList.toggle('high', document.querySelector('.overlay') != null || document.body.classList.contains('tabs-away'));
+  // Always in one place, under the top bar: the bottom belongs to the tabs,
+  // a card's actions and the strip, which come and go; a toast moving
+  // with them would jump while it is read (a series of moves updates it).
   toastEl.hidden = false;
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => (toastEl.hidden = true), action ? 5000 : 2400);

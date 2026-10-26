@@ -1,0 +1,14 @@
+/* kit/bottom-sheet.js — rises from below; on a wide screen, a centred panel. */
+.bottom-sheet { position: absolute; z-index: 60; left: max(0px, calc((100% - 520px) / 2)); right: max(0px, calc((100% - 520px) / 2)); bottom: 0;
+  max-height: calc(100% - 40px - var(--safe-t)); display: flex; flex-direction: column; gap: 12px;
+  padding: 8px 16px calc(18px + var(--safe-b)); background: var(--raise); border-radius: 22px 22px 0 0;
+  box-shadow: 0 -18px 40px -16px #000; transform: translateY(calc(100% + 40px)); transition: transform .38s cubic-bezier(.2, .9, .25, 1); }
+.bottom-sheet.on { transform: none; }
+.bottom-sheet.held { transition: none; }
+.bottom-sheet .grab { align-self: center; width: 40px; height: 4px; border-radius: 2px; background: var(--line); margin: 2px 0 2px;
+  box-shadow: 0 0 0 14px transparent; touch-action: none; cursor: grab; }
+.bottom-sheet h2 { margin: 0; font: 600 19px/1.2 var(--serif); }
+.bottom-sheet.low { max-height: 56%; }
+.bottom-sheet-body { min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; scrollbar-width: none; }
+.bottom-sheet-foot:empty { display: none; }
+.bottom-sheet-foot { display: flex; flex-direction: column; gap: 10px; }

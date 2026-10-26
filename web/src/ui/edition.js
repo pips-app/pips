@@ -55,9 +55,7 @@ export function editionPanel(digest) {
 
   const status = n
     ? h('p', { class: 'hint' }, log.of ? t('edition.status.of', n, log.of) : t('edition.status.open', n))
-    : h('div', {},
-      h('div', { class: 'field' }, h('label', {}, t('edition.run')), run),
-      h('p', { class: 'hint' }, t('edition.run.hint')));
+    : [h('div', { class: 'field' }, h('label', {}, t('edition.run')), run), h('p', { class: 'hint' }, t('edition.run.hint'))];
 
   const next = h('button', {
     class: 'btn key wide', disabled: out,
