@@ -69,8 +69,12 @@ thing, with one way of fitting together:
   6. Screens — `collection/view.js` only puts parts together and decides
      what gestures mean.
 - **Every gesture has a button.** Pull up / down in the feed is the action bar's
-  Share / Archive; zooming works with the back arrow, Escape and ctrl+wheel.
-  The browser tests use only the buttons.
+  Share / Archive. With a mouse, − and + in the bar zoom, arrows at the
+  feed's sides leaf through it, the wheel scrolls (ctrl+wheel zooms) and
+  every move has a key. The browser tests use only buttons, clicks and keys.
+- **Drawing reads no layout.** A frame only writes styles: sizes are
+  measured when the layout changes, hits are found from the rectangles
+  drawn last.
 - **Extract on the second use**, not before: a part used once stays in its
   screen until another screen needs it.
 
