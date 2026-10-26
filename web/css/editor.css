@@ -93,6 +93,13 @@
 .ed-shape { flex: 1; height: 44px; border: 0; border-radius: 10px; background: none; color: var(--text2); display: grid; place-items: center; }
 .ed-shape[aria-pressed="true"] { background: var(--raise); color: var(--text); }
 
+/* The selection's actions take the place of the frames while there is a box. */
+.ed-sel-bar { display: flex; gap: 4px; justify-content: center; padding: 10px 12px 4px; }
+.ed-sel-bar[hidden] { display: none; }
+.ed-sel-btn { width: 44px; height: 44px; border: 0; border-radius: 12px; background: var(--raise2); color: var(--text); display: grid; place-items: center; }
+.ed-sel-btn[aria-pressed="true"] { background: var(--cobalt); color: #fff; }
+.ed-view.selecting .ed-frames { display: none; }
+
 /* The precise mode: the pad takes the place of the frames. */
 .ed-pad { display: none; flex: 1; min-height: 180px; margin: 4px 12px 8px; border-radius: 22px; background: var(--raise); border: 1px solid var(--line);
   position: relative; touch-action: none; padding: 14px; flex-direction: column; justify-content: space-between; }

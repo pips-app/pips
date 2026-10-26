@@ -87,11 +87,11 @@ function join(a, b) {
  * @param {{limit?: number, now?: () => number}} [opts]
  */
 export function createModel(doc, opts = {}) {
-  /** @type {Set<(c: {frame: number, cells?: number[], whole?: boolean}) => void>} */
+  /** @type {Set<(c: {frame: number, cells?: number[], whole?: boolean, live?: boolean}) => void>} */
   const listeners = new Set();
   const history = createHistory({ apply: (e, dir) => applyEntry(doc, e, dir), sizeOf, join, ...opts });
 
-  /** @param {{frame: number, cells?: number[], whole?: boolean}} c */
+  /** @param {{frame: number, cells?: number[], whole?: boolean, live?: boolean}} c */
   const changed = (c) => { for (const f of listeners) f(c); };
 
   /** Records a change made already, and says so. @param {Entry} e @param {{label: string, frame?: number, merge?: string}} meta */
@@ -115,7 +115,7 @@ export function createModel(doc, opts = {}) {
 
   const api = {
     doc, history,
-    /** @param {(c: {frame: number, cells?: number[], whole?: boolean}) => void} fn */
+    /** @param {(c: {frame: number, cells?: number[], whole?: boolean, live?: boolean}) => void} fn */
     listen(fn) { listeners.add(fn); return () => listeners.delete(fn); },
 
     /**
@@ -140,8 +140,8 @@ export function createModel(doc, opts = {}) {
         },
         /** Every cell back, to draw a shape anew. */
         reset() { for (const [i, b] of before) buf[i] = b; },
-        /** Shows the stroke so far. */
-        show() { changed({ frame: f, cells: [...before.keys()] }); },
+        /** Shows the stroke so far (live: not yet a step of the history). */
+        show() { changed({ frame: f, cells: [...before.keys()], live: true }); },
         /** Records it as one step (nothing, if nothing changed). @param {string} label */
         commit(label) {
           const i = [...before.keys()].filter((k) => buf[k] !== before.get(k));
@@ -151,7 +151,7 @@ export function createModel(doc, opts = {}) {
         /** Takes it back, unrecorded: a second finger came, or a long press picked a colour. */
         cancel() {
           s.reset();
-          changed({ frame: f, cells: [...before.keys()] });
+          changed({ frame: f, cells: [...before.keys()], live: true });
           before.clear();
         },
       };

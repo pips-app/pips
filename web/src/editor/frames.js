@@ -43,17 +43,19 @@ export function framesStrip(o) {
     /**
      * @param {import('./model.js').Doc} doc @param {number} f the open frame
      * @param {{playing: boolean, shown: number, onion: boolean, delay: number}} s shown: the frame the preview shows
+     * @param {number[]|'all'} dirty the frames whose pictures changed
      */
-    set(doc, f, s) {
+    set(doc, f, s, dirty) {
       open = f;
       if (thumbs.length !== doc.frames.length) {
+        dirty = 'all';
         thumbs = doc.frames.map((_, k) => /** @type {HTMLCanvasElement} */ (h('canvas', {})));
         list.replaceChildren(...thumbs.map((cv, k) => h('button', {
           type: 'button', class: 'ed-frame', onclick: () => (k === open ? o.menu(k) : o.select(k)),
         }, cv)));
       }
       thumbs.forEach((cv, k) => {
-        thumb(cv, doc, k);
+        if (dirty === 'all' || dirty.includes(k)) thumb(cv, doc, k);
         const b = /** @type {HTMLElement} */ (cv.parentElement);
         b.setAttribute('aria-pressed', String(k === f));
         b.setAttribute('aria-label', t(k === f ? 'ed.frame.open' : 'ed.frame.n', k + 1, doc.frames.length));
@@ -71,5 +73,10 @@ export function framesStrip(o) {
     },
     /** Just the preview, while playing. @param {import('./model.js').Doc} doc @param {number} f */
     show(doc, f) { thumb(preview, doc, f); },
+    /** One frame's picture, while it is being drawn. @param {import('./model.js').Doc} doc @param {number} f */
+    draw(doc, f) {
+      if (thumbs[f]) thumb(thumbs[f], doc, f);
+      if (f === open) thumb(preview, doc, f);
+    },
   };
 }

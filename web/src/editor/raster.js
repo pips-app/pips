@@ -109,3 +109,62 @@ export function corner(a, b, c) {
 
 /** Within the canvas. @param {Cell} c @param {number} size */
 export const inside = (c, size) => c.x >= 0 && c.y >= 0 && c.x < size && c.y < size;
+
+// ------------------------------------------------------------ selections --
+
+/** A box of cells, both corners included. @typedef {{x0: number, y0: number, x1: number, y1: number}} Rect */
+/** Cells lifted out of a frame: w×h values, row by row. @typedef {{w: number, h: number, cells: Uint8Array}} Piece */
+
+/** The box spanned by two cells, kept on the canvas. @param {Cell} a @param {Cell} b @param {number} size @returns {Rect} */
+export function span(a, b, size) {
+  const c = (/** @type {number} */ v) => Math.max(0, Math.min(size - 1, v));
+  return { x0: c(Math.min(a.x, b.x)), y0: c(Math.min(a.y, b.y)), x1: c(Math.max(a.x, b.x)), y1: c(Math.max(a.y, b.y)) };
+}
+
+/** @param {Rect} r @param {Cell} c */
+export const within = (r, c) => c.x >= r.x0 && c.x <= r.x1 && c.y >= r.y0 && c.y <= r.y1;
+
+/** The cells of a box. @param {Uint8Array} buf @param {number} size @param {Rect} r @returns {Piece} */
+export function lift(buf, size, r) {
+  const w = r.x1 - r.x0 + 1, h = r.y1 - r.y0 + 1, cells = new Uint8Array(w * h);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) cells[y * w + x] = buf[(r.y0 + y) * size + r.x0 + x];
+  return { w, h, cells };
+}
+
+/** Mirrored left to right ('x') or top to bottom ('y'). @param {Piece} p @param {'x'|'y'} axis @returns {Piece} */
+export function flip(p, axis) {
+  const cells = new Uint8Array(p.cells.length);
+  for (let y = 0; y < p.h; y++) {
+    for (let x = 0; x < p.w; x++) {
+      cells[y * p.w + x] = axis === 'x' ? p.cells[y * p.w + (p.w - 1 - x)] : p.cells[(p.h - 1 - y) * p.w + x];
+    }
+  }
+  return { w: p.w, h: p.h, cells };
+}
+
+/** A quarter turn clockwise. @param {Piece} p @returns {Piece} */
+export function turn(p) {
+  const w = p.h, h = p.w, cells = new Uint8Array(p.cells.length);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) cells[y * w + x] = p.cells[(p.h - 1 - x) * p.w + y];
+  return { w, h, cells };
+}
+
+/**
+ * Where a piece puts its cells with its corner at (x, y): its empty cells
+ * leave what is beneath, and what falls off the canvas is lost.
+ * @param {Piece} p @param {number} x @param {number} y @param {number} size @param {number} empty
+ * @returns {{i: number, v: number}[]}
+ */
+export function place(p, x, y, size, empty) {
+  const out = [];
+  for (let py = 0; py < p.h; py++) {
+    for (let px = 0; px < p.w; px++) {
+      const v = p.cells[py * p.w + px], cx = x + px, cy = y + py;
+      if (v !== empty && cx >= 0 && cy >= 0 && cx < size && cy < size) out.push({ i: cy * size + cx, v });
+    }
+  }
+  return out;
+}
+
+/** The checks of a dithering brush: every other cell, like a chessboard. @param {Cell} c */
+export const dithered = (c) => (c.x + c.y) % 2 === 0;

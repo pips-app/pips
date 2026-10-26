@@ -79,7 +79,8 @@ thing, with one way of fitting together:
      that turns over), `back.js`, `share.js` (the share sheet), `moves.js`
      (sending cards between places, the strip, undo), `selection.js`,
      `first-run.js`; `editor/canvas.js`, `input.js` (a finger draws at once,
-     so the editor has its own arbiter), `tools.js`, `palette.js`,
+     so the editor has its own arbiter), `strokes.js` (what each tool does
+     with a finger), `selection.js`, `tools.js`, `palette.js`,
      `frames.js`, `precise.js`, `settings.js` and the editor's sheets.
   6. Screens — `collection/view.js`, `editor/view.js` only put parts together
      and decide what gestures mean.

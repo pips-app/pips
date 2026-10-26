@@ -408,6 +408,28 @@ test('the editor: drawing, undo that loses nothing, palettes, frames, a draft, s
   assert.equal(await cell(13, 12), null, 'the corner cell is taken out');
   assert.equal(await cell(13, 13), '#17151f');
 
+  // A selection: a box around the stair, moved four cells right, mirrored —
+  // two steps, both undone.
+  await p.keyboard.press('s');
+  await stroke([11, 11], [15, 15]);
+  assert.equal(await p.isVisible('.ed-sel-bar'), true);
+  await stroke([13, 13], [17, 13]);
+  assert.equal(await cell(17, 13), '#17151f', 'moved');
+  assert.equal(await cell(13, 13), null, 'and gone from where it was');
+  await p.click('.ed-sel-btn[aria-label="Отразить слева направо"]');
+  assert.equal(await undoLabel(), 'Отменить: отражение');
+  await p.keyboard.press('Control+z');
+  await p.keyboard.press('Control+z');
+  assert.equal(await cell(13, 13), '#17151f', 'back in place');
+  assert.equal(await cell(17, 13), null);
+
+  // The dithering pen fills every other cell.
+  await p.keyboard.press('d');
+  await stroke([2, 20], [9, 20]);
+  assert.deepEqual([await cell(2, 20), await cell(3, 20), await cell(4, 20)], ['#17151f', null, '#17151f']);
+  assert.equal(await undoLabel(), 'Отменить: шахматка');
+  await p.keyboard.press('d');
+
   // Zooming brings the whole card closer; 0 puts it back.
   const mid = at(16, 16);
   await p.mouse.move(mid.x, mid.y);

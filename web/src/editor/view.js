@@ -6,6 +6,8 @@
 //   canvas.js          the drawing surface
 //   input.js           fingers, pen and mouse on it
 //   raster.js          where each tool puts pixels
+//   strokes.js         what each tool does with a finger
+//   selection.js       the selection's box, its moves and turns
 //   tools.js           the tool bar
 //   palette.js         the colours under the canvas
 //   frames.js          the frames strip
@@ -15,8 +17,8 @@
 //   to-card.js         the picture as a card, when signed
 //   budget.js          how long it takes to pass on
 //
-// This file decides what the tools do with a finger, keeps the parts in
-// step with the picture, keeps the draft, and signs.
+// This file puts them together, keeps them in step with the picture,
+// keeps the draft, and signs.
 
 import { h, icon, byteLimit } from '../dom.js';
 import { t, date } from '../i18n.js';
@@ -27,11 +29,13 @@ import { FRAME_SHADES } from '../ui/card.js';
 import { bottomSheet } from '../kit/bottom-sheet.js';
 import { clamp } from '../kit/motion.js';
 import { blank, createModel, T, SIZES } from './model.js';
-import { line, rect, ellipse, fill, mirror, corner, inside } from './raster.js';
+import { inside } from './raster.js';
 import { parseHex, hex, fromRgb } from './color.js';
 import { createCanvas } from './canvas.js';
 import { drawInput } from './input.js';
 import { toolBar } from './tools.js';
+import { createStrokes } from './strokes.js';
+import { createSelection } from './selection.js';
 import { paletteGrid } from './palette.js';
 import { framesStrip } from './frames.js';
 import { precisePad } from './precise.js';
@@ -64,7 +68,7 @@ export function editorView() {
   const model = createModel(blank(32, defaultPalette()));
   const state = {
     frame: 0, color: 4, // the first built-in palette's ink
-    tool: /** @type {Tool} */ ('pen'), shape: /** @type {Shape} */ ('line'),
+    tool: /** @type {Tool} */ ('pen'), shape: /** @type {Shape} */ ('line'), pen: /** @type {import('./tools.js').PenMode} */ ('solid'),
     mirror: false, axes: { x: true, y: false }, precise: false, onion: true, grid: true,
     playing: false, shown: 0,
   };
@@ -85,7 +89,7 @@ export function editorView() {
   const bar = h('header', { class: 'bar ed-bar' }, close, meter, undoBtn, redoBtn, sign);
 
   const frames = framesStrip({
-    select: (f) => { stop(); state.frame = f; paint(); },
+    select: (f) => { stop(); openFrame(f); },
     add: () => { stop(); model.addFrame(state.frame); },
     play: () => (state.playing ? stop() : play()),
     menu: (f) => frameMenu(f),
@@ -101,6 +105,7 @@ export function editorView() {
   const tools = toolBar({
     tool: (tl) => { stop(); state.tool = tl; paint(); },
     shape: (s) => { state.shape = s; state.tool = 'shapes'; paint(); },
+    pen: (m) => { state.pen = m; state.tool = 'pen'; paint(); },
     mirror: () => { state.mirror = !state.mirror; paint(); },
     precise: () => { state.precise = !state.precise; cursor = { x: model.doc.size / 2, y: model.doc.size / 2 }; paint(); },
     more: () => more.show(),
@@ -115,7 +120,7 @@ export function editorView() {
     },
     // The big button does what the chosen tool does: a pixel, a fill, a
     // shape dragged from where it is pressed to where it is let go.
-    press: (erase) => { held = stroke(cursorCell(), erase ? 'eraser' : state.tool); },
+    press: (erase) => { held = strokes.start(cursorCell(), erase ? 'eraser' : state.tool); },
     release: () => { held?.end(); held = null; },
     pick: () => pickAt(cursorCell()),
   });
@@ -165,75 +170,33 @@ export function editorView() {
 
   // ------------------------------------------------------------ drawing --
   const cursorCell = () => ({ x: Math.floor(cursor.x), y: Math.floor(cursor.y) });
-  const index = (/** @type {Cell} */ c) => c.y * model.doc.size + c.x;
-  /** A cell and its mirror images, inside the canvas. @param {Cell} c */
-  const spots = (c) => (state.mirror ? mirror(c, model.doc.size, state.axes) : [c]).filter((x) => inside(x, model.doc.size));
-
-  /**
-   * What a finger (or the pad's button) does, by tool, from the cell it
-   * lands on. Returns the stroke to follow, or null.
-   * @param {Cell} c @param {Tool} tool
-   */
-  function stroke(c, tool) {
-    const f = state.frame, size = model.doc.size;
-    if (tool === 'pick') { pickAt(c); return null; }
-    if (tool === 'fill') {
-      if (!inside(c, size)) return null;
-      const s = model.stroke(f), v = state.color;
-      for (const p of spots(c)) for (const i of fill(model.doc.frames[f], size, p)) s.set(i, v);
-      s.commit('ed.h.fill');
-      return null;
-    }
-    if (tool === 'shapes') {
-      const s = model.stroke(f), a = c, v = state.color;
-      const draw = (/** @type {Cell} */ b) => {
-        s.reset();
-        const cells = state.shape === 'line' ? line(a, b)
-          : state.shape.startsWith('rect') ? rect(a, b, state.shape === 'rect-fill')
-            : ellipse(a, b, state.shape === 'ellipse-fill');
-        for (const p of cells) for (const q of spots(p)) s.set(index(q), v);
-        s.show();
-      };
-      draw(c);
-      return { move: draw, end: () => s.commit(`ed.h.${state.shape.replace('-fill', '')}`), cancel: () => s.cancel() };
-    }
-    // Pen and eraser: a line through every cell the finger passes, with
-    // the corners a hand leaves taken out (pixel-perfect).
-    const s = model.stroke(f), v = tool === 'eraser' ? T : state.color;
-    /** @type {Cell[]} */
-    const path = [];
-    const put = (/** @type {Cell} */ p) => {
-      if (path.length && path[path.length - 1].x === p.x && path[path.length - 1].y === p.y) return;
-      path.push(p);
-      for (const q of spots(p)) s.set(index(q), v);
-      if (tool === 'pen' && path.length >= 3 && corner(path[path.length - 3], path[path.length - 2], p)) {
-        const mid = /** @type {Cell} */ (path.splice(path.length - 2, 1)[0]);
-        for (const q of spots(mid)) s.restore(index(q));
-      }
-    };
-    put(c);
-    s.show();
-    return {
-      move: (/** @type {Cell} */ b) => {
-        const last = path[path.length - 1] ?? b;
-        for (const p of line(last, b)) put(p);
-        s.show();
-      },
-      end: () => s.commit(`ed.h.${tool}`),
-      cancel: () => s.cancel(),
-    };
-  }
+  const selection = createSelection({ model, frame: () => state.frame, changed: () => paintSelection() });
+  const strokes = createStrokes({
+    model, selection, pick: (c) => pickAt(c),
+    now: () => ({ frame: state.frame, color: state.color, shape: state.shape, pen: state.pen, mirror: state.mirror, axes: state.axes }),
+  });
+  main.insertBefore(selection.bar, frames.el);
 
   /** The pipette: an empty cell picks the eraser. @param {Cell} c */
   function pickAt(c) {
     if (!inside(c, model.doc.size)) return;
-    const v = model.doc.frames[state.frame][index(c)];
+    const v = model.doc.frames[state.frame][c.y * model.doc.size + c.x];
     if (v === T) state.tool = 'eraser';
     else {
       state.color = v;
       if (state.tool === 'pick' || state.tool === 'eraser') state.tool = 'pen';
     }
     paint();
+  }
+  /** Another frame: the selection stays with the one it was on. @param {number} f */
+  function openFrame(f) {
+    selection.clear();
+    state.frame = clamp(f, 0, model.doc.frames.length - 1);
+    paint();
+  }
+  function paintSelection() {
+    canvas.box(selection.box);
+    el.classList.toggle('selecting', !!selection.box);
   }
 
   /** Where the mouse (or a finger) last was over the canvas, for the cursor. @type {{x: number, y: number}|null} */
@@ -251,7 +214,7 @@ export function editorView() {
         canvas.cursor(cursorCell());
         return null;
       }
-      const s = stroke(canvas.cellAt(p), state.tool);
+      const s = strokes.start(canvas.cellAt(p), state.tool);
       return s && { move: (q) => s.move(canvas.cellAt(q)), end: s.end, cancel: s.cancel };
     },
     pick: (p) => pickAt(canvas.cellAt(p)),
@@ -404,13 +367,25 @@ export function editorView() {
     }, 600);
   }
   model.listen((c) => {
+    // A stroke being drawn: only its frame's picture, cheaply, on every move.
+    if (c.live) {
+      if (c.frame === state.frame && !state.playing) canvas.paint(model.doc, state.frame, layers());
+      frames.draw(model.doc, c.frame);
+      return;
+    }
     if (c.frame >= 0 && c.frame !== state.frame) state.frame = c.frame;
-    paint();
+    paint(c.whole || c.frame < 0 ? 'all' : [c.frame]);
     keep();
   });
 
   // -------------------------------------------------------------- paint --
-  function paint() {
+  /** What lies beneath the open frame: the one before it, faintly. */
+  const layers = () => {
+    const n = model.doc.frames.length;
+    return { onion: state.onion && n > 1 ? (state.frame + n - 1) % n : null, paper: paper() };
+  };
+  /** Everything, from the picture and the state. @param {number[]|'all'} [dirty] frames whose pictures changed */
+  function paint(dirty = []) {
     const d = model.doc;
     state.frame = clamp(state.frame, 0, d.frames.length - 1);
     state.color = clamp(state.color, 0, d.colors.length - 1);
@@ -418,14 +393,13 @@ export function editorView() {
     card.style.setProperty('--shade', s.paper);
     card.style.setProperty('--shade-ink', s.ink);
     card.style.setProperty('--shade-dim', s.dim);
-    if (!state.playing) {
-      canvas.paint(d, state.frame, { onion: state.onion && d.frames.length > 1 ? (state.frame + d.frames.length - 1) % d.frames.length : null, paper: paper() });
-    }
+    if (!state.playing) canvas.paint(d, state.frame, layers());
     if (document.activeElement !== title) title.value = d.title;
     byline.textContent = `${app.profile.nick ? `@${app.profile.nick}` : '—'} · ${date(Date.now(), { day: '2-digit', month: '2-digit' })}`;
-    frames.set(d, state.frame, { playing: state.playing, shown: state.playing ? state.shown : state.frame, onion: state.onion, delay: d.delay });
+    frames.set(d, state.frame, { playing: state.playing, shown: state.playing ? state.shown : state.frame, onion: state.onion, delay: d.delay }, dirty);
     palette.set(d, state.color);
-    tools.set({ tool: state.tool, shape: state.shape, mirror: state.mirror, precise: state.precise });
+    tools.set({ tool: state.tool, shape: state.shape, pen: state.pen, mirror: state.mirror, precise: state.precise });
+    if (state.tool !== 'select') selection.clear();
     settings.set(d);
     settings.setAxes(state.axes);
     pad.color(hex(d.colors[state.color] ?? 0));
@@ -452,19 +426,25 @@ export function editorView() {
 
   // ----------------------------------------------------------- keyboard --
   let spaceDown = false;
-  const TOOL_KEYS = /** @type {Record<string, Tool>} */ ({ b: 'pen', e: 'eraser', g: 'fill', u: 'shapes', i: 'pick' });
+  const TOOL_KEYS = /** @type {Record<string, Tool>} */ ({ b: 'pen', e: 'eraser', g: 'fill', u: 'shapes', s: 'select', i: 'pick' });
+  const ARROWS = /** @type {Record<string, [number, number]>} */ ({ ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] });
   document.addEventListener('keydown', (e) => {
     if (el.hidden || document.querySelector('.dialog') || [more, palettes, colors, history, frameSheet].some((s) => s.open)) return;
     const typing = e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement;
     const mod = e.ctrlKey || e.metaKey, k = e.key.toLowerCase();
     if (mod && k === 'z') { e.preventDefault(); if (e.shiftKey) redo(); else undo(); return; }
     if (mod && k === 'y') { e.preventDefault(); redo(); return; }
+    if (mod && k === 'a' && !typing) { e.preventDefault(); state.tool = 'select'; paint(); selection.all(); return; }
     if (typing || mod || e.altKey) return;
     if (e.key === ' ') { spaceDown = true; e.preventDefault(); return; }
-    if (TOOL_KEYS[k]) { stop(); state.tool = TOOL_KEYS[k]; paint(); }
+    if (selection.box && ARROWS[e.key]) selection.nudge(...ARROWS[e.key]);
+    else if (selection.box && (e.key === 'Delete' || e.key === 'Backspace')) selection.erase();
+    else if (selection.box && e.key === 'Escape') selection.clear();
+    else if (TOOL_KEYS[k]) { stop(); state.tool = TOOL_KEYS[k]; paint(); }
+    else if (k === 'd') { state.pen = state.pen === 'dither' ? 'solid' : 'dither'; state.tool = 'pen'; paint(); }
     else if (k === 'm') { state.mirror = !state.mirror; paint(); }
-    else if (e.key === ',' || e.key === '[') { state.frame = Math.max(0, state.frame - 1); paint(); }
-    else if (e.key === '.' || e.key === ']') { state.frame = Math.min(model.doc.frames.length - 1, state.frame + 1); paint(); }
+    else if (e.key === ',' || e.key === '[') openFrame(state.frame - 1);
+    else if (e.key === '.' || e.key === ']') openFrame(state.frame + 1);
     else if (e.key === 'Enter') { if (state.playing) stop(); else play(); }
     else if (e.key === '+' || e.key === '=') canvas.zoomBy(1.25, centre());
     else if (e.key === '-') canvas.zoomBy(0.8, centre());
@@ -497,7 +477,7 @@ export function editorView() {
           model.reset({ ...d.doc, frames: d.doc.frames.map((/** @type {any} */ f) => Uint8Array.from(f)) }, d.history);
         }
       }
-      requestAnimationFrame(() => { canvas.relayout(); paint(); });
+      requestAnimationFrame(() => { canvas.relayout(); paint('all'); });
     },
     hide() {
       stop();

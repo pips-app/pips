@@ -4,7 +4,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 const { parseHex, hex, toHsv, fromHsv, nearest, ramp } = await import('../../web/src/editor/color.js');
-const { line, rect, ellipse, fill, mirror, corner } = await import('../../web/src/editor/raster.js');
+const { line, rect, ellipse, fill, mirror, corner, span, within, lift, flip, turn, place, dithered } = await import('../../web/src/editor/raster.js');
 const { budget, LIMIT } = await import('../../web/src/editor/budget.js');
 const { createHistory } = await import('../../web/src/editor/history.js');
 const { blank, createModel, T } = await import('../../web/src/editor/model.js');
@@ -154,4 +154,23 @@ test('as a card: built-in palettes cost a number, others only the colours used',
   assert.equal(c.pixels[1], 1);
   assert.equal(c.pixels[0], 2);
   assert.equal(c.pixels[2], 0);
+});
+
+test('selections: a box, lifted, mirrored, turned and put down', () => {
+  assert.deepEqual(span({ x: 5, y: -2 }, { x: 1, y: 9 }, 8), { x0: 1, y0: 0, x1: 5, y1: 7 });
+  assert.ok(within({ x0: 1, y0: 1, x1: 2, y1: 2 }, { x: 2, y: 1 }));
+  // 4×4 canvas: a 3×2 piece "abc / def" at (1,1).
+  const buf = new Uint8Array(16).fill(255);
+  [[1, 1, 1], [2, 1, 2], [3, 1, 3], [1, 2, 4], [2, 2, 5], [3, 2, 6]].forEach(([x, y, v]) => { buf[y * 4 + x] = v; });
+  const p = lift(buf, 4, { x0: 1, y0: 1, x1: 3, y1: 2 });
+  assert.deepEqual([p.w, p.h, [...p.cells]], [3, 2, [1, 2, 3, 4, 5, 6]]);
+  assert.deepEqual([...flip(p, 'x').cells], [3, 2, 1, 6, 5, 4]);
+  assert.deepEqual([...flip(p, 'y').cells], [4, 5, 6, 1, 2, 3]);
+  const q = turn(p); // clockwise: "da / eb / fc"
+  assert.deepEqual([q.w, q.h, [...q.cells]], [2, 3, [4, 1, 5, 2, 6, 3]]);
+  assert.deepEqual([...turn(turn(turn(turn(p)))).cells], [...p.cells], 'four turns: as it was');
+  // Put down hanging over the edge: what falls off is lost, empty cells cover nothing.
+  const holey = { w: 2, h: 1, cells: Uint8Array.from([7, 255]) };
+  assert.deepEqual(place(holey, 3, 0, 4, 255), [{ i: 3, v: 7 }]);
+  assert.ok(dithered({ x: 0, y: 0 }) && !dithered({ x: 1, y: 0 }) && dithered({ x: 1, y: 1 }));
 });

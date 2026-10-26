@@ -83,6 +83,12 @@ const ICONS = {
   grid: '<path d="M4 4h16v16H4zM4 9.3h16M4 14.7h16M9.3 4v16M14.7 4v16"/>',
   copy: '<rect x="8" y="8" width="12" height="12" rx="1.5"/><path d="M16 8V5.5A1.5 1.5 0 0 0 14.5 4h-9A1.5 1.5 0 0 0 4 5.5v9A1.5 1.5 0 0 0 5.5 16H8"/>',
   history: '<path d="M4 12a8 8 0 1 0 2.3-5.7M4 4v4h4"/><path d="M12 8v4l3 2"/>',
+  select: '<path d="M4 4h3M10 4h4M17 4h3v3M20 10v4M20 17v3h-3M14 20h-4M7 20H4v-3M4 14v-4M4 7V4"/>',
+  'select-all': '<path d="M4 4h3M10 4h4M17 4h3v3M20 10v4M20 17v3h-3M14 20h-4M7 20H4v-3M4 14v-4M4 7V4"/><rect x="8" y="8" width="8" height="8" fill="currentColor" stroke="none"/>',
+  dither: '<path d="M5 5h4v4H5zM13 5h4v4h-4zM9 9h4v4H9zM17 9h2v4h-2zM5 13h4v4H5zM13 13h4v4h-4zM9 17h4v2H9z" fill="currentColor" stroke="none"/>',
+  'flip-x': '<path d="M12 3v18M9 7L4 12l5 5zM15 7l5 5-5 5z"/>',
+  'flip-y': '<path d="M3 12h18M7 9l5-5 5 5zM7 15l5 5 5-5z"/>',
+  rotate: '<path d="M20 12a8 8 0 1 1-2.3-5.7M20 4v4h-4"/>',
 };
 
 /** An icon from the fixed set above. @param {keyof typeof ICONS} name */

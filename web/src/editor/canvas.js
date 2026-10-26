@@ -31,8 +31,8 @@ export function createCanvas() {
   let viewport = el, target = el;
 
   let size = 0, zoom = 1, tx = 0, ty = 0, paper = 0xf6f3eb;
-  /** @type {{cursor: {x: number, y: number}|null, grid: boolean, flash: {cells: number[], until: number}|null}} */
-  const marks = { cursor: null, grid: true, flash: null };
+  /** @type {{cursor: {x: number, y: number}|null, grid: boolean, flash: {cells: number[], until: number}|null, box: import('./raster.js').Rect|null}} */
+  const marks = { cursor: null, grid: true, flash: null, box: null };
 
   /** The card's place in the viewport before any zoom, and the art's in the card. */
   const base = () => ({ x: target.offsetLeft, y: target.offsetTop, w: target.offsetWidth, h: target.offsetHeight, aw: el.offsetWidth });
@@ -105,6 +105,19 @@ export function createCanvas() {
       }
     } else marks.flash = null;
     g.restore();
+    if (marks.box) {
+      // The selection: a dashed line, dark and light, so it shows on any colour.
+      const b = marks.box, x0 = X(b.x0) + 0.5, y0 = Y(b.y0) + 0.5, w = X(b.x1 + 1) - X(b.x0) - 1, hh = Y(b.y1 + 1) - Y(b.y0) - 1, dash = 4 * dpr;
+      g.lineWidth = Math.max(1, Math.round(dpr));
+      g.setLineDash([dash, dash]);
+      g.strokeStyle = '#ffffff';
+      g.strokeRect(x0, y0, w, hh);
+      g.lineDashOffset = dash;
+      g.strokeStyle = '#1a1b21';
+      g.strokeRect(x0, y0, w, hh);
+      g.setLineDash([]);
+      g.lineDashOffset = 0;
+    }
     if (marks.cursor && marks.cursor.x >= 0 && marks.cursor.y >= 0 && marks.cursor.x < size && marks.cursor.y < size) {
       const { x, y } = marks.cursor, x0 = X(x), y0 = Y(y), s = X(x + 1) - x0, lw = Math.max(1, Math.round(dpr));
       g.lineWidth = lw;
@@ -177,6 +190,8 @@ export function createCanvas() {
     },
     /** @param {boolean} on */
     grid(on) { marks.grid = on; drawLines(); },
+    /** The selection's box, or none. @param {import('./raster.js').Rect|null} b */
+    box(b) { marks.box = b; drawLines(); },
     /** Lights up cells for a moment: what an undo just changed. @param {number[]} cells */
     flash(cells) {
       marks.flash = { cells, until: performance.now() + 600 };
