@@ -5,7 +5,7 @@
 // left by an undo and a new change), the step offers the other way too:
 // nothing done is ever lost.
 
-import { h, icon } from '../dom.js';
+import { h, icon, reveal } from '../dom.js';
 import { t } from '../i18n.js';
 import { bottomSheet } from '../kit/bottom-sheet.js';
 
@@ -41,7 +41,7 @@ export function historySheet(o) {
         }, icon('turn'), h('span', {}, `${sibs.indexOf(n) + 1}/${sibs.length}`)) : null);
     });
     list.replaceChildren(...rows.reverse());
-    list.querySelector('.here')?.scrollIntoView?.({ block: 'nearest' });
+    reveal(sheet.body, list.querySelector('.here'));
   }
 
   return {

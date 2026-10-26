@@ -122,3 +122,16 @@ export function fitBytes(s, max) {
   }
   return chars.slice(0, lo).join('');
 }
+
+/**
+ * Scrolls `box` (only it: never the page around it, as scrollIntoView
+ * would) so that `child` is in sight. @param {HTMLElement} box @param {Element|null|undefined} child
+ */
+export function reveal(box, child) {
+  if (!child) return;
+  const b = box.getBoundingClientRect(), c = child.getBoundingClientRect();
+  if (c.top < b.top) box.scrollTop -= b.top - c.top;
+  else if (c.bottom > b.bottom) box.scrollTop += c.bottom - b.bottom;
+  if (c.left < b.left) box.scrollLeft -= b.left - c.left;
+  else if (c.right > b.right) box.scrollLeft += c.right - b.right;
+}

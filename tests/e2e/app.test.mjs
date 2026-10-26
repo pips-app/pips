@@ -391,6 +391,8 @@ test('the editor: drawing, undo that loses nothing, palettes, frames, a draft, s
   await stroke([2, 6], [9, 6]);
   assert.equal(await cell(5, 6), '#c4392f');
   await p.click('.ed-bar .ib >> nth=1', { button: 'right' }); // the whole history
+  await p.locator('.ed-history').waitFor();
+  assert.equal(await p.evaluate(() => document.getElementById('app').scrollTop), 0, 'the history list scrolls itself, never the screen');
   await p.locator('.ed-history .ed-branch').first().click();
   assert.equal(await cell(5, 2), '#17151f', 'the abandoned line is back');
   assert.equal(await cell(5, 6), null);
@@ -405,6 +407,14 @@ test('the editor: drawing, undo that loses nothing, palettes, frames, a draft, s
   await p.mouse.up();
   assert.equal(await cell(13, 12), null, 'the corner cell is taken out');
   assert.equal(await cell(13, 13), '#17151f');
+
+  // Zooming brings the whole card closer; 0 puts it back.
+  const mid = at(16, 16);
+  await p.mouse.move(mid.x, mid.y);
+  await p.mouse.wheel(0, -100);
+  assert.match(await p.$eval('.ed-card', (e) => e.style.transform), /scale\(1\.25\)/);
+  await p.keyboard.press('0');
+  assert.equal(await p.$eval('.ed-card', (e) => e.style.transform), '');
 
   // A ready palette, tried and applied: the picture takes its colours, one step.
   await p.click('.ed-pal-name');

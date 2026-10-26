@@ -4,7 +4,7 @@
 // frame, "+" for a copy of the open one, and the onion skin switch. A tap on
 // the open frame shows what can be done with it.
 
-import { h, icon } from '../dom.js';
+import { h, icon, reveal } from '../dom.js';
 import { t } from '../i18n.js';
 import { T } from './model.js';
 import { rgb } from './color.js';
@@ -67,7 +67,7 @@ export function framesStrip(o) {
       onion.replaceChildren(h('b', {}, t('ed.onion')), h('span', {}, s.onion ? t('ed.on') : t('ed.off')));
       onion.setAttribute('aria-pressed', String(s.onion));
       onion.hidden = doc.frames.length < 2;
-      list.children[f]?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
+      reveal(scroller, list.children[f]);
     },
     /** Just the preview, while playing. @param {import('./model.js').Doc} doc @param {number} f */
     show(doc, f) { thumb(preview, doc, f); },

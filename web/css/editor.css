@@ -2,7 +2,7 @@
    phone a column (card, frames, palette, tools); on a wide screen the tools
    in a rail on the left and the palette and settings on the right. */
 
-.view.ed-view { inset: 0; background: var(--void); }
+.view.ed-view { inset: 0; background: var(--void); overflow: clip; } /* closed sheets wait below, out of sight */
 .ed-bar { gap: 6px; padding-left: 8px; }
 .ed-bar .ib { width: 44px; height: 44px; background: var(--raise2); color: var(--text); }
 .ed-bar .ib.plain { background: none; margin-left: 0; }
@@ -38,11 +38,14 @@
 
 /* The canvas: a stage that zooms and moves, and a layer of thin lines over it. */
 .ed-art { position: relative; aspect-ratio: 1; overflow: hidden; touch-action: none; cursor: crosshair; -webkit-user-select: none; user-select: none; }
-.ed-stage { position: absolute; inset: 0; transform-origin: 0 0; }
 .ed-layer { position: absolute; inset: 0; width: 100%; height: 100%; image-rendering: pixelated; }
 .ed-onion { opacity: .45; }
 .ed-art.playing .ed-onion { display: none; }
-.ed-lines { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.ed-lines { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 2; }
+/* Zoomed in, the card is brought closer: scaled from its corner, clipped by its place. */
+.ed-card-wrap { overflow: hidden; touch-action: none; }
+.ed-card { transform-origin: 0 0; }
+.ed-card.lifted .face { box-shadow: none; }
 
 /* Frames: the playing preview, then the frames, scrolling, fading out at the edge. */
 .ed-frames { display: flex; align-items: center; gap: 8px; padding: 10px 12px 4px; }
