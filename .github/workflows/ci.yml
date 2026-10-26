@@ -77,8 +77,13 @@ jobs:
         working-directory: tests/e2e
         run: |
           npm ci
-          npx playwright install --with-deps chromium
+          npx playwright install --with-deps chromium firefox
           npm test
+      # The same journeys in Firefox: it draws and schedules differently,
+      # and has caught bugs Chromium did not show.
+      - name: Browser tests in Firefox
+        working-directory: tests/e2e
+        run: BROWSER=firefox npm test
       - run: scripts/build-site.sh
       - uses: actions/upload-pages-artifact@v3
         with:

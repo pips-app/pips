@@ -13,7 +13,7 @@
 import { h, icon, byteLimit, fitBytes } from '../dom.js';
 import { t } from '../i18n.js';
 import { app, addOwn } from '../state.js';
-import { frame, FRAME_SHADES } from './card.js';
+import { frame, FRAME_SHADES, BLANK_CARD } from './card.js';
 import { go, toast } from './shell.js';
 import { iconButton } from '../kit/icon-button.js';
 
@@ -156,7 +156,7 @@ export function importView() {
     // Preview: always a card frame of the same size.
     const card = result
       ? { ...result.card, title: title.value, frame: shade, author: app.profile.nick }
-      : { ...BLANK, title: title.value, frame: shade, author: app.profile.nick };
+      : { ...BLANK_CARD, title: title.value, frame: shade, author: app.profile.nick };
     const f = frame({ card, rec: /** @type {any} */ ({ digest: '', received: Date.now() }), author: null });
     // The caption shows the title as typed, or a hint; the hint is not part
     // of any card (and may be longer than a title may be).
@@ -267,12 +267,6 @@ export function importView() {
     hide: () => clearInterval(timer),
   };
 }
-
-/** A blank card, only to give the empty preview the exact frame size. */
-const BLANK = {
-  width: 1, height: 1, opaque: false, palette: { builtin: 0 }, frame: 0, frames: 1, delay_ms: 0,
-  title: '', author: '', handle: null, link: '', pixels: new Uint8Array(1),
-};
 
 /** "Sweetie 16" with 16 colours reads "Sweetie · 16": the count once. @param {any} p */
 function paletteLabel(p) {

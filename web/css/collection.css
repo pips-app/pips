@@ -16,6 +16,21 @@
 
 /* ------------------------------------------------------------- stage -- */
 .stage-host { position: absolute; inset: 0; z-index: 0; }
+/* With a mouse, the pointer says what a click does: closer over a card of
+   the grid and the feed's middle one, along the feed over its neighbours. */
+@media (hover: hover) and (pointer: fine) {
+  .stage-host:is([data-level="0"], [data-level="1"]) .on-stage, .stage-host[data-level="2"] .on-stage.centre { cursor: zoom-in; }
+  .stage-host[data-level="2"] .on-stage:not(.centre), .collection-view.selecting .on-stage { cursor: pointer; }
+  .stage-host:is([data-level="0"], [data-level="1"]) .on-stage:hover { filter: brightness(1.08); }
+}
+
+/* Mouse controls: closer and further in the bar, along the feed at its sides. */
+.collection-bar .zoom { display: flex; gap: 4px; flex: none; }
+.collection-bar .zoom .ib:disabled, .feed-nav .ib:disabled { opacity: .35; cursor: default; }
+.feed-nav { position: absolute; z-index: 160; left: 0; right: 0; top: 50%; pointer-events: none; display: flex; justify-content: space-between;
+  padding: 0 max(16px, calc((100% - 1100px) / 2 + 16px)); }
+.feed-nav[hidden] { display: none; }
+.feed-nav .ib { pointer-events: auto; width: 44px; height: 44px; background: var(--raise2); box-shadow: 0 6px 16px -8px #000; }
 .frame.on-stage { position: absolute; left: 0; top: 0; transform-origin: 0 0; will-change: transform; }
 /* --cap: how much of the caption shows, 0 (a bare tile) … 1 (the full frame). */
 .on-stage .front, .turn .front { padding-bottom: calc(3.6cqw * (1 - var(--cap, 1))); }
@@ -40,6 +55,8 @@
 .turn-flip > .face { position: absolute; inset: 0; backface-visibility: hidden; -webkit-backface-visibility: hidden; background: none; box-shadow: none; }
 .turn-flip > .front-face .frame .face { box-shadow: 0 30px 60px -30px #000, 0 2px 4px #0006; }
 .turn-flip > .back-face { transform: rotateY(180deg); }
+.turn-flip.flat { transform-style: flat; }
+.turn-flip.flat > .back-face { transform: none; }
 .turn-flip > .back-face.live { pointer-events: auto; }
 .turn-flip > .back-face:not(.live) * { pointer-events: none !important; }
 
@@ -89,8 +106,12 @@ input.tag.add::placeholder { color: var(--shade-dim); }
    is the limit. */
 .back-in textarea { flex: 1 1 auto; width: 100%; min-height: calc(5 * 1.45em + 1.1em); line-height: 1.45em; overflow: hidden; resize: none; border: 0;
   border-radius: .5em; padding: .55em .7em; font: inherit; color: var(--shade-ink); -webkit-user-select: text; user-select: text; touch-action: pan-y;
-  background: color-mix(in srgb, var(--shade-ink) 6%, transparent) repeating-linear-gradient(transparent 0 calc(1.45em - 1px),
-    color-mix(in srgb, var(--shade-ink) 10%, transparent) calc(1.45em - 1px) 1.45em) content-box; }
+  /* One ruled line per text line: a 1 px line at the foot of a tile one
+     line tall, repeated. (A repeating gradient with stops at fractions of
+     a pixel draws thick bands in Firefox.) */
+  background-color: color-mix(in srgb, var(--shade-ink) 6%, transparent);
+  background-image: linear-gradient(to top, color-mix(in srgb, var(--shade-ink) 12%, transparent) 1px, transparent 1px);
+  background-size: 100% 1.45em; background-origin: content-box; background-clip: padding-box; }
 .back-in textarea::placeholder { color: var(--shade-dim); }
 .back-in textarea[readonly] { pointer-events: none; }
 .back-in textarea:focus-visible { outline: 2px solid color-mix(in srgb, var(--shade-ink) 30%, transparent); outline-offset: 0; }

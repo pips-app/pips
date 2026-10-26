@@ -8,7 +8,10 @@ import { readFile, mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, normalize, extname } from 'node:path';
 import { deflateSync, crc32 } from 'node:zlib';
-import { chromium } from 'playwright';
+import { chromium, firefox } from 'playwright';
+
+/** BROWSER=firefox runs the same journeys in Firefox. */
+const engine = process.env.BROWSER === 'firefox' ? firefox : chromium;
 
 const WEB = new URL('../../web/', import.meta.url).pathname;
 const TYPES = {
@@ -38,12 +41,13 @@ export async function serve() {
 /** One browser for a test file, plus a scratch folder for pictures. */
 export async function setup() {
   const site = await serve();
-  const browser = await chromium.launch();
+  const browser = await engine.launch();
   const dir = await mkdtemp(join(tmpdir(), 'pips-e2e-'));
   const errors = [];
-  /** A fresh phone; with `words`, restored instead of created. */
-  async function phone(nick, words) {
-    const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, locale: 'ru-RU', acceptDownloads: true });
+  /** A fresh phone; with `words`, restored instead of created; `desk`: a computer's screen instead. */
+  async function phone(nick, words, desk = false) {
+    const viewport = desk ? { width: 1440, height: 900 } : { width: 390, height: 844 };
+    const ctx = await browser.newContext({ viewport, locale: 'ru-RU', acceptDownloads: true });
     const p = await ctx.newPage();
     p.on('pageerror', (e) => errors.push(`${nick}: ${e.message}`));
     p.on('console', (m) => { if (m.type() === 'error') errors.push(`${nick}: ${m.text()}`); });

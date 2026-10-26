@@ -58,16 +58,23 @@ thing, with one way of fitting together:
      the touch arbiter: one owner per touch, everything else waits; a second
      finger anywhere makes a pinch. Plain logic, no app knowledge.
   3. `collection/layout.js`, `collection/query.js` — pure functions (cards in,
-     rectangles or lists out), tested under node in `tests/unit/`.
+     rectangles or lists out), tested under node in `tests/unit/`, as is the
+     touch arbiter.
   4. `kit/*` controls — icon button, segmented switch, chips, search field,
      top sheet, strip, action bar, identicon.
   5. Screen parts — `collection/stage.js` (the zoom axis), `turn.js` (the card
-     that turns over), `back.js`, `share.js`.
+     that turns over), `back.js`, `share.js` (the share sheet), `moves.js`
+     (sending cards between places, the strip, undo), `selection.js`,
+     `first-run.js`.
   6. Screens — `collection/view.js` only puts parts together and decides
      what gestures mean.
 - **Every gesture has a button.** Pull up / down in the feed is the action bar's
-  Share / Archive; zooming works with the back arrow, Escape and ctrl+wheel.
-  The browser tests use only the buttons.
+  Share / Archive. With a mouse, − and + in the bar zoom, arrows at the
+  feed's sides leaf through it, the wheel scrolls (ctrl+wheel zooms) and
+  every move has a key. The browser tests use only buttons, clicks and keys.
+- **Drawing reads no layout.** A frame only writes styles: sizes are
+  measured when the layout changes, hits are found from the rectangles
+  drawn last.
 - **Extract on the second use**, not before: a part used once stays in its
   screen until another screen needs it.
 

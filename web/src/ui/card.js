@@ -3,8 +3,14 @@
 // collection, is collection/back.js.)
 
 import { h } from '../dom.js';
-import { t, date } from '../i18n.js';
+import { date } from '../i18n.js';
 import { app } from '../state.js';
+
+/** A blank card: the exact frame size of an empty preview, or how large a profile makes a code. */
+export const BLANK_CARD = Object.freeze({
+  width: 1, height: 1, opaque: false, palette: { builtin: 0 }, frame: 0, frames: 1, delay_ms: 0,
+  title: '', author: '', handle: /** @type {{network: string, text: string}|null} */ (null), link: '', pixels: new Uint8Array(1),
+});
 
 /** Frame shades a card may name (format field `frame`, 0..=15). */
 export const FRAME_SHADES = [

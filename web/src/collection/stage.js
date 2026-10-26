@@ -24,7 +24,7 @@ import { grid, feedRect, feedWidth, runs, groupKey } from './layout.js';
  *   ghost: null | {x: number, y: number, w: number, cap: number},
  *   collapse: null | {t0: number, dur: number},
  *   flying: null | {at: (now: number) => {x: number, y: number, w: number, cap: number}},
- *   rr: null | {x: number, y: number, w: number, h: number, cap: number},
+ *   rr: null | {x: number, y: number, w: number, h: number, cap: number, o: number, z: number},
  *   dragged?: boolean,
  * }} Item
  */
@@ -52,15 +52,23 @@ export function createStage(o) {
   const dragY = new Spring(0, SPRINGS.drag);
   /** @type {Item[]} */
   let list = [];
+  /** @type {Set<Item>} */
+  let shown = new Set();
   /** @type {Map<string, Item>} */
   const all = new Map(); // shown, leaving or flying
+  /** The frame, measured when the layout is: never read while drawing. */
+  let fr = o.frame();
   /** @type {ReturnType<typeof layouts>} */
   let cache = layouts();
   /** @type {Map<Item, number>} */
   let fidx = new Map();
   /** @type {HTMLElement[][]} */
   const labelEls = [[], []];
-  let lastLevel = 1;
+  /** What each label element shows now: text is written only when it changes. */
+  const painted = new WeakMap();
+  let lastLevel = -1;
+  /** @type {Item|null} */
+  let centred = null;
 
   /** @param {string} id @param {HTMLElement} el @param {{received: number, author: string}} data @returns {Item} */
   function item(id, el, data) {
@@ -71,9 +79,13 @@ export function createStage(o) {
     };
   }
 
+  /** Both grids, with their labels' words, for the current list and frame. */
   function layouts() {
-    const f = o.frame();
-    return /** @type {const} */ ([0, 1]).map((l) => grid(l, runs(list, (c) => groupKey(l, o.by(), c)), f));
+    fr = o.frame();
+    return /** @type {const} */ ([0, 1]).map((l) => {
+      const g = grid(l, runs(list, (c) => groupKey(l, o.by(), c)), fr);
+      return { ...g, texts: g.labels.map((lab) => o.label(l, lab)) };
+    });
   }
 
   /** The rectangle of `c` at a level, on screen. @param {number} level @param {Item} c */
@@ -82,7 +94,7 @@ export function createStage(o) {
       const r = cache[level].rects.get(c);
       return r ? { ...r, y: r.y - scroll[level].v, o: 1, z: 1 } : { x: 0, y: 0, w: 0, cap: 0, o: 0, z: 1 };
     }
-    return feedRect(fidx.get(c) ?? list.indexOf(c), feed.v, level === 3, o.frame());
+    return feedRect(fidx.get(c) ?? list.indexOf(c), feed.v, level === 3, fr);
   }
 
   function render() {
@@ -94,11 +106,16 @@ export function createStage(o) {
       fidx.set(c, acc);
       acc += 1 - ease(c.collapse ? clamp((now - c.collapse.t0) / c.collapse.dur, 0, 1) : 0);
     }
-    const centre = list[Math.round(feed.v)];
+    const centre = list[Math.round(feed.v)] ?? null;
+    if (centre !== centred) {
+      centred?.el.classList.remove('centre');
+      centre?.el.classList.add('centre');
+      centred = centre;
+    }
     for (const c of all.values()) {
-      const shown = list.includes(c);
-      const ghost = !shown && !c.flying && c.ghost && c.fade.v > 0.01;
-      if (!shown && !c.flying && !ghost) {
+      const on = shown.has(c);
+      const ghost = !on && !c.flying && c.ghost && c.fade.v > 0.01;
+      if (!on && !c.flying && !ghost) {
         c.el.remove();
         all.delete(c.id);
         continue;
@@ -126,14 +143,14 @@ export function createStage(o) {
         }
         // The feed card being pulled follows the finger, shrinking a little going down.
         if (z > 1.5 && c === centre && dragY.v) {
-          const p = clamp(dragY.v / (o.frame().H * 0.45), 0, 1), cx = r.x + r.w / 2;
+          const p = clamp(dragY.v / (fr.H * 0.45), 0, 1), cx = r.x + r.w / 2;
           r.w *= 1 - p * 0.45;
           r.x = cx - r.w / 2;
           r.y += dragY.v;
         }
       }
       const hgt = r.w + (r.w * 0.19 + 10) * r.cap; // as .cap in app.css
-      c.rr = { x: r.x, y: r.y, w: r.w, h: hgt, cap: r.cap };
+      c.rr = { x: r.x, y: r.y, w: r.w, h: hgt, cap: r.cap, o: r.o, z: r.z };
       const s = c.el.style;
       s.width = `${r.w}px`;
       s.transform = `translate3d(${r.x}px,${r.y}px,0)`;
@@ -145,13 +162,17 @@ export function createStage(o) {
     drawLabels(z);
     o.drawn(z);
     const lv = Math.round(Z.to);
-    if (lv !== lastLevel) { lastLevel = lv; o.levelChanged(lv); }
+    if (lv !== lastLevel) {
+      lastLevel = lv;
+      o.host.dataset.level = String(lv); // for the pointer's look over the cards
+      o.levelChanged(lv);
+    }
   }
 
   /** Group labels belong to their level and fade with distance from it. @param {number} z */
   function drawLabels(z) {
     for (const level of /** @type {const} */ ([0, 1])) {
-      const vis = Math.max(0, 1 - Math.abs(z - level) * 2.2), labs = cache[level].labels, els = labelEls[level];
+      const vis = Math.max(0, 1 - Math.abs(z - level) * 2.2), { labels: labs, texts } = cache[level], els = labelEls[level];
       while (els.length < labs.length) {
         const l = h('div', { class: 'stage-label', 'aria-hidden': 'true' }, h('b'), h('span'));
         o.host.append(l);
@@ -161,10 +182,12 @@ export function createStage(o) {
         const lab = labs[k];
         l.hidden = !lab || vis === 0;
         if (l.hidden) return;
-        const { title, sub } = o.label(level, lab);
-        /** @type {HTMLElement} */ (l.firstChild).textContent = title;
-        /** @type {HTMLElement} */ (l.lastChild).textContent = sub;
-        l.classList.toggle('by-author', o.by() === 'author');
+        if (painted.get(l) !== texts[k]) {
+          painted.set(l, texts[k]);
+          /** @type {HTMLElement} */ (l.firstChild).textContent = texts[k].title;
+          /** @type {HTMLElement} */ (l.lastChild).textContent = texts[k].sub;
+          l.classList.toggle('by-author', o.by() === 'author');
+        }
         // Type follows the cell: the label is part of the grid, not above it.
         const fs = lab.w * (o.by() === 'author' ? (level === 0 ? 0.15 : 0.13) : level === 0 ? 0.19 : 0.15);
         Object.assign(l.style, {
@@ -201,24 +224,37 @@ export function createStage(o) {
   /** @type {number|null} */
   let scrolling = null;
   const level = () => Math.round(Z.to);
+  // Points come in page coordinates; cards are drawn in the host's. The
+  // rectangles drawn last are the ones looked up: no layout is read.
   /** The card under a point; where cards overlap (the feed), the topmost. @param {number} x @param {number} y */
   function cardAt(x, y) {
+    const hr = o.host.getBoundingClientRect();
+    x -= hr.left;
+    y -= hr.top;
     let best = null, bz = -Infinity;
     for (const c of list) {
-      const r = c.el.getBoundingClientRect(), zi = Number(c.el.style.zIndex) || 0;
-      if (Number(c.el.style.opacity) < 0.05) continue;
-      if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom && zi > bz) { best = c; bz = zi; }
+      const r = c.rr;
+      if (!r || r.o < 0.05) continue;
+      if (x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h && r.z > bz) { best = c; bz = r.z; }
     }
     return best;
   }
   /** @param {{x: number, y: number}} p */
   function nearest(p) {
+    const hr = o.host.getBoundingClientRect();
     let best = null, bd = Infinity;
     for (const c of list) {
-      const r = c.el.getBoundingClientRect(), d = Math.hypot(r.left + r.width / 2 - p.x, r.top + r.height / 2 - p.y);
+      const r = c.rr;
+      if (!r) continue;
+      const d = Math.hypot(hr.left + r.x + r.w / 2 - p.x, hr.top + r.y + r.h / 2 - p.y);
       if (d < bd) { bd = d; best = c; }
     }
     return best;
+  }
+  /** The middle of the room the cards have, in page coordinates. */
+  function middle() {
+    const hr = o.host.getBoundingClientRect();
+    return { x: hr.left + fr.W / 2, y: hr.top + (fr.top + fr.H - fr.bottom) / 2 };
   }
   /** Lines the levels up around `c`: the card under the fingers keeps its
    * place on screen as the layout changes around it. @param {Item|null} c */
@@ -232,7 +268,7 @@ export function createStage(o) {
   /** Scrolls a grid level so `c` is in view. @param {Item} c @param {0|1} l */
   function scrollTo(c, l) {
     const r = cache[l].rects.get(c);
-    if (r) scroll[l].set(clamp(r.y - o.frame().H / 2 + r.w / 2, 0, cache[l].max));
+    if (r) scroll[l].set(clamp(r.y - fr.H / 2 + r.w / 2, 0, cache[l].max));
   }
 
   let z0 = 0;
@@ -259,7 +295,7 @@ export function createStage(o) {
       if (lv === 2) {
         const c = list[Math.round(feed.v)];
         if (Math.abs(p.dy) > Math.abs(p.dx) * 1.2 && c && cardAt(p.x0, p.y0) === c) return o.pull(c);
-        const f0 = feed.v, n = list.length - 1, step = feedWidth(o.frame()) * 0.66;
+        const f0 = feed.v, n = list.length - 1, step = feedWidth(fr) * 0.66;
         return {
           move: (q) => { feed.set(rubber(f0 - q.dx / step, 0, n, 0.3)); kick(); },
           end: (_q, v) => {
@@ -302,21 +338,64 @@ export function createStage(o) {
     change: () => kick(),
   });
 
-  // Desktop: ctrl/⌘ + wheel (or a trackpad pinch) zooms; the wheel scrolls.
-  let wheelTimer = 0;
+  // ---------------------------------------------------------------- mouse --
+  // A mouse wheel turns in notches, a trackpad sends a stream of small
+  // steps; both are measured in pixels, whatever unit the device reports.
+  // The wheel scrolls the grids and leafs through the feed one card a
+  // notch; with ctrl/⌘ (or a trackpad pinch) it zooms — a notch a level.
+  const NOTCH = 50;
+  let wheelTimer = 0, leaf = 0;
   o.surface.addEventListener('wheel', (e) => {
     if (/** @type {Element} */ (e.target).closest(o.skip) || o.blocked()) return;
     e.preventDefault();
-    const lv = level();
+    const unit = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? fr.H : 1, dy = e.deltaY * unit, dx = e.deltaX * unit;
+    const notch = e.deltaMode !== 0 || Math.abs(dy) >= NOTCH, lv = level(), at = { x: e.clientX, y: e.clientY };
     if (e.ctrlKey || e.metaKey) {
-      if (!g.busy && !wheelTimer) align(lv <= 1 ? cardAt(e.clientX, e.clientY) ?? nearest({ x: e.clientX, y: e.clientY }) : list[Math.round(feed.v)] ?? null);
-      Z.set(clamp(Z.v - e.deltaY * 0.012, 0, 3));
-      clearTimeout(wheelTimer);
-      wheelTimer = window.setTimeout(() => { wheelTimer = 0; setLevel(Math.round(Z.v)); }, 160);
-    } else if (lv <= 1) scroll[lv].set(clamp(scroll[lv].v + e.deltaY, 0, cache[lv].max));
-    else if (lv === 2) feed.to = clamp(feed.to + Math.sign(e.deltaY + e.deltaX), 0, list.length - 1);
+      if (notch) zoom(dy < 0 ? 1 : -1, at);
+      else {
+        if (!g.busy && !wheelTimer) align(lv <= 1 ? cardAt(at.x, at.y) ?? nearest(at) : list[Math.round(feed.v)] ?? null);
+        Z.set(clamp(Z.v - dy * 0.012, 0, 3));
+        clearTimeout(wheelTimer);
+        wheelTimer = window.setTimeout(() => { wheelTimer = 0; setLevel(Math.round(Z.v)); }, 160);
+      }
+    } else if (lv <= 1) {
+      const s = scroll[lv], to = clamp((notch ? s.to : s.v) + dy, 0, cache[lv].max);
+      if (notch) s.to = to; // glides there
+      else s.set(to);
+    } else {
+      leaf += Math.abs(dx) > Math.abs(dy) ? dx : dy;
+      if (Math.abs(leaf) >= NOTCH) { step(Math.sign(leaf)); leaf = 0; }
+    }
     kick();
   }, { passive: false });
+
+  /** Scrolls the grid shown, gliding. @param {number} d */
+  function scrollBy(d) {
+    const lv = level();
+    if (lv > 1) return;
+    scroll[lv].to = clamp(scroll[lv].to + d, 0, cache[lv].max);
+    kick();
+  }
+
+  /** One card along the feed. @param {number} d */
+  function step(d) {
+    feed.to = clamp(Math.round(feed.to) + d, 0, Math.max(0, list.length - 1));
+    kick();
+  }
+
+  /**
+   * One level closer (1) or further (-1), around the card at `at` (or the
+   * middle of the screen): it keeps its place as the grid changes.
+   * @param {1|-1} d @param {{x: number, y: number}} [at]
+   */
+  function zoom(d, at = middle()) {
+    const lv = level(), anchor = lv <= 1 ? cardAt(at.x, at.y) ?? nearest(at) : null;
+    if (anchor) {
+      if (Math.abs(Z.v - Z.to) < 0.01) align(anchor);
+      else if (d > 0) feed.set(Math.max(0, list.indexOf(anchor)));
+    }
+    setLevel(lv + d);
+  }
 
   /** @param {number} l */
   function setLevel(l) {
@@ -336,6 +415,7 @@ export function createStage(o) {
     const was = new Set(list);
     const before = new Map(list.map((c) => [c, c.rr ? { ...c.rr } : null]));
     list = next;
+    shown = new Set(next);
     for (const c of next) if (!all.has(c.id)) { all.set(c.id, c); o.host.append(c.el); }
     cache = layouts();
     const k = cur ? next.indexOf(cur) : -1;
@@ -357,7 +437,7 @@ export function createStage(o) {
       const top = Math.min(...arriving.map((c) => c.rr?.y ?? 0));
       for (const c of arriving) {
         c.ghost = null;
-        c.fade.set(-0.35 - Math.min(0.5, ((c.rr?.y ?? top) - top) / o.frame().H));
+        c.fade.set(-0.35 - Math.min(0.5, ((c.rr?.y ?? top) - top) / fr.H));
         c.fade.to = 1;
       }
     }
@@ -365,18 +445,18 @@ export function createStage(o) {
   }
 
   return {
-    item, reflow, setLevel, render, kick, align, scrollTo,
+    item, reflow, setLevel, render, kick, align, scrollTo, zoom, step, scrollBy,
     Z, feed, dragY, scroll,
     get list() { return list; },
     get level() { return level(); },
+    /** The frame the cards were laid out in. */
+    get frame() { return fr; },
     get busy() { return g.busy; },
     get pinching() { return g.pinching; },
     /** The card in the middle of the feed. */
     current: () => list[Math.round(feed.v)] ?? null,
-    /** Re-measures after a resize. */
+    /** Re-measures and re-labels: after a resize, or when the room above the cards changed. */
     relayout() { cache = layouts(); render(); },
-    /** Re-labels after the language or grouping changed. */
-    labels() { cache = layouts(); render(); },
     /** The feed index each card would have with the leaving ones gone. @param {Item} c */
     index: (c) => fidx.get(c) ?? list.indexOf(c),
   };

@@ -29,6 +29,12 @@ function draw(cv, text, maxPx) {
 }
 
 /**
+ * The side of a code on screen: as large as is comfortable for another
+ * phone's camera, while the rest of the sheet still fits around it.
+ */
+export const codeSize = () => Math.max(200, Math.min(340, innerWidth - 96, innerHeight * 0.44));
+
+/**
  * A QR display for `bytes`; returns the element, how it is shown, and a stop
  * function for carousels.
  * @param {Uint8Array} bytes @param {number} maxPx
