@@ -6,7 +6,7 @@
 import { h } from '../dom.js';
 import { t } from '../i18n.js';
 import { app, subscribe } from '../state.js';
-import { qrFor, keepAwake } from '../ui/qr.js';
+import { qrFor, keepAwake, codeSize } from '../ui/qr.js';
 import { editionPanel } from '../ui/edition.js';
 import { segmented } from '../kit/segmented.js';
 import { topSheet } from '../kit/top-sheet.js';
@@ -21,10 +21,9 @@ export function fillShare(body, entry) {
   let stop = () => {};
   let release = () => {};
   keepAwake().then((r) => (release = r));
-  // As large as comfortable for another phone's camera; the code area
-  // keeps one height whether it shows a code or the numbered-copy panel,
-  // so switching between them does not jump.
-  const size = Math.max(200, Math.min(340, innerWidth - 96, innerHeight * 0.44));
+  // The code area keeps one height whether it shows a code or the
+  // numbered-copy panel, so switching between them does not jump.
+  const size = codeSize();
   const code = h('div', { class: 'share-code' });
   code.style.height = `${size + 28 + 72}px`;
 
@@ -74,7 +73,16 @@ export function createShareSheet(o) {
   let stop = null;
   /** @type {string|null} */
   let of = null;
-  const sheet = topSheet({ label: t('share.title'), onClose: () => { stop?.(); stop = null; of = null; o.busy.n = Math.max(0, o.busy.n - 1); o.closed(); } });
+  const sheet = topSheet({
+    label: t('share.title'),
+    onClose: () => {
+      stop?.();
+      stop = null;
+      of = null;
+      o.busy.n--; // taken in show(): the sheet calls this only after it was open
+      o.closed();
+    },
+  });
   const api = {
     els: sheet.els,
     get open() { return sheet.open; },

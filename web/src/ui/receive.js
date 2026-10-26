@@ -42,7 +42,8 @@ export function receiveView() {
     linkInput.value = '';
     if (v) handle(v);
   };
-  linkInput.addEventListener('paste', () => setTimeout(submit));
+  // A paste is read once it is in the field.
+  linkInput.addEventListener('input', (e) => { if (/** @type {InputEvent} */ (e).inputType === 'insertFromPaste') submit(); });
   linkInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') submit(); });
 
   /** The chain button: straight from the clipboard where the browser allows

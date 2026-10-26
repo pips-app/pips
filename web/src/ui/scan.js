@@ -76,7 +76,7 @@ export function scanner(onText, hint = t('receive.point')) {
     if (!f) return;
     const r = await reader();
     if (!r) return toast(t('scan.failed'));
-    const texts = await r.read(await createImageBitmap(f)).catch(() => []);
+    const texts = await r.read(await createImageBitmap(f)).catch(() => /** @type {string[]} */ ([]));
     if (!texts.length) return toast(t('scan.none'));
     for (const text of texts) onText(text);
   }

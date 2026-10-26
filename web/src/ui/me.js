@@ -2,13 +2,14 @@
 // Me: identity, what goes on the back of your cards, secrets, settings.
 
 import { h, icon, replace, byteLimit } from '../dom.js';
-import { t, language, setLanguage, date } from '../i18n.js';
+import { t, language, date } from '../i18n.js';
 import { app, setProfile, addOwn, receive, backdate, makeBackup, restoreBackup, lastBackup } from '../state.js';
 import { isPersisted, setMeta, memoryOnly } from '../store.js';
 import { toast, ask, go } from './shell.js';
 import { qrText } from './qr.js';
 import { isDevHost } from '../core.js';
 import { identicon } from '../kit/identicon.js';
+import { BLANK_CARD } from './card.js';
 
 const NETWORKS = ['telegram', 'instagram', 'x', 'bluesky', 'mastodon', 'vk', 'tiktok', 'other'];
 
@@ -31,7 +32,7 @@ export function meView() {
       onchange: async () => {
         await setMeta('language', lang.value);
         // In memory-only mode a reload would lose everything: apply on next start.
-        if (memoryOnly) toast(lang.value === 'ru' ? 'Язык сменится при следующем запуске' : 'The language changes on the next start');
+        if (memoryOnly) toast(t('me.language.later'));
         else location.reload();
       },
     }, h('option', { value: 'ru', selected: language() === 'ru' }, 'Русский'), h('option', { value: 'en', selected: language() === 'en' }, 'English')));
@@ -45,7 +46,7 @@ export function meView() {
       };
       // The core is the judge of what a card may carry.
       try {
-        app.core.shareSize({ ...probe, author: next.nick, handle: next.handle, link: next.link });
+        app.core.shareSize({ ...BLANK_CARD, author: next.nick, handle: next.handle, link: next.link });
       } catch (e) {
         error.textContent = /** @type {any} */ (e).message ?? t('err.generic');
         return;
@@ -75,7 +76,7 @@ export function meView() {
       if (!(await ask(t('me.secret.confirm'), { yes: t('ask.show') }))) return;
       shown = what;
       if (what === 'words') {
-        replace(secret, h('div', { class: 'word-grid' }, app.identity.words().split(' ').map((w) => h('span', {}, w))));
+        replace(secret, h('div', { class: 'word-grid' }, app.identity.words().split(' ').map((/** @type {string} */ w) => h('span', {}, w))));
       } else {
         // The QR is what gets printed; the text stays folded away unless asked for.
         const paper = app.identity.paper();
@@ -193,11 +194,6 @@ function normalLink(s) {
   const i = v.search(/[/?#]/);
   return i < 0 ? v.toLowerCase() : v.slice(0, i).toLowerCase() + v.slice(i);
 }
-
-const probe = {
-  width: 1, height: 1, opaque: false, palette: { builtin: 0 }, frame: 0, frames: 1, delay_ms: 0,
-  title: '', author: '', handle: null, link: '', pixels: new Uint8Array(1),
-};
 
 /** Development: own cards from the sample art, and received ones from
  * made-up artists. No reload afterwards: with storage unavailable the app

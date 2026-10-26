@@ -77,7 +77,7 @@ export function gestures(el, o) {
     }
     if (pts.size !== 1) return;
     if (onControl) return set({ kind: 'control', id: e.pointerId, hist: [] });
-    const s = { kind: /** @type {'pending'} */ ('pending'), id: e.pointerId, hist: [], hold: 0 };
+    const s = { kind: /** @type {'pending'} */ ('pending'), id: e.pointerId, hist: /** @type {{x: number, y: number, t: number}[]} */ ([]), hold: 0 };
     set(s);
     if (o.hold) {
       s.hold = window.setTimeout(() => {

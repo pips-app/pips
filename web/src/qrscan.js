@@ -19,7 +19,7 @@ export function qrReader() {
 
 async function make() {
   const D = /** @type {any} */ (globalThis).BarcodeDetector;
-  const formats = D ? await D.getSupportedFormats?.().catch(() => []) : [];
+  const formats = D ? await D.getSupportedFormats?.().catch(() => /** @type {string[]} */ ([])) : [];
   if (D && formats?.includes('qr_code')) {
     const d = new D({ formats: ['qr_code'] });
     return { native: true, read: async (/** @type {any} */ src) => (await d.detect(src)).map((/** @type {any} */ c) => c.rawValue) };

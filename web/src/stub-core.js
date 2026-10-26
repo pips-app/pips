@@ -77,14 +77,14 @@ export default async function init() {
 }
 
 export function palettes() {
-  return PALETTES.map((p) => ({ id: p.id, slug: p.slug, name: p.slug, summary: '', credit: null, colors: p.colors }));
+  return PALETTES.map((p) => ({ id: p.id, slug: p.slug, name: p.slug, summary: '', credit: /** @type {string|null} */ (null), colors: p.colors }));
 }
 
 /** @param {Uint8Array} bytes */
 export function parsePalette(bytes) {
   const colors = dec.decode(bytes).split(/\s+/).filter(Boolean).map((h) => [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16)));
   if (colors.length < 2 || colors.some((c) => c.some(Number.isNaN))) fail('bad_palette', 'stub: .hex only');
-  return { name: null, colors };
+  return { name: /** @type {string|null} */ (null), colors };
 }
 
 /** @param {any} card */
@@ -137,8 +137,8 @@ function serialiseCard(full) {
       i = j;
     }
     return runs.length < packed.length
-      ? { ...card, pixels: undefined, r: b64(new Uint8Array(runs)), n: px.length }
-      : { ...card, pixels: undefined, p4: b64(packed), n: px.length };
+      ? { ...card, pixels: /** @type {undefined} */ (undefined), r: b64(new Uint8Array(runs)), n: px.length }
+      : { ...card, pixels: /** @type {undefined} */ (undefined), p4: b64(packed), n: px.length };
   }
   return { ...card, pixels: undefined, p8: b64(px), n: px.length };
 }
@@ -189,6 +189,7 @@ export function importPicture() {
   throw { code: 'unsupported', message: 'import needs the WebAssembly core' };
 }
 
+/** @param {string} text */
 export function classify(text) {
   text = text.trim();
   if (text.startsWith('PIPS:KEY:1:')) return { kind: 'paper_key' };
@@ -272,7 +273,7 @@ export class Identity {
   /** @param {string} text */
   static fromPaper(text) { return new Identity(text.replace('PIPS:KEY:1:', '').padEnd(64, '0').slice(0, 64)); }
   seed() { return unhex(this.s); }
-  words() { return ['stub', ...this.s.match(/../g).slice(0, 16), 'demo', 'demo', 'demo', 'demo', 'demo', 'demo', 'demo'].join(' '); }
+  words() { return ['stub', ...(this.s.match(/../g) ?? []).slice(0, 16), 'demo', 'demo', 'demo', 'demo', 'demo', 'demo', 'demo'].join(' '); }
   paper() { return `PIPS:KEY:1:${this.s.toUpperCase()}`; }
   publicKey() { return keyData(this.k); }
   /** @param {any} card */

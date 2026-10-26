@@ -7,7 +7,7 @@
 import { h, icon } from '../dom.js';
 import { t, date } from '../i18n.js';
 import { app, editionLog, issueEdition } from '../state.js';
-import { qrFor, qrText, keepAwake } from './qr.js';
+import { qrFor, qrText, keepAwake, codeSize } from './qr.js';
 import { scanner } from './scan.js';
 import { ask, toast } from './shell.js';
 
@@ -37,7 +37,7 @@ export async function showRecipientCode() {
   const release = await keepAwake();
   const { body } = sheet(t('edition.my-code'), release);
   body.append(
-    qrText(app.identity.recipientCode(nick), Math.min(320, innerWidth - 64)),
+    qrText(app.identity.recipientCode(nick), codeSize()),
     h('p', { class: 'qr-note' }, t('edition.my-code.hint', nick)));
 }
 
@@ -110,7 +110,7 @@ function scanRecipient(digest, of) {
 /** @param {Uint8Array} envelope @param {string} label @param {string} nick */
 async function showEnvelope(envelope, label, nick) {
   const release = await keepAwake();
-  const q = qrFor(envelope, Math.min(320, innerWidth - 64));
+  const q = qrFor(envelope, codeSize());
   const { body, close } = sheet(label, () => {
     q.stop();
     release();
