@@ -27,7 +27,7 @@
 /* Mouse controls: closer and further in the bar, along the feed at its sides. */
 .collection-bar .zoom { display: flex; gap: 4px; flex: none; }
 .collection-bar .zoom .ib:disabled, .feed-nav .ib:disabled { opacity: .35; cursor: default; }
-.feed-nav { position: absolute; z-index: 160; left: 0; right: 0; top: 50%; pointer-events: none; display: flex; justify-content: space-between;
+.feed-nav { position: absolute; z-index: 42; left: 0; right: 0; top: 50%; pointer-events: none; display: flex; justify-content: space-between;
   padding: 0 max(16px, calc((100% - 1100px) / 2 + 16px)); }
 .feed-nav[hidden] { display: none; }
 .feed-nav .ib { pointer-events: auto; width: 44px; height: 44px; background: var(--raise2); box-shadow: 0 6px 16px -8px #000; }
@@ -154,7 +154,6 @@ input.tag.add::placeholder { color: var(--shade-dim); }
 .share-code p { margin: 0; font-size: 13px; text-align: center; max-width: 34ch; color: var(--shade-dim); }
 .share-code p.small { font-size: 11.5px; }
 .share-code .qr-box { box-shadow: none; }
-.share-code .edition-panel { width: 100%; margin: 0; color: var(--shade-ink); }
 /* The numbered-copy panel inside the sheet takes the paper's colours. */
 .share-code .field { background: color-mix(in srgb, var(--shade-ink) 7%, transparent); box-shadow: none; }
 .share-code .field:focus-within { box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--shade-ink) 40%, transparent); }
@@ -162,11 +161,11 @@ input.tag.add::placeholder { color: var(--shade-dim); }
 .share-code .field input, .share-code .issued-row { color: var(--shade-ink); }
 .share-code .field input::placeholder { color: var(--shade-dim); }
 .share-code .issued-row { border-color: color-mix(in srgb, var(--shade-ink) 12%, transparent); }
-/* In the sheet everything is centred on the code's axis: the run-size
-   field is a compact centred box, the button keeps a button's width. */
-.share-code .edition-panel { align-items: center; text-align: center; }
-.share-code .edition-panel .field { width: min(100%, 300px); margin: 0; }
+/* In the sheet the panel is one column on the code's axis: the run-size
+   field, the button and the issue log share its width and its edges. */
+.share-code .edition-panel { width: min(100%, 300px); margin: 0; color: var(--shade-ink); text-align: center; }
+.share-code .edition-panel .field { margin: 0; }
 .share-code .edition-panel .field label { min-width: 0; }
-.share-code .edition-panel .field input { text-align: center; }
-.share-code .edition-panel .btn.wide { width: min(100%, 300px); }
-.share-code .edition-panel .issued { width: min(100%, 300px); text-align: left; }
+.share-code .edition-panel .field input { text-align: right; }
+.share-code .edition-panel .issued { text-align: left; }
+.share-code .edition-panel p { max-width: none; }
