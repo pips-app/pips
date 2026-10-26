@@ -7,8 +7,9 @@ import { loadCore, isDevHost } from './core.js';
 import { t, setLanguage, defaultLanguage } from './i18n.js';
 import { load, hasIdentity } from './state.js';
 import { getMeta } from './store.js';
-import { mountShell, go, ask } from './ui/shell.js';
+import { mountShell, go } from './ui/shell.js';
 import { collectionView } from './collection/view.js';
+import { editorView } from './editor/view.js';
 import { importView } from './ui/import.js';
 import { receiveView } from './ui/receive.js';
 import { meView } from './ui/me.js';
@@ -32,9 +33,9 @@ async function main() {
   if (loaded.stub) document.body.append(h('div', { class: 'dev-banner' }, 'DEV STUB — NOT SECURE'));
 
   const start = () => {
-    // No editor yet: say so, and offer what makes a card today.
-    const draw = () => ask(t('draw.soon'), { yes: t('tab.import') }).then((yes) => yes && go('import'));
-    mountShell(root, { collection: collectionView({ draw }), import: importView(), receive: receiveView(), me: meView() }, { draw });
+    mountShell(root, {
+      collection: collectionView({ draw: () => go('draw') }), draw: editorView(), import: importView(), receive: receiveView(), me: meView(),
+    });
     go('collection');
   };
   if (hasIdentity()) start();

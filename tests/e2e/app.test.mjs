@@ -355,6 +355,94 @@ test('on a computer, a mouse and the keys reach every level', async () => {
   await p.context().close();
 });
 
+test('the editor: drawing, undo that loses nothing, palettes, frames, a draft, signing', async () => {
+  const p = await env.phone('drawfox', undefined, true);
+  await tab(p, 'draw');
+  await p.locator('.ed-art').waitFor();
+  await p.waitForTimeout(400);
+  const art = await p.$eval('.ed-art', (e) => { const r = e.getBoundingClientRect(); return { x: r.x, y: r.y, w: r.width }; });
+  const at = (x, y) => ({ x: art.x + ((x + 0.5) * art.w) / 32, y: art.y + ((y + 0.5) * art.w) / 32 });
+  /** The colour of a cell as drawn, or null if empty. */
+  const cell = (x, y) => p.evaluate(([x, y]) => {
+    const d = document.querySelectorAll('.ed-layer')[2].getContext('2d').getImageData(x, y, 1, 1).data;
+    return d[3] ? `#${[d[0], d[1], d[2]].map((v) => v.toString(16).padStart(2, '0')).join('')}` : null;
+  }, [x, y]);
+  const stroke = async (from, to) => {
+    const a = at(...from), b = at(...to);
+    await p.mouse.move(a.x, a.y);
+    await p.mouse.down();
+    await p.mouse.move(b.x, b.y, { steps: 8 });
+    await p.mouse.up();
+  };
+  const undoLabel = () => p.getAttribute('.ed-bar .ib >> nth=1', 'aria-label');
+
+  // A line, undone with the keyboard, redone with the button.
+  await stroke([2, 2], [9, 2]);
+  assert.equal(await cell(5, 2), '#17151f');
+  assert.equal(await undoLabel(), 'Отменить: карандаш');
+  await p.keyboard.press('Control+z');
+  assert.equal(await cell(5, 2), null);
+  await p.click('.ed-bar .ib >> nth=2');
+  assert.equal(await cell(5, 2), '#17151f');
+
+  // Undo, then something else: the first line is a branch, not lost.
+  await p.keyboard.press('Control+z');
+  await p.click('.ed-swatch >> nth=8'); // red
+  await stroke([2, 6], [9, 6]);
+  assert.equal(await cell(5, 6), '#c4392f');
+  await p.click('.ed-bar .ib >> nth=1', { button: 'right' }); // the whole history
+  await p.locator('.ed-history .ed-branch').first().click();
+  assert.equal(await cell(5, 2), '#17151f', 'the abandoned line is back');
+  assert.equal(await cell(5, 6), null);
+  await p.keyboard.press('Escape');
+
+  // Pixel-perfect: a hand-drawn stair has no doubled corners.
+  await p.click('.ed-swatch >> nth=4');
+  const pts = [[12, 12], [13, 12], [13, 13], [14, 13], [14, 14]].map(([x, y]) => at(x, y));
+  await p.mouse.move(pts[0].x, pts[0].y);
+  await p.mouse.down();
+  for (const q of pts.slice(1)) await p.mouse.move(q.x, q.y);
+  await p.mouse.up();
+  assert.equal(await cell(13, 12), null, 'the corner cell is taken out');
+  assert.equal(await cell(13, 13), '#17151f');
+
+  // A ready palette, tried and applied: the picture takes its colours, one step.
+  await p.click('.ed-pal-name');
+  await p.locator('.ed-pal-row', { hasText: 'Sweetie 16' }).click();
+  await p.click('.bottom-sheet.on .btn.key');
+  assert.match(await p.textContent('.ed-pal-name'), /Sweetie 16/);
+  assert.notEqual(await cell(5, 2), '#17151f');
+  assert.equal(await undoLabel(), 'Отменить: другая палитра');
+
+  // A second frame, a title; the meter says one code.
+  await p.click('.ed-frame.add');
+  assert.equal(await p.locator('.ed-frame-list .ed-frame').count(), 2);
+  await p.fill('.ed-title', 'Лесенка');
+  assert.match(await p.textContent('.ed-meter'), /1 QR/);
+
+  // The draft, with its history, outlives a reload.
+  await p.waitForTimeout(900);
+  await p.reload();
+  await p.locator('nav.tabs').waitFor();
+  await tab(p, 'draw');
+  await p.locator('.ed-frame-list .ed-frame >> nth=1').waitFor();
+  assert.equal(await p.inputValue('.ed-title'), 'Лесенка');
+  assert.match(await undoLabel(), /название/);
+
+  // Signed, it opens in the collection.
+  await p.click('.ed-sign');
+  await p.locator('.turn:not([hidden])').waitFor();
+  const card = await p.evaluate(async () => {
+    const s = await import('/src/state.js');
+    const e = [...s.app.cards.values()].find((x) => x.card.title === 'Лесенка');
+    return e && { frames: e.card.frames, size: e.card.width, mine: e.rec.mine };
+  });
+  assert.deepEqual(card, { frames: 2, size: 32, mine: true });
+  await tab(p, 'draw');
+  assert.equal(await p.inputValue('.ed-title'), '', 'a fresh canvas after signing');
+  await p.context().close();
+});
+
 test('a backup restores cards, notes and the copy log, only for its key', async () => {
   const a = await env.phone('pixelfox');
   await tab(a, 'me');
