@@ -113,7 +113,9 @@ export function editorView() {
       held?.move(c);
       coords.textContent = `x ${c.x} · y ${c.y}`;
     },
-    press: (erase) => { held = stroke(cursorCell(), erase ? 'eraser' : 'pen'); },
+    // The big button does what the chosen tool does: a pixel, a fill, a
+    // shape dragged from where it is pressed to where it is let go.
+    press: (erase) => { held = stroke(cursorCell(), erase ? 'eraser' : state.tool); },
     release: () => { held?.end(); held = null; },
     pick: () => pickAt(cursorCell()),
   });
@@ -138,7 +140,9 @@ export function editorView() {
   const frameSheet = bottomSheet({ label: t('ed.frame.menu') });
 
   const aside = h('aside', { class: 'ed-aside' });
-  const main = h('div', { class: 'ed-main' }, h('div', { class: 'ed-card-wrap' }, card, coords), frames.el);
+  const wrap = h('div', { class: 'ed-card-wrap' }, card, coords);
+  canvas.mount(wrap, card);
+  const main = h('div', { class: 'ed-main' }, wrap, frames.el);
   const el = h('section', { class: 'view ed-view' },
     bar, h('div', { class: 'ed-body' }, tools.el, main, h('div', { class: 'ed-lower' }, palette.el, pad.el), aside),
     ...more.els, ...palettes.els, ...colors.els, ...history.els, ...frameSheet.els);
@@ -232,7 +236,12 @@ export function editorView() {
     paint();
   }
 
-  const input = drawInput(canvas.el, {
+  /** Where the mouse (or a finger) last was over the canvas, for the cursor. @type {{x: number, y: number}|null} */
+  let pointer = null;
+  /** The cursor of the next pixel follows the pointer, and stays right when the view moves under it. */
+  const follow = () => { if (!state.precise) canvas.cursor(pointer && canvas.cellAt(pointer)); };
+  const input = drawInput(wrap, {
+    skip: '.ed-title',
     draw: (p) => {
       if (state.playing) { stop(); return null; }
       if (state.precise) {
@@ -248,19 +257,21 @@ export function editorView() {
     pick: (p) => pickAt(canvas.cellAt(p)),
     view: canvas.view(),
     taps: (n) => (n === 2 ? undo() : redo()),
-    hover: (p) => { if (!state.precise) canvas.cursor(p && inside(canvas.cellAt(p), model.doc.size) ? canvas.cellAt(p) : null); },
+    point: (p) => { pointer = p; follow(); },
     panKey: () => spaceDown,
   });
 
   // A mouse wheel zooms around the pointer, a notch a step; a trackpad's
   // two-finger scroll moves the view, its pinch zooms.
-  canvas.el.addEventListener('wheel', (e) => {
+  wrap.addEventListener('wheel', (e) => {
     e.preventDefault();
     const unit = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? 400 : 1, dy = e.deltaY * unit, dx = e.deltaX * unit;
     const at = { x: e.clientX, y: e.clientY };
     if (e.ctrlKey || e.metaKey) canvas.zoomBy(Math.exp(-dy * 0.01), at);
     else if (e.deltaMode !== 0 || Math.abs(dy) >= 50) canvas.zoomBy(dy < 0 ? 1.25 : 0.8, at);
     else canvas.panBy(dx, dy);
+    pointer = at;
+    follow();
   }, { passive: false });
 
   // ---------------------------------------------------------- undo, redo --
@@ -421,6 +432,7 @@ export function editorView() {
     el.classList.toggle('precise', state.precise);
     canvas.el.classList.toggle('playing', state.playing);
     if (state.precise) {
+      cursor = { x: clamp(cursor.x, 0, d.size - 0.01), y: clamp(cursor.y, 0, d.size - 0.01) };
       const c = cursorCell();
       canvas.cursor(c);
       coords.textContent = `x ${c.x} · y ${c.y}`;
@@ -461,6 +473,7 @@ export function editorView() {
     else if (e.key === 'Escape') { if (state.playing) stop(); else if (state.precise) { state.precise = false; paint(); } else go('collection'); }
     else return;
     e.preventDefault();
+    follow(); // a zoom moves the canvas under a still mouse
   });
   document.addEventListener('keyup', (e) => { if (e.key === ' ') spaceDown = false; });
   const centre = () => {

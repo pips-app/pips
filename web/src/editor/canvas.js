@@ -1,13 +1,16 @@
 // @ts-check
 // The drawing surface: the picture over a checkerboard of its own cells,
 // the previous frame faintly beneath it (the onion skin), the grid, and
-// where the next pixel would go. It can be zoomed and moved; it does not
-// know about tools — it draws what it is given and tells which cell a point
-// of the page is over.
+// where the next pixel would go. It does not know about tools — it draws
+// what it is given and tells which cell a point of the page is over.
 //
-// Three small canvases at the picture's own resolution, scaled up with
-// pixelated sampling, so cells, checks and onion line up exactly whatever
-// the zoom; one more, at the screen's resolution, for the thin lines.
+// Zooming brings the whole card closer, paper and all, like a card lifted
+// to the eye: the card is scaled and moved inside its viewport, which clips
+// it. Three small canvases at the picture's own resolution, scaled up with
+// pixelated sampling, keep cells, checks and onion exactly in line at any
+// zoom; the thin lines (grid, cursor, the light of an undo) are drawn on one
+// more canvas over the viewport, at the screen's resolution, so they stay
+// sharp however close the card is.
 
 import { h } from '../dom.js';
 import { T } from './model.js';
@@ -16,27 +19,43 @@ import { clamp } from '../kit/motion.js';
 
 const ONION = [91, 127, 192]; // cool blue, so the previous frame never reads as paint
 const GRID_MIN = 7; // px a cell needs on screen to show the grid
+const CELL_MAX = 48; // px a cell may grow to
 
 export function createCanvas() {
   const checker = /** @type {HTMLCanvasElement} */ (h('canvas', { class: 'ed-layer' }));
   const onion = /** @type {HTMLCanvasElement} */ (h('canvas', { class: 'ed-layer ed-onion' }));
   const pix = /** @type {HTMLCanvasElement} */ (h('canvas', { class: 'ed-layer' }));
   const lines = /** @type {HTMLCanvasElement} */ (h('canvas', { class: 'ed-lines', 'aria-hidden': 'true' }));
-  const stage = h('div', { class: 'ed-stage' }, checker, onion, pix);
-  const el = h('div', { class: 'ed-art', role: 'img' }, stage, lines);
+  const el = h('div', { class: 'ed-art', role: 'img' }, checker, onion, pix);
+  /** @type {HTMLElement} */
+  let viewport = el, target = el;
 
   let size = 0, zoom = 1, tx = 0, ty = 0, paper = 0xf6f3eb;
   /** @type {{cursor: {x: number, y: number}|null, grid: boolean, flash: {cells: number[], until: number}|null}} */
   const marks = { cursor: null, grid: true, flash: null };
 
-  const side = () => el.clientWidth || 1;
-  const maxZoom = () => Math.max(1, (48 * size) / side()); // a cell up to ~48 px
+  /** The card's place in the viewport before any zoom, and the art's in the card. */
+  const base = () => ({ x: target.offsetLeft, y: target.offsetTop, w: target.offsetWidth, h: target.offsetHeight, aw: el.offsetWidth });
+  /** Where the art is now, in viewport pixels. */
+  function art() {
+    const b = base(), off = offsetIn(el, target);
+    return { x: b.x + tx + off.x * zoom, y: b.y + ty + off.y * zoom, w: b.aw * zoom };
+  }
+  const maxZoom = () => Math.max(1, (CELL_MAX * size) / (el.offsetWidth || 1));
+
+  /** Keeps the card on screen: centred while it fits, else covering the viewport. */
   function place() {
-    const w = side();
+    const b = base(), W = viewport.clientWidth, H = viewport.clientHeight;
     zoom = clamp(zoom, 1, maxZoom());
-    tx = clamp(tx, w - w * zoom, 0);
-    ty = clamp(ty, w - w * zoom, 0);
-    stage.style.transform = `translate(${tx}px,${ty}px) scale(${zoom})`;
+    const fit = (/** @type {number} */ at, /** @type {number} */ t, /** @type {number} */ len, /** @type {number} */ room) => {
+      const span = len * zoom;
+      const x0 = span <= room ? at - (span - len) / 2 : clamp(at + t, room - span, 0);
+      return x0 - at;
+    };
+    tx = zoom === 1 ? 0 : fit(b.x, tx, b.w, W);
+    ty = zoom === 1 ? 0 : fit(b.y, ty, b.h, H);
+    target.style.transform = zoom === 1 ? '' : `translate(${tx}px,${ty}px) scale(${zoom})`;
+    target.classList.toggle('lifted', zoom > 1);
     drawLines();
   }
 
@@ -53,22 +72,27 @@ export function createCanvas() {
     g.putImageData(img, 0, 0);
   }
 
-  /** The thin things, at the screen's resolution. */
+  /** The thin things, over the viewport, at the screen's resolution. */
   function drawLines() {
-    const w = side(), dpr = devicePixelRatio || 1, px = Math.round(w * dpr);
-    if (lines.width !== px) { lines.width = px; lines.height = px; }
+    const W = viewport.clientWidth, H = viewport.clientHeight, dpr = devicePixelRatio || 1;
+    const pw = Math.round(W * dpr), ph = Math.round(H * dpr);
+    if (lines.width !== pw || lines.height !== ph) { lines.width = pw; lines.height = ph; }
     const g = /** @type {CanvasRenderingContext2D} */ (lines.getContext('2d'));
-    g.clearRect(0, 0, px, px);
+    g.clearRect(0, 0, pw, ph);
     if (!size) return;
-    const cell = (w * zoom) / size;
-    const at = (/** @type {number} */ k, /** @type {number} */ t) => Math.round((t + k * cell) * dpr) + 0.5;
+    const a = art(), cell = a.w / size;
+    const X = (/** @type {number} */ k) => Math.round((a.x + k * cell) * dpr), Y = (/** @type {number} */ k) => Math.round((a.y + k * cell) * dpr);
+    g.save();
+    g.beginPath();
+    g.rect(X(0), Y(0), X(size) - X(0), Y(size) - Y(0));
+    g.clip(); // nothing over the paper
     if (marks.grid && cell >= GRID_MIN) {
       g.strokeStyle = 'rgba(0,0,0,.2)';
       g.lineWidth = 1;
       g.beginPath();
       for (let k = 1; k < size; k++) {
-        g.moveTo(at(k, tx), 0); g.lineTo(at(k, tx), px);
-        g.moveTo(0, at(k, ty)); g.lineTo(px, at(k, ty));
+        g.moveTo(X(k) + 0.5, Y(0)); g.lineTo(X(k) + 0.5, Y(size));
+        g.moveTo(X(0), Y(k) + 0.5); g.lineTo(X(size), Y(k) + 0.5);
       }
       g.stroke();
     }
@@ -77,16 +101,17 @@ export function createCanvas() {
       g.fillStyle = `rgba(109,143,214,${0.55 * ((marks.flash.until - now) / 600)})`;
       for (const i of marks.flash.cells) {
         const x = i % size, y = (i - x) / size;
-        g.fillRect((tx + x * cell) * dpr, (ty + y * cell) * dpr, cell * dpr, cell * dpr);
+        g.fillRect(X(x), Y(y), X(x + 1) - X(x), Y(y + 1) - Y(y));
       }
     } else marks.flash = null;
-    if (marks.cursor) {
-      const { x, y } = marks.cursor, s = cell * dpr, X = (tx + x * cell) * dpr, Y = (ty + y * cell) * dpr;
-      g.lineWidth = Math.max(1, dpr);
+    g.restore();
+    if (marks.cursor && marks.cursor.x >= 0 && marks.cursor.y >= 0 && marks.cursor.x < size && marks.cursor.y < size) {
+      const { x, y } = marks.cursor, x0 = X(x), y0 = Y(y), s = X(x + 1) - x0, lw = Math.max(1, Math.round(dpr));
+      g.lineWidth = lw;
       g.strokeStyle = '#1a1b21';
-      g.strokeRect(X + 0.5, Y + 0.5, s - 1, s - 1);
+      g.strokeRect(x0 + lw / 2, y0 + lw / 2, s - lw, s - lw);
       g.strokeStyle = '#ffffff';
-      g.strokeRect(X + 0.5 + dpr, Y + 0.5 + dpr, s - 1 - 2 * dpr, s - 1 - 2 * dpr);
+      g.strokeRect(x0 + lw * 1.5, y0 + lw * 1.5, s - lw * 3, s - lw * 3);
     }
   }
 
@@ -105,15 +130,31 @@ export function createCanvas() {
     g.putImageData(img, 0, 0);
   }
 
+  /** A point of the page in viewport pixels. @param {{x: number, y: number}} p */
+  const local = (p) => {
+    const r = viewport.getBoundingClientRect();
+    return { x: p.x - r.left, y: p.y - r.top };
+  };
+
   return {
     el,
+    /**
+     * Where the canvas lives: `viewport` clips and holds the thin lines,
+     * `target` (the card around the art) is what zooming moves.
+     * @param {HTMLElement} v @param {HTMLElement} t
+     */
+    mount(v, t) {
+      viewport = v;
+      target = t;
+      v.append(lines);
+    },
     /**
      * Draws a frame. @param {import('./model.js').Doc} doc @param {number} f
      * @param {{onion: number|null, paper: number}} o onion: the frame beneath, or null
      */
     paint(doc, f, o) {
       if (doc.size !== size || o.paper !== paper) {
-        if (doc.size !== size) { zoom = 1; tx = ty = 0; }
+        if (doc.size !== size) zoom = 1;
         size = doc.size;
         paper = o.paper;
         for (const cv of [checker, onion, pix]) { cv.width = size; cv.height = size; }
@@ -125,10 +166,10 @@ export function createCanvas() {
     },
     /** The cell under a point of the page (it may lie outside). @param {{x: number, y: number}} p */
     cellAt(p) {
-      const r = el.getBoundingClientRect(), cell = (r.width * zoom) / size;
-      return { x: Math.floor((p.x - r.left - tx) / cell), y: Math.floor((p.y - r.top - ty) / cell) };
+      const q = local(p), a = art(), cell = a.w / size;
+      return { x: Math.floor((q.x - a.x) / cell), y: Math.floor((q.y - a.y) / cell) };
     },
-    /** @param {{x: number, y: number}|null} c */
+    /** Where the next pixel would go, or nothing. @param {{x: number, y: number}|null} c */
     cursor(c) {
       if (c?.x === marks.cursor?.x && c?.y === marks.cursor?.y) return;
       marks.cursor = c;
@@ -147,15 +188,15 @@ export function createCanvas() {
       let z0 = 1, x0 = 0, y0 = 0, d0 = 0, m0 = { x: 0, y: 0 };
       return {
         /** @param {{x: number, y: number}} m @param {number} d */
-        start(m, d) { z0 = zoom; x0 = tx; y0 = ty; d0 = d; m0 = m; },
+        start(m, d) { z0 = zoom; x0 = tx; y0 = ty; d0 = d; m0 = local(m); },
         /** @param {{x: number, y: number}} m @param {number} d */
         move(m, d) {
-          const r = el.getBoundingClientRect();
+          const q = local(m), b = base();
           zoom = clamp(d0 > 0 && d > 0 ? z0 * (d / d0) : z0, 1, maxZoom());
-          // The point of the picture first under the fingers stays under them.
-          const px = (m0.x - r.left - x0) / z0, py = (m0.y - r.top - y0) / z0;
-          tx = m.x - r.left - px * zoom;
-          ty = m.y - r.top - py * zoom;
+          // The point of the card first under the fingers stays under them.
+          const ux = (m0.x - b.x - x0) / z0, uy = (m0.y - b.y - y0) / z0;
+          tx = q.x - b.x - ux * zoom;
+          ty = q.y - b.y - uy * zoom;
           place();
         },
         end() {},
@@ -163,19 +204,29 @@ export function createCanvas() {
     },
     /** Zooms by a factor around a point of the page. @param {number} f @param {{x: number, y: number}} at */
     zoomBy(f, at) {
-      const r = el.getBoundingClientRect(), z = clamp(zoom * f, 1, maxZoom());
-      const px = (at.x - r.left - tx) / zoom, py = (at.y - r.top - ty) / zoom;
+      const q = local(at), b = base(), z = clamp(zoom * f, 1, maxZoom());
+      const ux = (q.x - b.x - tx) / zoom, uy = (q.y - b.y - ty) / zoom;
       zoom = z;
-      tx = at.x - r.left - px * zoom;
-      ty = at.y - r.top - py * zoom;
+      tx = q.x - b.x - ux * zoom;
+      ty = q.y - b.y - uy * zoom;
       place();
     },
     /** @param {number} dx @param {number} dy */
     panBy(dx, dy) { tx -= dx; ty -= dy; place(); },
-    /** Whole picture in view. */
-    fit() { zoom = 1; tx = ty = 0; place(); },
+    /** The whole card in view. */
+    fit() { zoom = 1; place(); },
     /** After the page's layout changed. */
     relayout: () => place(),
     get zoomed() { return zoom > 1.01; },
   };
+}
+
+/** Where `el` sits inside `outer`, before transforms. @param {HTMLElement} el @param {HTMLElement} outer */
+function offsetIn(el, outer) {
+  let x = 0, y = 0;
+  for (let n = /** @type {HTMLElement|null} */ (el); n && n !== outer; n = /** @type {HTMLElement|null} */ (n.offsetParent)) {
+    x += n.offsetLeft;
+    y += n.offsetTop;
+  }
+  return { x, y };
 }

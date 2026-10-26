@@ -18,11 +18,15 @@ function surface() {
     pick: (p) => log.push(['pick', p.x]),
     view: { start: () => log.push(['view']), move: () => {}, end: () => log.push(['view-end']) },
     taps: (n) => log.push(['taps', n]),
+    point: (p) => log.push(['point', p && p.x]),
+    skip: '.field',
   });
-  const ev = (type, id, x, y, kind = 'touch', extra = {}) => on[type]({ type, pointerId: id, pointerType: kind, clientX: x, clientY: y, button: 0, ...extra });
+  const target = (cls) => ({ closest: (sel) => (cls && sel === `.${cls}` ? {} : null) });
+  const ev = (type, id, x, y, kind = 'touch', extra = {}) => on[type]({ type, pointerId: id, pointerType: kind, clientX: x, clientY: y, button: 0, target: target(extra.cls), ...extra });
   return {
     input, log,
     down: (id, x, y, kind, extra) => ev('pointerdown', id, x, y, kind, extra),
+    log0: () => log.filter((e) => e[0] !== 'point'),
     move: (id, x, y, kind) => ev('pointermove', id, x, y, kind),
     up: (id, x, y, kind) => ev('pointerup', id, x, y, kind),
   };
@@ -34,7 +38,7 @@ test('a finger draws from the moment it lands', () => {
   s.down(1, 10, 10);
   s.move(1, 30, 10);
   s.up(1, 30, 10);
-  assert.deepEqual(s.log, [['draw', 10], ['move', 30], ['end']]);
+  assert.deepEqual(s.log0(), [['draw', 10], ['move', 30], ['end']]);
   assert.equal(s.input.busy, false);
 });
 
@@ -44,7 +48,7 @@ test('a second finger takes the stroke back; a quick two-finger tap undoes', () 
   s.down(2, 100, 10);
   s.up(2, 100, 10);
   s.up(1, 10, 10);
-  assert.deepEqual(s.log, [['draw', 10], ['cancel'], ['view'], ['view-end'], ['taps', 2]]);
+  assert.deepEqual(s.log0(), [['draw', 10], ['cancel'], ['view'], ['view-end'], ['taps', 2]]);
 });
 
 test('three fingers tapped together redo', () => {
@@ -53,7 +57,7 @@ test('three fingers tapped together redo', () => {
   s.down(2, 100, 10);
   s.down(3, 50, 80);
   for (const id of [1, 2, 3]) s.up(id, 0, 0);
-  assert.deepEqual(s.log.at(-1), ['taps', 3]);
+  assert.deepEqual(s.log0().at(-1), ['taps', 3]);
 });
 
 test('a pinch that moves is no tap', () => {
@@ -71,7 +75,7 @@ test('a still press picks the colour instead of drawing', async () => {
   s.down(1, 40, 40);
   await wait(500);
   s.up(1, 40, 40);
-  assert.deepEqual(s.log, [['draw', 40], ['cancel'], ['pick', 40]]);
+  assert.deepEqual(s.log0(), [['draw', 40], ['cancel'], ['pick', 40]]);
 });
 
 test('while a pen draws, the palm is ignored', () => {
@@ -79,7 +83,7 @@ test('while a pen draws, the palm is ignored', () => {
   s.down(1, 10, 10, 'pen');
   s.down(2, 300, 300, 'touch');
   s.up(1, 10, 10, 'pen');
-  assert.deepEqual(s.log, [['draw', 10], ['end']]);
+  assert.deepEqual(s.log0(), [['draw', 10], ['end']]);
 });
 
 test('the mouse: left draws, right picks, middle moves the view', () => {
@@ -90,5 +94,22 @@ test('the mouse: left draws, right picks, middle moves the view', () => {
   s.up(1, 10, 10, 'mouse');
   s.down(1, 20, 10, 'mouse');
   s.up(1, 20, 10, 'mouse');
-  assert.deepEqual(s.log, [['pick', 10], ['view'], ['view-end'], ['draw', 20], ['end']]);
+  assert.deepEqual(s.log0(), [['pick', 10], ['view'], ['view-end'], ['draw', 20], ['end']]);
+});
+
+test('the cursor follows a stroke, a hovering mouse, and leaves with the finger', () => {
+  const s = surface();
+  s.move(9, 5, 5, 'mouse'); // hovering
+  s.down(1, 10, 10);
+  s.move(1, 20, 10);
+  s.up(1, 20, 10);
+  const pts = s.log.filter((e) => e[0] === 'point').map((e) => e[1]);
+  assert.deepEqual(pts, [5, 10, 20, null]);
+});
+
+test('a press on a field of the card is not a stroke', () => {
+  const s = surface();
+  s.down(1, 10, 10, 'mouse', { cls: 'field' });
+  s.up(1, 10, 10, 'mouse');
+  assert.deepEqual(s.log0(), []);
 });

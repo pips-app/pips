@@ -13,8 +13,11 @@
 //   a pen             while one is in use, touches of the palm are ignored.
 //
 // With a mouse: the left button draws, the right one (or Alt + left) picks,
-// the middle one (or Space + left) moves the view; moving without a button
-// shows where the next pixel would go.
+// the middle one (or Space + left) moves the view.
+//
+// `point` follows whatever is over the canvas — a mouse with or without a
+// button down, a pen, the finger of a stroke — so the cursor of the next
+// pixel never lags behind; a finger lifted, or the mouse gone, clears it.
 
 const HOLD_MS = 450;
 const STILL = 6; // px a finger may wander and still be still
@@ -32,9 +35,10 @@ const PEN_MS = 1000; // touches this soon after a pen are a palm
  *   pick: (p: Point) => void,
  *   view: ViewGesture,
  *   taps: (fingers: number) => void,
- *   hover?: (p: Point|null) => void,
+ *   point?: (p: Point|null) => void,
  *   panKey?: () => boolean,
- * }} o  points are in page coordinates
+ *   skip?: string,
+ * }} o  points are in page coordinates; skip: what is not the canvas (a field on the card)
  */
 export function drawInput(el, o) {
   /** @type {Map<number, {x: number, y: number, x0: number, y0: number}>} */
@@ -63,6 +67,7 @@ export function drawInput(el, o) {
 
   el.addEventListener('contextmenu', (e) => e.preventDefault());
   el.addEventListener('pointerdown', (e) => {
+    if (o.skip && /** @type {Element} */ (e.target).closest?.(o.skip)) return;
     if (e.pointerType === 'pen') penAt = performance.now();
     else if (e.pointerType === 'touch' && performance.now() - penAt < PEN_MS) return; // the palm
     try { el.setPointerCapture(e.pointerId); } catch { /* synthetic pointers */ }
@@ -77,10 +82,14 @@ export function drawInput(el, o) {
         o.view.start(at, 0);
         return;
       }
-      if (e.button === 0) g = { kind: 'draw', id: e.pointerId, s: o.draw(at, { button: 0 }), hold: 0 };
+      if (e.button === 0) {
+        o.point?.(at);
+        g = { kind: 'draw', id: e.pointerId, s: o.draw(at, { button: 0 }), hold: 0 };
+      }
       return;
     }
     if (pts.size === 1) {
+      o.point?.(at);
       const s = o.draw(at, { button: 0 });
       const d = { kind: /** @type {const} */ ('draw'), id: e.pointerId, s, hold: 0 };
       d.hold = window.setTimeout(() => {
@@ -95,6 +104,7 @@ export function drawInput(el, o) {
       g = d;
     } else if (g?.kind === 'draw' || (g?.kind === 'view' && pts.size > g.fingers)) {
       // A second (or third) finger: it was never a stroke.
+      o.point?.(null);
       const fingers = Math.max(pts.size, g.kind === 'view' ? g.fingers : 0);
       if (g.kind === 'view') o.view.end();
       toView();
@@ -105,13 +115,14 @@ export function drawInput(el, o) {
   el.addEventListener('pointermove', (e) => {
     const p = pts.get(e.pointerId);
     if (!p) {
-      if (e.pointerType === 'mouse' && !g) o.hover?.({ x: e.clientX, y: e.clientY });
+      if (e.pointerType !== 'touch' && !g) o.point?.({ x: e.clientX, y: e.clientY }); // a mouse or a pen, hovering
       return;
     }
     p.x = e.clientX;
     p.y = e.clientY;
     if (g?.kind === 'draw' && e.pointerId === g.id) {
       if (Math.hypot(p.x - p.x0, p.y - p.y0) > STILL) clearTimeout(g.hold);
+      o.point?.({ x: p.x, y: p.y });
       for (const c of /** @type {PointerEvent[]} */ (e.getCoalescedEvents?.() ?? [e])) g.s?.move({ x: c.clientX, y: c.clientY });
     } else if (g?.kind === 'view') {
       const m = mid(), d = spread();
@@ -128,6 +139,7 @@ export function drawInput(el, o) {
       if (e.type === 'pointercancel') g.s?.cancel();
       else g.s?.end();
       g = null;
+      o.point?.(e.pointerType === 'touch' ? null : { x: e.clientX, y: e.clientY });
     } else if (g?.kind === 'view') {
       if (pts.size) return; // the gesture ends with the last finger
       const v = g;
@@ -136,11 +148,12 @@ export function drawInput(el, o) {
       if (!v.moved && v.fingers >= 2 && performance.now() - v.t0 < TAP_MS) o.taps(v.fingers);
     } else if (!pts.size) {
       g = null;
+      if (e.pointerType === 'touch') o.point?.(null);
     }
   };
   el.addEventListener('pointerup', up);
   el.addEventListener('pointercancel', up);
-  el.addEventListener('pointerleave', (e) => { if (e.pointerType === 'mouse' && !pts.size) o.hover?.(null); });
+  el.addEventListener('pointerleave', (e) => { if (e.pointerType !== 'touch' && !pts.size) o.point?.(null); });
 
   return {
     /** Whether something is under way: a stroke, a pinch. */
