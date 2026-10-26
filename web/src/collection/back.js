@@ -108,7 +108,8 @@ export function cardBack(entry, o) {
       h('div', { class: 'tags-all-list' }, list.map((tag) => chip(tag, list))));
     all.hidden = false;
   };
-  new ResizeObserver(() => fold()).observe(tags);
+  const sizes = new ResizeObserver(() => fold());
+  sizes.observe(tags);
   /** @param {string[]} list */
   const save = (list) => {
     setTags(rec.digest, list);
@@ -172,7 +173,9 @@ export function cardBack(entry, o) {
     drawTags();
   };
   setEditing(editing);
-  return { el, setEditing };
+  /** Lets go of the back once it is no longer shown. */
+  const stop = () => sizes.disconnect();
+  return { el, setEditing, stop };
 }
 
 /** The artist's handle and link, each with a way to copy or open it. @param {any} card */

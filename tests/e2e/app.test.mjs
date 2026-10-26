@@ -289,6 +289,53 @@ test('the collection: tags, search, archive and the bin, all without gestures', 
   await p.context().close();
 });
 
+test('on a computer, a mouse and the keys reach every level', async () => {
+  const p = await env.phone('deskfox', undefined, true);
+  await tab(p, 'me');
+  await p.click('text=Добавить образцы карточек');
+  await p.locator('.collection-view:visible').waitFor();
+  await p.waitForTimeout(800);
+  const level = () => p.$eval('.stage-host', (e) => Number(e.dataset.level));
+  const centre = () => p.$eval('.stage-host .on-stage.centre', (e) => [...e.parentElement.children].indexOf(e));
+  const settle = () => p.waitForTimeout(800);
+  assert.equal(await level(), 1);
+  await p.click('.collection-bar .zoom [aria-label="Дальше"]');
+  await settle();
+  assert.equal(await level(), 0, 'minus: the months');
+  assert.ok(await p.$eval('.collection-bar .zoom [aria-label="Дальше"]', (b) => b.disabled), 'no further than the months');
+  await p.click('.collection-bar .zoom [aria-label="Ближе"]');
+  await p.click('.collection-bar .zoom [aria-label="Ближе"]');
+  await settle();
+  assert.equal(await level(), 2, 'plus, twice: the feed');
+  assert.ok(await p.isVisible('.feed-nav'), 'arrows along the feed');
+  const c0 = await centre();
+  await p.click('.feed-nav [aria-label="Следующая карточка"]');
+  await p.mouse.move(720, 450);
+  await p.mouse.wheel(0, 100);
+  await settle();
+  assert.notEqual(await centre(), c0, 'the arrow and the wheel leaf through');
+  await p.keyboard.press('ArrowLeft');
+  await p.keyboard.press('ArrowLeft');
+  await settle();
+  assert.equal(await centre(), c0, 'and the arrow keys back');
+  await p.keyboard.press('Enter');
+  await settle();
+  assert.equal(await level(), 3, 'Enter opens the card');
+  await p.keyboard.press(' ');
+  await settle();
+  assert.equal(await p.$eval('.turn-flip', (e) => Math.abs(Number(e.dataset.angle)) % 360), 180, 'Space turns it');
+  await p.keyboard.press('Escape');
+  await p.keyboard.press('Escape');
+  await settle();
+  assert.equal(await level(), 1, 'Esc steps back');
+  await p.keyboard.down('Control');
+  await p.mouse.wheel(0, -100);
+  await p.keyboard.up('Control');
+  await settle();
+  assert.equal(await level(), 2, 'ctrl + a wheel notch: one level closer');
+  await p.context().close();
+});
+
 test('a backup restores cards, notes and the copy log, only for its key', async () => {
   const a = await env.phone('pixelfox');
   await tab(a, 'me');

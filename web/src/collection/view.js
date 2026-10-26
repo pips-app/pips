@@ -32,7 +32,7 @@ import { createStage } from './stage.js';
 import { createTurn } from './turn.js';
 import { cardBack } from './back.js';
 import { createShareSheet } from './share.js';
-import { createMoves } from './moves.js';
+import { createMoves, PLACE_TITLE } from './moves.js';
 import { createSelection } from './selection.js';
 import { firstRun } from './first-run.js';
 import { select, tagCounts, toggleTag, words } from './query.js';
@@ -41,7 +41,10 @@ import { weekLabel, monthLabel } from './dates.js';
 /** @typedef {import('./query.js').Place} Place */
 /** @typedef {import('./stage.js').Item} Item */
 
-const PLACE_TITLE = { collection: 'collection.title', archive: 'archive.title', trash: 'archive.trash' };
+/** The room the bar takes above the cards, and the tabs or the card's actions below. */
+const TOP = 76, BOTTOM = 84;
+/** A mouse here, rather than a finger: the buttons for what a pinch or a swipe does show. */
+const MOUSE = typeof matchMedia === 'function' && matchMedia('(hover: hover) and (pointer: fine)').matches;
 
 /** @param {{draw: () => void}} o what the first-run "draw" button does */
 export function collectionView(o) {
@@ -66,8 +69,22 @@ export function collectionView(o) {
     onclick: () => { if (!selection.active && stage.level <= 1) stage.setLevel(stage.level === 0 ? 1 : 0); },
   }));
   const chip = h('button', { type: 'button', class: 'filter-chip', onclick: () => clearFilter() });
+  // Closer and further, for a mouse: what spreading and pinching do.
+  const zoomOut = iconButton({ icon: 'minus', label: t('zoom.out'), onClick: () => zoom(-1) });
+  const zoomIn = iconButton({ icon: 'plus', label: t('zoom.in'), onClick: () => zoom(1) });
+  const zoomBox = h('div', { class: 'zoom', hidden: !MOUSE }, zoomOut.el, zoomIn.el);
   const bar = h('header', { class: 'bar collection-bar' }, backBtn.el,
-    h('div', { class: 'title' }, title, h('div', { class: 'sub' }, sub, chip)), archBtn.el, binBtn.el, selBtn);
+    h('div', { class: 'title' }, title, h('div', { class: 'sub' }, sub, chip)), zoomBox, archBtn.el, binBtn.el, selBtn);
+  // Along the feed, for a mouse: what a swipe does.
+  const prevBtn = iconButton({ icon: 'back', label: t('feed.prev'), onClick: () => { if (!busy.n) stage.step(-1); } });
+  const nextBtn = iconButton({ icon: 'next', label: t('feed.next'), onClick: () => { if (!busy.n) stage.step(1); } });
+  const feedNav = h('div', { class: 'feed-nav', hidden: true }, prevBtn.el, nextBtn.el);
+  // These stand in for the fingers and have keys of their own, so a click
+  // on them does not take the focus: Enter and Space keep their meaning.
+  for (const b of [zoomOut, zoomIn, prevBtn, nextBtn]) {
+    b.el.tabIndex = -1;
+    b.el.addEventListener('mousedown', (e) => e.preventDefault());
+  }
 
   const search = searchField({ placeholder: t('search.ph'), clearLabel: t('search.clear'), onInput: (v) => refilter(() => { filter.query = v; }) });
   const owner = segmented({
@@ -84,15 +101,14 @@ export function collectionView(o) {
   const fly = h('div', { class: 'fly-layer' });
   const placeEmpty = h('p', { class: 'place-empty' });
   const first = firstRun({ draw: o.draw, scan: () => go('receive') });
-  const coarse = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
-  const coach = h('div', { class: 'coach', hidden: true }, t(coarse ? 'collection.coach' : 'collection.coach.desk'));
+  const coach = h('div', { class: 'coach', hidden: true }, t(MOUSE ? 'collection.coach.desk' : 'collection.coach'));
   const strip = makeStrip();
   const sheet = createShareSheet({ busy, closed: () => sync() });
   const feedBar = actionBar({ label: t('collection.card'), compact: true });
   const selectBar = actionBar({ label: t('collection.select-title') });
 
   const el = h('section', { class: 'view collection-view' },
-    host, placeEmpty, first.el, searchPanel, bar, fly, strip.el, feedBar.el, selectBar.el, coach, ...sheet.els);
+    host, placeEmpty, first.el, searchPanel, bar, fly, strip.el, feedNav, feedBar.el, selectBar.el, coach, ...sheet.els);
 
   // The safe-area insets in pixels, measured once per size.
   const probe = h('div', { class: 'safe-probe', 'aria-hidden': 'true' });
@@ -101,10 +117,10 @@ export function collectionView(o) {
     const cs = getComputedStyle(probe);
     safe = { t: parseFloat(cs.paddingTop) || 0, b: parseFloat(cs.paddingBottom) || 0 };
   };
-  /** @returns {import('./layout.js').Frame} */
+  /** Read by the stage when it lays the cards out, never while drawing. @returns {import('./layout.js').Frame} */
   const frameOf = () => ({
     W: el.clientWidth || innerWidth, H: el.clientHeight || innerHeight,
-    top: 76 + safe.t, bottom: 84 + safe.b, lead: searchPanel.offsetHeight + 8,
+    top: TOP + safe.t, bottom: BOTTOM + safe.b, lead: searchPanel.offsetHeight + 8,
   });
   el.append(probe);
 
@@ -116,7 +132,7 @@ export function collectionView(o) {
       if (filter.by === 'author') return { title: c.author ? `@${c.author}` : '—', sub: level === 0 ? String(n) : t('collection.count', n) };
       return level === 0 ? { title: monthLabel(c.received), sub: String(n) } : { title: weekLabel(c.received), sub: t('collection.count', n) };
     },
-    skip: '.bar, .search-panel, .action-bar, .top-sheet, .scrim, .strip, .first-run, .coach',
+    skip: '.bar, .search-panel, .action-bar, .top-sheet, .scrim, .strip, .first-run, .coach, .feed-nav',
     control: '.turn button, .turn textarea, .turn input',
     blocked: () => busy.n > 0,
     tap, hold, pull, turn: () => (stage.level === 3 ? turn.drag() : null),
@@ -193,6 +209,11 @@ export function collectionView(o) {
     if (stage.level >= 2) stage.setLevel(stage.level - 1);
     else setPlace('collection');
   }
+  /** @param {1|-1} d */
+  function zoom(d) {
+    if (busy.n || stage.busy || selection.active || !stage.list.length) return;
+    stage.zoom(d);
+  }
 
   // --------------------------------------------------------------- gestures --
   /** @param {Item|null} c @param {number} level @param {{x: number, y: number}} at */
@@ -224,6 +245,7 @@ export function collectionView(o) {
   /** The feed card pulled up or down. @param {Item} c @returns {import('../kit/gestures.js').DragHandler} */
   function pull(c) {
     const H = el.clientHeight, canShare = filter.place !== 'trash';
+    let stripDrawn = false;
     return {
       move(p) {
         pulling = true;
@@ -235,7 +257,7 @@ export function collectionView(o) {
           sheet.follow(clamp((-dy - 90) / (H * 0.2), 0, 1));
           moves.showStrip(0);
         } else {
-          moves.drawStrip();
+          if (!stripDrawn) { moves.drawStrip(); stripDrawn = true; }
           moves.showStrip(clamp(dy / (H * 0.26), 0, 1));
           sheet.follow(0);
         }
@@ -269,13 +291,19 @@ export function collectionView(o) {
     // A finger on the back's pencil is a touch too: only a pinch or a
     // flight makes the back stop taking presses.
     turn.draw(z, c, build, !stage.pinching && !busy.n);
-    moves.tick();
     const sv = Math.max(0, 1 - z * 2.2);
     searchPanel.style.opacity = String(sv);
     searchPanel.style.visibility = sv < 0.02 ? 'hidden' : '';
     searchPanel.style.pointerEvents = sv > 0.6 ? '' : 'none';
-    searchPanel.style.transform = `translate3d(0,${frameOf().top - stage.scroll[0].v}px,0)`;
-    feedBar.show(z > 1.6 && !busy.n && !stage.dragY.v && !!c);
+    searchPanel.style.transform = `translate3d(0,${stage.frame.top - stage.scroll[0].v}px,0)`;
+    const inFeed = z > 1.6 && !busy.n && !stage.dragY.v && !!c;
+    feedBar.show(inFeed);
+    if (MOUSE) {
+      const i = Math.round(stage.feed.to), n = stage.list.length;
+      if (feedNav.hidden === inFeed) feedNav.hidden = !inFeed;
+      if (prevBtn.el.disabled !== i <= 0) prevBtn.el.disabled = i <= 0;
+      if (nextBtn.el.disabled !== i >= n - 1) nextBtn.el.disabled = i >= n - 1;
+    }
     const away = z > 1.4 || selection.active || filter.place !== 'collection';
     if (away !== tabsAway) { tabsAway = away; if (!el.hidden) hideTabs(away); }
     const lv = Math.round(z);
@@ -310,6 +338,9 @@ export function collectionView(o) {
     archBtn.count(inPlace('archive').length);
     binBtn.count(inPlace('trash').length);
     selBtn.hidden = (lv >= 2 && !selecting) || !stage.list.length;
+    zoomBox.hidden = !MOUSE || selecting || firstRun || !stage.list.length;
+    zoomOut.el.disabled = lv <= 0;
+    zoomIn.el.disabled = lv >= 3;
     selBtn.textContent = t(selecting ? 'collection.done' : 'collection.select');
     groupBtn.textContent = t(filter.by === 'author' ? 'group.author' : 'group.date');
     tagChips.update(tagCounts(inPlace(filter.place).map(asItem)).map(([tag, n]) => ({ value: tag, text: `#${tag}`, count: n, on: words(filter.query).includes(`#${tag}`) })));
@@ -352,6 +383,7 @@ export function collectionView(o) {
   /** @param {string} id */
   function build(id) {
     const e = /** @type {import('../state.js').Entry} */ (app.cards.get(id));
+    shownBack?.stop();
     shownBack = cardBack(e, {
       editing, onEdit: setEditing,
       onTag: (tag) => { setQuery(`#${tag}`); stage.setLevel(0); },
@@ -372,24 +404,39 @@ export function collectionView(o) {
     loop.kick();
   }
 
-  // ------------------------------------------------------------- keyboard --
+  // ----------------------------------------------------- keyboard, mouse --
+  // Every gesture has a key too: Esc goes back, + and − zoom, the arrows
+  // and Page keys move through the grid or along the feed, Space turns.
   document.addEventListener('keydown', (e) => {
-    if (el.hidden || e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
-    if (document.querySelector('.overlay, .dialog')) return;
-    const lv = stage.level;
-    if (e.key === 'Escape') {
+    const tg = e.target;
+    if (el.hidden || tg instanceof HTMLInputElement || tg instanceof HTMLTextAreaElement) return;
+    // Enter and Space press the screen's own buttons; one elsewhere (the
+    // tab that brought the person here) leaves them to the collection.
+    if (tg instanceof HTMLButtonElement && el.contains(tg) && (e.key === 'Enter' || e.key === ' ')) return;
+    if (e.ctrlKey || e.metaKey || e.altKey || document.querySelector('.overlay, .dialog')) return;
+    const lv = stage.level, page = stage.frame.H * 0.8;
+    /** @type {Record<string, () => void>} */
+    const keys = lv <= 1
+      ? { ArrowUp: () => stage.scrollBy(-120), ArrowDown: () => stage.scrollBy(120), PageUp: () => stage.scrollBy(-page), PageDown: () => stage.scrollBy(page),
+        Home: () => stage.scrollBy(-Infinity), End: () => stage.scrollBy(Infinity), Enter: () => zoom(1) }
+      : { ArrowLeft: () => stage.step(-1), ArrowRight: () => stage.step(1), Home: () => stage.step(-Infinity), End: () => stage.step(Infinity),
+        ...(lv === 2 ? { Enter: () => zoom(1) } : { ' ': () => turn.flipOver() }) };
+    keys['+'] = keys['='] = () => zoom(1);
+    keys['-'] = () => zoom(-1);
+    keys.Escape = () => {
       if (sheet.open) return;
       if (editing) setEditing(false);
       else if (selection.active) selection.stop();
       else back();
-    } else if (lv >= 2 && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
-      stage.feed.to = clamp(Math.round(stage.feed.to) + (e.key === 'ArrowLeft' ? -1 : 1), 0, stage.list.length - 1);
-      stage.kick();
-    } else if (lv === 3 && e.key === ' ') {
-      e.preventDefault();
-      turn.flipOver();
-    }
+    };
+    const run = keys[e.key];
+    if (!run || busy.n) return;
+    e.preventDefault();
+    run();
   });
+  // The mouse's own back button goes back here, not away from the app.
+  el.addEventListener('mouseup', (e) => { if (e.button === 3) { e.preventDefault(); back(); } });
+  el.addEventListener('mousedown', (e) => { if (e.button === 3) e.preventDefault(); });
   addEventListener('resize', () => { measure(); stage.relayout(); });
 
   let coachShown = false;

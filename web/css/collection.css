@@ -16,6 +16,21 @@
 
 /* ------------------------------------------------------------- stage -- */
 .stage-host { position: absolute; inset: 0; z-index: 0; }
+/* With a mouse, the pointer says what a click does: closer over a card of
+   the grid and the feed's middle one, along the feed over its neighbours. */
+@media (hover: hover) and (pointer: fine) {
+  .stage-host:is([data-level="0"], [data-level="1"]) .on-stage, .stage-host[data-level="2"] .on-stage.centre { cursor: zoom-in; }
+  .stage-host[data-level="2"] .on-stage:not(.centre), .collection-view.selecting .on-stage { cursor: pointer; }
+  .stage-host:is([data-level="0"], [data-level="1"]) .on-stage:hover { filter: brightness(1.08); }
+}
+
+/* Mouse controls: closer and further in the bar, along the feed at its sides. */
+.collection-bar .zoom { display: flex; gap: 4px; flex: none; }
+.collection-bar .zoom .ib:disabled, .feed-nav .ib:disabled { opacity: .35; cursor: default; }
+.feed-nav { position: absolute; z-index: 160; left: 0; right: 0; top: 50%; pointer-events: none; display: flex; justify-content: space-between;
+  padding: 0 max(16px, calc((100% - 1100px) / 2 + 16px)); }
+.feed-nav[hidden] { display: none; }
+.feed-nav .ib { pointer-events: auto; width: 44px; height: 44px; background: var(--raise2); box-shadow: 0 6px 16px -8px #000; }
 .frame.on-stage { position: absolute; left: 0; top: 0; transform-origin: 0 0; will-change: transform; }
 /* --cap: how much of the caption shows, 0 (a bare tile) … 1 (the full frame). */
 .on-stage .front, .turn .front { padding-bottom: calc(3.6cqw * (1 - var(--cap, 1))); }

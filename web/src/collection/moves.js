@@ -16,7 +16,8 @@ import { clamp, flight } from '../kit/motion.js';
 /** @typedef {import('./query.js').Place} Place */
 /** @typedef {import('./stage.js').Item} Item */
 
-const PLACE_TITLE = { collection: 'collection.title', archive: 'archive.title', trash: 'archive.trash' };
+/** Each place's name. */
+export const PLACE_TITLE = { collection: 'collection.title', archive: 'archive.title', trash: 'archive.trash' };
 /** Where a card sent down goes from each place. */
 export const DOWN = /** @type {const} */ ({ collection: 'archive', archive: 'collection', trash: 'collection' });
 /** One undo covers moves made the same way while its toast is up. */
@@ -39,12 +40,12 @@ export function createMoves(o) {
   /** @type {null | {from: Place, to: Place, ids: Set<string>, at: number}} */
   let series = null;
   // The strip is up while a card is pulled down, while cards fly to it and
-  // a moment after; `tick` checks that every frame, so it never stays behind.
-  let stripUp = false, stripHold = 0;
+  // a moment after they landed — unless another pull or flight took it on.
+  let stripTimer = 0;
 
   /** @param {number} f @param {boolean} [anim] */
   function showStrip(f, anim = false) {
-    stripUp = f > 0;
+    clearTimeout(stripTimer);
     strip.reveal(f, anim);
   }
 
@@ -79,7 +80,6 @@ export function createMoves(o) {
     o.beforeFlight();
     drawStrip();
     showStrip(1, true);
-    stripHold = Infinity;
     const now = performance.now(), start = now + (pulled ? 0 : 160);
     const dur = 620, gap = list.length <= 6 ? 190 : Math.max(60, 1100 / list.length);
     list.forEach((c, k) => {
@@ -122,8 +122,7 @@ export function createMoves(o) {
       o.selection.stop();
       o.sync();
       moved(list.map((c) => c.id), from, to);
-      stripHold = performance.now() + 1300;
-      setTimeout(() => stage.kick(), 1350); // the frame loop sleeps when nothing moves
+      stripTimer = window.setTimeout(() => { if (!o.pulling() && !o.busy.n) strip.reveal(0, true); }, 1300);
     }, start - now + (list.length - 1) * gap + dur + 40);
   }
 
@@ -176,10 +175,6 @@ export function createMoves(o) {
       o.selection.stop();
       o.sync();
       toast(t('moved.purged', ids.length));
-    },
-    /** Every frame: puts the strip away once nothing needs it. */
-    tick() {
-      if (stripUp && !o.pulling() && !o.busy.n && performance.now() > stripHold) showStrip(0, true);
     },
   };
 }

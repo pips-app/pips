@@ -44,9 +44,10 @@ export async function setup() {
   const browser = await engine.launch();
   const dir = await mkdtemp(join(tmpdir(), 'pips-e2e-'));
   const errors = [];
-  /** A fresh phone; with `words`, restored instead of created. */
-  async function phone(nick, words) {
-    const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, locale: 'ru-RU', acceptDownloads: true });
+  /** A fresh phone; with `words`, restored instead of created; `desk`: a computer's screen instead. */
+  async function phone(nick, words, desk = false) {
+    const viewport = desk ? { width: 1440, height: 900 } : { width: 390, height: 844 };
+    const ctx = await browser.newContext({ viewport, locale: 'ru-RU', acceptDownloads: true });
     const p = await ctx.newPage();
     p.on('pageerror', (e) => errors.push(`${nick}: ${e.message}`));
     p.on('console', (m) => { if (m.type() === 'error') errors.push(`${nick}: ${m.text()}`); });

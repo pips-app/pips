@@ -21,11 +21,25 @@ export function createTurn(o) {
   o.host.append(el);
   /** @type {string|null} */
   let of = null;
-  let lastZ = 0, wantTurn = 0, fit = 1; // wantTurn: a turn asked for, and its direction
+  let lastZ = 0, wantTurn = 0; // wantTurn: a turn asked for, and its direction
+  let fit = 1, fitW = 0; // the back's type scale, and the width it was found for
   loop.add((dt) => {
     const a = rotY.step(dt), b = rotX.step(dt);
     return a || b;
   });
+
+  /** @param {number} w */
+  function fitBack(w) {
+    fitW = w;
+    fit = 1;
+    const inner = /** @type {HTMLElement|null} */ (back.firstElementChild);
+    if (!inner) return;
+    for (;;) {
+      back.style.fontSize = `${Math.max(9, w * 0.037 * fit)}px`;
+      if (fit <= 0.8 || inner.scrollHeight <= inner.clientHeight + 1) return;
+      fit -= 0.04;
+    }
+  }
 
   const turned = () => Math.abs(rotY.v - frontOf(rotY.v)) > 1.5 || Math.abs(rotX.v) > 1.5;
   const showsBack = () => { const a = ((rotY.v % 360) + 360) % 360; return a > 90 && a < 270; };
@@ -57,25 +71,26 @@ export function createTurn(o) {
       if (of !== c.id) {
         of = c.id;
         const f = build(c.id);
-        fit = 1;
         front.replaceChildren(f.front);
         back.replaceChildren(f.back);
+        fitW = 0;
       }
       const { x, y, w, h: hh, cap } = c.rr;
       Object.assign(el.style, { width: `${w}px`, height: `${hh}px`, transform: `translate3d(${x}px,${y}px,0)` });
       const fr = /** @type {HTMLElement|null} */ (front.firstElementChild);
       if (fr) { fr.style.width = `${w}px`; fr.style.setProperty('--cap', String(cap)); }
-      // The back has no scrolling: if a long back does not fit, its type
-      // gets a little smaller until it does.
+      // The back has no scrolling: if a long back does not fit, its type is
+      // made a little smaller until it does. Found once for a new back and
+      // again when the card has settled at another size, not every frame.
+      if (!fitW || (z > 2.95 && Math.abs(w - fitW) > 1)) fitBack(w);
       back.style.fontSize = `${Math.max(9, w * 0.037 * fit)}px`;
-      const inner = /** @type {HTMLElement|null} */ (back.firstElementChild);
-      if (inner && fit > 0.8 && inner.scrollHeight > inner.clientHeight + 1) { fit -= 0.04; loop.kick(); }
       // 3D only while it moves. At rest the card lies flat: no 3D layer to
       // keep up to date while the back is edited (Firefox on Android left
       // stale stripes there), crisp text, and presses land where they look.
       const resting = rotY.v === rotY.to && rotX.v === 0 && rotX.to === 0 && rotY.v % 180 === 0;
       flip.classList.toggle('flat', resting);
-      flip.dataset.angle = String(Math.round(rotY.v)); // which way it lies, for tests and tools
+      const angle = String(Math.round(rotY.v));
+      if (flip.dataset.angle !== angle) flip.dataset.angle = angle; // which way it lies, for tests and tools
       flip.style.transform = resting ? '' : `rotateX(${rotX.v}deg) rotateY(${rotY.v}deg)`;
       // Each face is hidden outright when turned away: backface-visibility
       // alone shows a mirrored front on some engines (Firefox).
@@ -85,7 +100,7 @@ export function createTurn(o) {
       back.classList.toggle('live', b && z > 2.9 && interactive);
     },
     /** Rebuilds the faces next time (the card changed). */
-    invalidate() { of = null; fit = 1; },
+    invalidate() { of = null; },
     /**
      * Turns over, or to a given side. `dir` 1 sends the right edge away,
      * -1 the left one. @param {boolean} [toBack] @param {1|-1} [dir]
