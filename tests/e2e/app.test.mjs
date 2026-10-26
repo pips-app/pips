@@ -43,6 +43,85 @@ test('a key restored from the words is the same key', async () => {
   await b.context().close();
 });
 
+test('restoring on a new phone: the backup and the key in one step', async () => {
+  const short = (p) => p.evaluate(async () => (await import('/src/state.js')).app.identity.publicKey().short);
+  const a = await env.phone('pixelfox');
+  await tab(a, 'me');
+  await a.click('text=Добавить образцы карточек');
+  await a.waitForTimeout(1500);
+  await a.evaluate(async () => {
+    const s = await import('/src/state.js');
+    await s.setProfile({ ...s.app.profile, link: 'pixelfox.example' });
+  });
+  await tab(a, 'collection');
+  await tab(a, 'me');
+  const [download] = await Promise.all([a.waitForEvent('download'), a.click('text=Сохранить копию')]);
+  const file = join(env.dir, 'restore.pipsbak');
+  await download.saveAs(file);
+  const list = (await words(a)).split(' ');
+  // The paper key, as printed.
+  await a.click('text=Бумажный ключ');
+  await a.getByRole('button', { name: 'Показать', exact: true }).click();
+  const paper = await photo(a, '.secret .qr-box canvas', env.dir, 'paper-key');
+
+  const fresh = async () => {
+    const p = await env.blank('новый телефон');
+    await p.click('text=У меня уже есть ключ');
+    return p;
+  };
+  const status = (p) => p.textContent('.onb-status[role="status"]');
+  const go = (p) => p.isEnabled('.onb-go');
+
+  // The backup first: whose it is shows before any key.
+  const b = await fresh();
+  await choose(b, () => b.click('text=Выбрать файл копии'), file);
+  assert.equal(await b.textContent('.onb-file-row span'), `Копия ключа ${await short(a)}`);
+  // A typo shows in its cell at once; a swap, once all 24 are in.
+  await b.fill('.words-entry input >> nth=0', list.join(' '));
+  await b.fill('.words-entry input >> nth=5', 'qqq');
+  assert.match(await status(b), /Слова № 6 нет в списке/);
+  assert.equal(await b.getAttribute('.words-entry input >> nth=5', 'aria-invalid'), 'true');
+  await b.fill('.words-entry input >> nth=5', `${list[6]} ${list[5]}`); // two words, swapped, from cell 6 on
+  assert.match(await status(b), /не сходятся/);
+  assert.equal(await go(b), false);
+  // Four letters of each word are enough; they are written out in full.
+  await b.fill('.words-entry input >> nth=0', list.map((w) => w.slice(0, 4)).join(' '));
+  assert.equal(await b.inputValue('.words-entry input >> nth=23'), list[23]);
+  assert.equal(await status(b), `Ключ ${await short(a)}`);
+  await b.click('.onb-go');
+  await b.locator('nav.tabs').waitFor(); // no nick asked: it came with the backup
+  const facts = await b.evaluate(async () => {
+    const s = await import('/src/state.js');
+    return { cards: s.app.cards.size, nick: s.app.profile.nick, link: s.app.profile.link };
+  });
+  assert.deepEqual(facts, { cards: 22, nick: 'pixelfox', link: 'pixelfox.example' });
+  assert.equal(await short(b), await short(a));
+
+  // Another key's words do not open this backup.
+  const c = await env.phone('чужой');
+  const other = await words(c);
+  const d = await fresh();
+  await choose(d, () => d.click('text=Выбрать файл копии'), file);
+  await d.fill('.words-entry input >> nth=0', other);
+  assert.match(await status(d), /а копия — от другого/);
+  assert.equal(await go(d), false);
+  await d.click('text=Убрать'); // without the file, the key alone will do
+  assert.equal(await go(d), true);
+
+  // The paper key, from a photo of it.
+  const e = await fresh();
+  await e.click('.onb .seg >> text=Бумажный ключ');
+  await fromPicture(e, '.onb', paper);
+  await e.waitForFunction(() => document.querySelector('.onb-status')?.textContent?.startsWith('Ключ'));
+  assert.equal(await status(e), `Ключ ${await short(a)}`);
+  await e.click('.onb-go');
+  await e.fill('.field input', 'pixelfox'); // no backup: the nick is asked
+  await e.click('text=Готово');
+  await e.locator('nav.tabs').waitFor();
+  assert.equal(await short(e), await short(a));
+  for (const p of [a, b, c, d, e]) await p.context().close();
+});
+
 test('import keeps its layout and reports what it did', async () => {
   const p = await env.phone('pixelfox');
   await tab(p, 'import');

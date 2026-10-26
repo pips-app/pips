@@ -108,9 +108,24 @@ const ru = {
   'onb.words.lead': 'Это и есть ваш ключ. По ним карточки узнают автора. Если телефон потеряется — по этим словам всё вернётся. Запишите на бумаге и никому не показывайте.',
   'onb.words.ack': 'Я записал(а) слова и храню их в надёжном месте',
   'onb.next': 'Дальше', 'onb.nick.title': 'Как вас подписывать?', 'onb.nick.lead': 'Ник появится на ваших карточках. Его можно поменять потом — но на уже отданных останется старый.',
-  'onb.done': 'Готово', 'onb.restore.title': 'Восстановление', 'onb.restore.lead': 'Введите 24 слова через пробел.',
+  'onb.done': 'Готово', 'onb.restore.title': 'Восстановление',
+  'onb.restore.lead': 'Ключ вернёт вашу подпись, копия — коллекцию. Без копии вернётся только ключ.',
+  'onb.restore.file': 'Резервная копия', 'onb.restore.file.pick': 'Выбрать файл копии', 'onb.restore.file.drop': 'Убрать',
+  'onb.restore.file.of': (/** @type {string} */ k) => `Копия ключа ${k}`,
+  'onb.restore.file.off': 'Если есть — выберите её первой: приложение проверит, что ключ от неё.',
+  'onb.restore.file.on': 'Откроется вашим ключом — карточки, заметки и профиль вернутся вместе с ним.',
+  'onb.restore.key': 'Ключ', 'onb.restore.words': '24 слова', 'onb.restore.paper': 'Бумажный ключ',
+  'onb.restore.words.lead': 'По порядку, как записаны. Достаточно первых четырёх букв каждого слова.',
+  'onb.restore.paper.point': 'Наведите камеру на бумажный ключ',
   'onb.restore.go': 'Восстановить',
-  'err.bad_words': 'Слова не подходят: проверьте каждое и их порядок.',
+  'onb.key.count': (/** @type {number} */ n) => `Слов: ${n} из 24`,
+  'onb.key.unknown': (/** @type {number} */ n) => `Слова № ${n} нет в списке — проверьте его`,
+  'onb.key.sum': 'Все слова из списка, но вместе не сходятся: одно из них другое или два переставлены.',
+  'onb.key.ok': (/** @type {string} */ k) => `Ключ ${k}`,
+  'onb.key.mismatch': (/** @type {string} */ k) => `Это ключ ${k}, а копия — от другого. Проверьте слова или выберите другой файл.`,
+  'onb.key.not-paper': 'Это не бумажный ключ Pips',
+  'onb.key.bad-paper': 'Бумажный ключ не читается целиком — попробуйте ещё раз или введите слова',
+  'words.cell': (/** @type {number} */ n) => `Слово ${n}`,
   'err.generic': 'Что-то пошло не так',
   'core.failed': 'Не удалось загрузить ядро приложения.',
   // The collection screen.
@@ -314,9 +329,24 @@ const en = {
   'onb.words.lead': 'These words are your key. Cards recognise their artist by it, and if this phone is lost, the words bring it back. Write them on paper and show no one.',
   'onb.words.ack': 'I have written the words down and keep them safe',
   'onb.next': 'Next', 'onb.nick.title': 'What should your cards say?', 'onb.nick.lead': 'Your name goes on your cards. You can change it later, but cards already given keep the old one.',
-  'onb.done': 'Done', 'onb.restore.title': 'Restore', 'onb.restore.lead': 'Enter the 24 words, separated by spaces.',
+  'onb.done': 'Done', 'onb.restore.title': 'Restore',
+  'onb.restore.lead': 'The key brings back your signature; a backup, your collection. Without a backup, only the key comes back.',
+  'onb.restore.file': 'Backup', 'onb.restore.file.pick': 'Choose the backup file', 'onb.restore.file.drop': 'Remove',
+  'onb.restore.file.of': (/** @type {string} */ k) => `Backup of key ${k}`,
+  'onb.restore.file.off': 'If you have one, choose it first: the app will check that the key is the one it belongs to.',
+  'onb.restore.file.on': 'It opens with your key — cards, notes and profile come back with it.',
+  'onb.restore.key': 'Key', 'onb.restore.words': '24 words', 'onb.restore.paper': 'Paper key',
+  'onb.restore.words.lead': 'In order, as written down. The first four letters of each word are enough.',
+  'onb.restore.paper.point': 'Point the camera at the paper key',
   'onb.restore.go': 'Restore',
-  'err.bad_words': 'Those words do not fit: check each one and their order.',
+  'onb.key.count': (/** @type {number} */ n) => `${n} of 24 words`,
+  'onb.key.unknown': (/** @type {number} */ n) => `Word ${n} is not in the list — check it`,
+  'onb.key.sum': 'Every word is in the list, but together they do not add up: one is different, or two are swapped.',
+  'onb.key.ok': (/** @type {string} */ k) => `Key ${k}`,
+  'onb.key.mismatch': (/** @type {string} */ k) => `This is key ${k}, and the backup belongs to another. Check the words or choose another file.`,
+  'onb.key.not-paper': 'Not a Pips paper key',
+  'onb.key.bad-paper': 'The paper key did not read whole — try again or enter the words',
+  'words.cell': (/** @type {number} */ n) => `Word ${n}`,
   'err.generic': 'Something went wrong',
   'core.failed': 'Could not load the app core.',
   // The collection screen.
@@ -436,6 +466,17 @@ export function defaultLanguage() {
 export function t(key, ...args) {
   const v = DICTS[lang][key] ?? DICTS.ru[key] ?? key;
   return typeof v === 'function' ? v(...args) : v;
+}
+
+/**
+ * A core error in words: the string `<prefix>.<code>` if there is one,
+ * otherwise the generic one with the core's own message.
+ * @param {string} prefix @param {any} e @param {...any} args for the string
+ */
+export function reason(prefix, e, ...args) {
+  const key = `${prefix}.${e?.code}`;
+  const text = t(key, ...args);
+  return text === key ? `${t('err.generic')}: ${e?.message ?? e}` : text;
 }
 
 /** Russian plural forms. @param {number} n @param {string} one @param {string} few @param {string} many */

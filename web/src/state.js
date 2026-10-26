@@ -217,15 +217,22 @@ export async function makeBackup() {
 export const lastBackup = async () => (await store.getMeta('lastBackup')) ?? null;
 
 /**
- * Adds a backup's cards to this device. Nothing here is overwritten: a card
- * already on the device keeps its place, and gains the backup's note only
- * if it has none. The profile is taken only if this device has no handle
- * and no link yet (a fresh install restored from the words).
+ * Adds a backup's cards to this device; see `applyBackup`.
  * @param {Uint8Array} bytes
+ */
+export const restoreBackup = (bytes) => applyBackup(app.identity.openBackup(bytes)); // throws unless every card and certificate checks out
+
+/**
+ * Adds an opened backup's cards to this device. Nothing here is
+ * overwritten: a card already on the device keeps its place, and gains the
+ * backup's note only if it has none. The profile is taken only if this
+ * device has no handle and no link yet (a fresh install restored from the
+ * words). Opened apart, so that a first run can check the file before it
+ * stores the key.
+ * @param {any} b what `Identity.openBackup` gives
  * @returns {Promise<{added: number, known: number, profile: boolean}>}
  */
-export async function restoreBackup(bytes) {
-  const b = app.identity.openBackup(bytes); // throws unless every card and certificate checks out
+export async function applyBackup(b) {
   let added = 0, known = 0;
   for (const c of b.cards) {
     const i = app.core.inspectCard(c.payload);

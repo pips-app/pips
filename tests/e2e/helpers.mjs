@@ -44,18 +44,23 @@ export async function setup() {
   const browser = await engine.launch();
   const dir = await mkdtemp(join(tmpdir(), 'pips-e2e-'));
   const errors = [];
-  /** A fresh phone; with `words`, restored instead of created; `desk`: a computer's screen instead. */
-  async function phone(nick, words, desk = false) {
+  /** A fresh phone at its first screen; `desk`: a computer's screen instead. */
+  async function blank(name, desk = false) {
     const viewport = desk ? { width: 1440, height: 900 } : { width: 390, height: 844 };
     const ctx = await browser.newContext({ viewport, locale: 'ru-RU', acceptDownloads: true });
     const p = await ctx.newPage();
-    p.on('pageerror', (e) => errors.push(`${nick}: ${e.message}`));
-    p.on('console', (m) => { if (m.type() === 'error') errors.push(`${nick}: ${m.text()}`); });
+    p.on('pageerror', (e) => errors.push(`${name}: ${e.message}`));
+    p.on('console', (m) => { if (m.type() === 'error') errors.push(`${name}: ${m.text()}`); });
     await p.goto(`${site.url}?dev`);
+    return p;
+  }
+  /** A fresh phone with a key; with `words`, restored instead of created. */
+  async function phone(nick, words, desk = false) {
+    const p = await blank(nick, desk);
     if (words) {
       await p.click('text=У меня уже есть ключ');
-      await p.fill('textarea.words', words);
-      await p.click('text=Восстановить');
+      await p.fill('.words-entry input >> nth=0', words); // a phrase pasted fills every cell
+      await p.click('.onb-go');
     } else {
       await p.click('text=Создать ключ');
       await p.check('.check input');
@@ -67,7 +72,7 @@ export async function setup() {
     return p;
   }
   return {
-    phone, dir, errors,
+    phone, blank, dir, errors,
     async close() {
       await browser.close();
       site.close();

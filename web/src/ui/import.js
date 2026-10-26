@@ -11,7 +11,7 @@
 // original bytes, so options never compound.
 
 import { h, icon, byteLimit, fitBytes } from '../dom.js';
-import { t } from '../i18n.js';
+import { t, reason } from '../i18n.js';
 import { app, addOwn } from '../state.js';
 import { frame, FRAME_SHADES, BLANK_CARD } from './card.js';
 import { go, toast } from './shell.js';
@@ -288,7 +288,5 @@ function paletteName(id) {
 /** A translated reason, with the numbers the core attached.
  * @param {{code: string, args?: number[], message?: string}} e */
 function explain(e) {
-  const key = `import.err.${e?.code}`;
-  const text = t(key, ...(e?.args ?? []));
-  return text === key ? `${t('err.generic')}: ${e?.message ?? e}` : text;
+  return reason('import.err', e, ...(e?.args ?? []));
 }

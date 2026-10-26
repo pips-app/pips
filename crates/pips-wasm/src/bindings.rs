@@ -78,6 +78,12 @@ pub fn import_picture(bytes: &[u8], options: JsValue) -> Js<JsValue> {
     js(&api::import_picture(bytes, o).map_err(thrown)?)
 }
 
+/// The words a recovery phrase is made of, in order.
+#[wasm_bindgen(js_name = recoveryWords)]
+pub fn recovery_words() -> Js<JsValue> {
+    js(&api::recovery_words())
+}
+
 /// Whose backup a file is, `{ hex, short }`, without any key.
 #[wasm_bindgen(js_name = backupOwner)]
 pub fn backup_owner(bytes: &[u8]) -> Js<JsValue> {

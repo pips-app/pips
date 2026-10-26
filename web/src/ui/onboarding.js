@@ -1,10 +1,15 @@
 // @ts-check
-// First run: create a key (and write down its words) or restore one.
-// Nothing is stored until the person has confirmed the words.
+// First run: create a key (and write down its words) or restore one — the
+// key from its 24 words or its paper QR, with the backup if there is one.
+// Nothing is stored until the person has confirmed the words, or until the
+// key and the backup have both checked out.
 
-import { h, replace, byteLimit } from '../dom.js';
-import { t } from '../i18n.js';
-import { app, setIdentity, setProfile } from '../state.js';
+import { h, replace, byteLimit, icon } from '../dom.js';
+import { t, reason } from '../i18n.js';
+import { app, setIdentity, setProfile, applyBackup } from '../state.js';
+import { segmented } from '../kit/segmented.js';
+import { wordsEntry } from './words-entry.js';
+import { scanner } from './scan.js';
 
 /** @param {HTMLElement} root @param {() => void} done */
 export function onboarding(root, done) {
@@ -35,27 +40,134 @@ export function onboarding(root, done) {
       h('label', { class: 'check' }, ack, t('onb.words.ack')), h('div', { class: 'grow' }), next);
   }
 
+  /**
+   * Getting back what there was: the backup first, if there is one, so the
+   * key can be checked against it before anything is stored; then the key,
+   * from its words or its paper QR. Both come back in one step, and the
+   * profile with them.
+   */
   function restore() {
-    const words = /** @type {HTMLTextAreaElement} */ (h('textarea', { class: 'words', autocapitalize: 'none', autocomplete: 'off', spellcheck: false }));
-    const error = h('div', { class: 'error' });
-    const go = () => {
+    /** @type {any} the identity the words or the paper give, once they do */
+    let key = null;
+    /** @type {{bytes: Uint8Array, owner: {hex: string, short: string}}|null} */
+    let file = null;
+    let fileError = '';
+    /** What the key part has to say. @type {{text: string, wrong: boolean}} */
+    let note = { text: '', wrong: false };
+
+    const status = h('p', { class: 'onb-status', role: 'status' });
+    const go = /** @type {HTMLButtonElement} */ (h('button', { class: 'btn key wide onb-go', disabled: true, onclick: () => finish() }, t('onb.restore.go')));
+    /** Where things stand; the restore goes only with a key that fits the file. */
+    function paint() {
+      const mismatch = !!(key && file && key.publicKey().hex !== file.owner.hex);
+      status.textContent = mismatch ? t('onb.key.mismatch', key.publicKey().short) : note.text;
+      status.classList.toggle('wrong', mismatch || note.wrong);
+      go.disabled = !key || mismatch;
+    }
+
+    // ------------------------------------------------------- the backup --
+    const fileInput = /** @type {HTMLInputElement} */ (h('input', { type: 'file', accept: '.pipsbak', hidden: true, onchange: () => pick() }));
+    const fileBox = h('div', { class: 'onb-file' });
+    async function pick() {
+      const f = fileInput.files?.[0];
+      fileInput.value = '';
+      if (!f) return;
       try {
-        name(app.core.Identity.fromWords(words.value));
+        const bytes = new Uint8Array(await f.arrayBuffer());
+        file = { bytes, owner: app.core.backupOwner(bytes) };
+        fileError = '';
       } catch (e) {
-        error.textContent = /** @type {any} */ (e).code === 'bad_words' ? `${t('err.bad_words')} (${/** @type {any} */ (e).message})` : t('err.generic');
+        file = null;
+        fileError = reason('backup.err', e, /** @type {any} */ (e)?.message);
       }
-    };
-    replace(page, h('h1', {}, t('onb.restore.title')), h('p', {}, t('onb.restore.lead')), words, error,
-      h('div', { class: 'grow' }), h('button', { class: 'btn key wide', onclick: go }, t('onb.restore.go')),
-      h('div', { style: { height: '8px' } }), h('button', { class: 'btn wide', onclick: welcome }, '←'));
+      paintFile();
+      paint();
+    }
+    function paintFile() {
+      replace(fileBox,
+        file
+          ? h('div', { class: 'onb-file-row' }, icon('key'), h('span', {}, t('onb.restore.file.of', file.owner.short)),
+            h('button', { type: 'button', class: 'btn', onclick: () => { file = null; paintFile(); paint(); } }, t('onb.restore.file.drop')))
+          : h('button', { type: 'button', class: 'btn wide', onclick: () => fileInput.click() }, t('onb.restore.file.pick')),
+        fileError ? h('p', { class: 'onb-status wrong' }, fileError) : h('p', { class: 'hint' }, t(file ? 'onb.restore.file.on' : 'onb.restore.file.off')));
+    }
+    paintFile();
+
+    // ---------------------------------------------------------- the key --
+    /** @param {any} k @param {{text: string, wrong: boolean}} n */
+    const setKey = (k, n) => { key = k; note = n; paint(); };
+    const ok = () => ({ text: t('onb.key.ok', key.publicKey().short), wrong: false });
+
+    const words = wordsEntry(app.core.recoveryWords(), (s) => {
+      if (s.bad >= 0) return setKey(null, { text: t('onb.key.unknown', s.bad + 1), wrong: true });
+      if (!s.words) return setKey(null, { text: s.named ? t('onb.key.count', s.named) : '', wrong: false });
+      try {
+        key = app.core.Identity.fromWords(s.words.join(' '));
+        setKey(key, ok());
+      } catch {
+        setKey(null, { text: t('onb.key.sum'), wrong: true });
+      }
+    });
+    const scan = scanner((text) => {
+      if (key) return; // read already; the camera keeps reading until stopped
+      if (app.core.classify(text).kind !== 'paper_key') return scan.say(t('onb.key.not-paper'));
+      try {
+        key = app.core.Identity.fromPaper(text);
+        scan.stop();
+        setKey(key, ok());
+      } catch {
+        scan.say(t('onb.key.bad-paper'));
+      }
+    }, t('onb.restore.paper.point'));
+    const keyBox = h('div', {});
+    /** @param {'words'|'paper'} how */
+    function show(how) {
+      scan.stop();
+      setKey(null, { text: '', wrong: false });
+      replace(keyBox, how === 'words' ? [h('p', { class: 'hint' }, t('onb.restore.words.lead')), words.el] : scan.el);
+      if (how === 'words') words.refresh(); // what was typed is still there
+    }
+    const how = segmented({
+      label: t('onb.restore.key'), value: /** @type {'words'|'paper'} */ ('words'), onChange: show,
+      options: [{ value: 'words', label: t('onb.restore.words') }, { value: 'paper', label: t('onb.restore.paper') }],
+    });
+    show('words');
+
+    async function finish() {
+      if (go.disabled) return;
+      go.disabled = true;
+      let opened = null;
+      if (file) {
+        try {
+          opened = key.openBackup(file.bytes); // every card and certificate checked, nothing stored yet
+        } catch (e) {
+          fileError = reason('backup.err', e, /** @type {any} */ (e)?.message);
+          paintFile();
+          return paint();
+        }
+      }
+      scan.stop();
+      await setIdentity(key);
+      if (opened) await applyBackup(opened);
+      if (app.profile.nick) {
+        page.remove();
+        done();
+      } else name(key);
+    }
+
+    replace(page, h('h1', {}, t('onb.restore.title')), h('p', {}, t('onb.restore.lead')),
+      h('h2', {}, t('onb.restore.file')), fileBox, fileInput,
+      h('h2', {}, t('onb.restore.key')), how.el, keyBox, status,
+      h('div', { class: 'grow' }), go,
+      h('div', { style: { height: '8px' } }), h('button', { class: 'btn wide', onclick: () => { scan.stop(); welcome(); } }, '←'));
   }
 
-  /** @param {any} identity */
+  /** The nick, for a new key or one restored without it. Whatever else the profile holds stays. @param {any} identity */
   function name(identity) {
     const nick = byteLimit(/** @type {HTMLInputElement} */ (h('input', { autocomplete: 'nickname', placeholder: 'kitsu' })), 24);
     const finish = async () => {
       await setIdentity(identity);
-      await setProfile({ nick: nick.value.trim(), handle: null, link: '' });
+      await setProfile({ ...app.profile, nick: nick.value.trim() });
       page.remove();
       done();
     };

@@ -113,8 +113,6 @@ svg.i { width: 22px; height: 22px; stroke: currentColor; fill: none; stroke-widt
 .field:focus-within { box-shadow: inset 0 0 0 2px var(--cobalt-hi); }
 .field .prefix { font-size: 15px; color: var(--text3); margin-right: -10px; user-select: none; }
 .field select option { background: var(--raise); }
-textarea.words { width: 100%; min-height: 120px; resize: vertical; border: 0; border-radius: 12px; padding: 12px;
-  background: var(--raise); box-shadow: inset 0 0 0 1px var(--line); font: 15px/1.6 var(--sans); }
 .group { margin-top: 24px; }
 .group h2 { margin: 0 0 8px; font-size: 12px; font-weight: 500; color: var(--text3); letter-spacing: .02em; }
 .error { color: var(--warn); font-size: 13px; margin: 8px 2px 0; min-height: 1em; }
@@ -172,12 +170,28 @@ textarea.words { width: 100%; min-height: 120px; resize: vertical; border: 0; bo
 .word-grid span { background: var(--raise); border-radius: 9px; padding: 8px 8px 8px 28px; position: relative; font-size: 14px;
   box-shadow: inset 0 0 0 1px var(--line); user-select: text; -webkit-user-select: text; }
 .word-grid span::before { counter-increment: w; content: counter(w); position: absolute; left: 8px; color: var(--text3); font-size: 11px; top: 10px; }
+/* The same grid, to type into: a numbered cell per word. */
+.words-entry { list-style: none; margin: 0; padding: 0; }
+.words-entry li { position: relative; }
+.words-entry li::before { counter-increment: w; content: counter(w); position: absolute; left: 8px; top: 11px; color: var(--text3); font-size: 11px; pointer-events: none; }
+.words-entry input { width: 100%; min-width: 0; border: 0; border-radius: 9px; padding: 8px 6px 8px 28px; font: 14px var(--sans); color: var(--text);
+  background: var(--raise); box-shadow: inset 0 0 0 1px var(--line); }
+.words-entry input:focus-visible { outline: none; box-shadow: inset 0 0 0 2px var(--cobalt-hi); }
+.words-entry input.bad { box-shadow: inset 0 0 0 2px var(--warn); }
 
 /* ------------------------------------------------------------ onboarding -- */
 .onb { position: fixed; inset: 0; overflow-y: auto; padding: calc(40px + var(--safe-t)) 22px calc(28px + var(--safe-b)); display: flex; flex-direction: column; }
 .onb h1 { font: 600 32px/1.1 var(--serif); margin: 0 0 12px; letter-spacing: -.015em; }
 .onb p { color: var(--text2); margin: 0 0 14px; }
 .onb .grow { flex: 1; }
+.onb h2 { margin: 22px 0 8px; font-size: 12px; font-weight: 500; color: var(--text3); letter-spacing: .02em; }
+.onb .seg { width: 100%; margin: 0 0 10px; }
+.onb .hint { margin: 0 2px 10px; }
+.onb-file-row { display: flex; align-items: center; gap: 10px; min-height: 48px; }
+.onb-file-row span { flex: 1; font-size: 14px; }
+.onb-file-row .i { color: var(--text3); }
+.onb .onb-status { min-height: 1.5em; margin: 10px 2px 14px; font-size: 13.5px; color: var(--text2); }
+.onb .onb-status.wrong { color: var(--warn); }
 .onb .logo { width: 72px; height: 72px; image-rendering: pixelated; margin-bottom: 22px; }
 .check { display: flex; gap: 10px; align-items: flex-start; font-size: 14px; color: var(--text2); margin: 16px 0; }
 .check input { width: 20px; height: 20px; accent-color: var(--cobalt); margin: 1px 0 0; }

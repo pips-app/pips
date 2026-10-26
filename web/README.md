@@ -34,13 +34,14 @@ src/core.js                               loads the WASM core (or the dev stub)
 src/qrscan.js                             QR reading: BarcodeDetector or pkg/pips_scan, on demand
 src/store.js                              IndexedDB: meta + cards
 src/state.js                              the one place that changes data
-src/i18n.js                               ru / en strings
+src/i18n.js                               ru / en strings, core errors in words
+src/words.js                              the recovery words as typed: whole or four letters
 src/dom.js                                DOM without innerHTML, the icon set
 src/kit/                                  the bricks: motion, gestures, buttons, fields, sheets
 src/collection/                           the collection screen, built from the bricks
 src/editor/                               the pixel editor: model, undo tree, tools, its parts
 src/ui/                                   shell, card frame, qr, scan, the other tabs,
-                                          import, edition, onboarding
+                                          import, edition, onboarding (with the words entry)
 fonts/                                    Literata, IBM Plex Sans (OFL), self-hosted
 ```
 

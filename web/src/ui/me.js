@@ -2,7 +2,7 @@
 // Me: identity, what goes on the back of your cards, secrets, settings.
 
 import { h, icon, replace, byteLimit } from '../dom.js';
-import { t, language, date } from '../i18n.js';
+import { t, reason, language, date } from '../i18n.js';
 import { app, setProfile, addOwn, receive, backdate, makeBackup, restoreBackup, lastBackup } from '../state.js';
 import { isPersisted, setMeta, memoryOnly } from '../store.js';
 import { toast, ask, go } from './shell.js';
@@ -179,12 +179,7 @@ async function backupGroup() {
 }
 
 /** @param {{code?: string, message?: string}} e */
-function backupError(e) {
-  if (e?.code === 'other_owner') return t('backup.err.other_owner', e.message);
-  const key = `backup.err.${e?.code}`;
-  const text = t(key);
-  return text === key ? `${t('err.generic')}: ${e?.message ?? e}` : text;
-}
+const backupError = (e) => reason('backup.err', e, e?.message);
 
 
 /** Without the scheme, and with the host in lower case, as the format wants;
