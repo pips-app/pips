@@ -475,6 +475,93 @@ test('the editor: drawing, undo that loses nothing, palettes, frames, a draft, s
   await p.context().close();
 });
 
+test('the precise mode works with every tool', async () => {
+  const p = await env.phone('aimfox');
+  await tab(p, 'draw');
+  await p.locator('.ed-art').waitFor();
+  await p.click('.ed-tool-precise');
+  const cell = (x, y) => p.evaluate(([x, y]) => {
+    const d = document.querySelectorAll('.ed-layer')[2].getContext('2d').getImageData(x, y, 1, 1).data;
+    return d[3] ? `#${[d[0], d[1], d[2]].map((v) => v.toString(16).padStart(2, '0')).join('')}` : null;
+  }, [x, y]);
+  // Fingers as pointer events: one moves on the pad, another holds a button.
+  const finger = (sel, type, id, dx = 0, dy = 0) => p.evaluate(([sel, type, id, dx, dy]) => {
+    const el = document.querySelector(sel), r = el.getBoundingClientRect();
+    const x = sel === '.ed-pad' ? r.left + 20 : r.left + r.width / 2, y = sel === '.ed-pad' ? r.top + 50 : r.top + r.height / 2;
+    el.dispatchEvent(new PointerEvent(type, { bubbles: true, pointerId: id, pointerType: 'touch', clientX: x + dx, clientY: y + dy }));
+  }, [sel, type, id, dx, dy]);
+  /** Moves the cursor by whole cells (22 px of finger a cell). */
+  const aim = async (cx, cy) => {
+    await finger('.ed-pad', 'pointerdown', 2);
+    await finger('.ed-pad', 'pointermove', 2, cx * 22, cy * 22);
+    await finger('.ed-pad', 'pointerup', 2, cx * 22, cy * 22);
+  };
+  /** Holds a button while the cursor moves (or not). */
+  const hold = async (sel, cx = 0, cy = 0) => {
+    await finger(sel, 'pointerdown', 1);
+    if (cx || cy) {
+      await finger('.ed-pad', 'pointerdown', 2);
+      await finger('.ed-pad', 'pointermove', 2, cx * 22, cy * 22);
+      await finger('.ed-pad', 'pointerup', 2, cx * 22, cy * 22);
+    }
+    await finger(sel, 'pointerup', 1);
+  };
+  const put = '.ed-put', erase = '.ed-pad .ed-round:nth-child(2)';
+  assert.equal(await p.textContent(put), 'Ставить');
+
+  // The pen: a dot, then a line while held. The cursor starts in the middle (16, 16).
+  await hold(put);
+  assert.equal(await cell(16, 16), '#17151f');
+  await hold(put, 4, 0);
+  assert.deepEqual([await cell(18, 16), await cell(20, 16)], ['#17151f', '#17151f']);
+  // The eraser button, under the cursor (now at 20, 16).
+  await hold(erase);
+  assert.equal(await cell(20, 16), null);
+
+  // Fill, in red, from an empty cell: everything empty takes it.
+  await p.click('.ed-tool-fill');
+  await p.click('.ed-swatch >> nth=8');
+  assert.equal(await p.textContent(put), 'Залить');
+  await aim(-18, -14); // to (2, 2)
+  await hold(put);
+  assert.equal(await cell(30, 30), '#c4392f');
+  assert.equal(await cell(18, 16), '#17151f', 'the line stays');
+  await p.click('.ed-bar .ib >> nth=1'); // undo the fill
+  assert.equal(await cell(30, 30), null);
+
+  // A rectangle, dragged from press to release.
+  await p.click('.ed-tool-shapes');
+  await p.click('.ed-tool-shapes');
+  await p.click('.ed-shape[data-kind="rect"]');
+  await hold(put, 4, 4); // (2, 2) to (6, 6)
+  assert.deepEqual([await cell(6, 2), await cell(2, 6), await cell(4, 4)], ['#c4392f', '#c4392f', null]);
+
+  // A selection around it, then moved eight cells right.
+  await p.click('.ed-tool-select');
+  assert.equal(await p.textContent(put), 'Выделить');
+  await aim(-5, -5); // (1, 1)
+  await hold(put, 6, 6); // the box (1, 1)–(7, 7)
+  assert.equal(await p.isVisible('.ed-sel-bar'), true);
+  await aim(-3, -3); // (4, 4), inside
+  await hold(put, 8, 0);
+  assert.deepEqual([await cell(14, 2), await cell(6, 2)], ['#c4392f', null]);
+  assert.equal(await p.getAttribute('.ed-bar .ib >> nth=1', 'aria-label'), 'Отменить: перенос');
+
+  // The pipette button takes the colour under the cursor.
+  await p.click('.ed-tool-pen');
+  await p.click('.ed-swatch >> nth=4'); // ink
+  await aim(-2, -2); // (10, 2): the moved rectangle's corner, red
+  await p.click('.ed-pad .ed-round:nth-child(1)');
+  assert.match(await p.getAttribute('.ed-swatch[aria-pressed="true"]', 'aria-label'), /#c4392f/);
+
+  // The mirror works here too.
+  await p.click('.ed-tool-mirror');
+  await aim(0, 20); // (10, 22)
+  await hold(put);
+  assert.deepEqual([await cell(10, 22), await cell(21, 22)], ['#c4392f', '#c4392f']);
+  await p.context().close();
+});
+
 test('a backup restores cards, notes and the copy log, only for its key', async () => {
   const a = await env.phone('pixelfox');
   await tab(a, 'me');

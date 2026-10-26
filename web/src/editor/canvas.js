@@ -230,6 +230,15 @@ export function createCanvas() {
     panBy(dx, dy) { tx -= dx; ty -= dy; place(); },
     /** The whole card in view. */
     fit() { zoom = 1; place(); },
+    /** Moves a zoomed view just enough that a cell (and a cell around it) is in sight. @param {{x: number, y: number}} c */
+    reveal(c) {
+      if (zoom <= 1 || !size) return;
+      const a = art(), cell = a.w / size, W = viewport.clientWidth, H = viewport.clientHeight, m = cell * 1.5;
+      const x0 = a.x + c.x * cell, y0 = a.y + c.y * cell;
+      if (x0 < m) tx += m - x0; else if (x0 + cell > W - m) tx -= x0 + cell - (W - m);
+      if (y0 < m) ty += m - y0; else if (y0 + cell > H - m) ty -= y0 + cell - (H - m);
+      place();
+    },
     /** After the page's layout changed. */
     relayout: () => place(),
     get zoomed() { return zoom > 1.01; },

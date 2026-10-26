@@ -114,13 +114,14 @@ export function editorView() {
     move: (dx, dy) => {
       cursor = { x: clamp(cursor.x + dx, 0, model.doc.size - 0.01), y: clamp(cursor.y + dy, 0, model.doc.size - 0.01) };
       const c = cursorCell();
+      canvas.reveal(c); // zoomed in, the view follows the cursor
       canvas.cursor(c);
       held?.move(c);
       coords.textContent = `x ${c.x} · y ${c.y}`;
     },
     // The big button does what the chosen tool does: a pixel, a fill, a
     // shape dragged from where it is pressed to where it is let go.
-    press: (erase) => { held = strokes.start(cursorCell(), erase ? 'eraser' : state.tool); },
+    press: (erase) => { stop(); held = strokes.start(cursorCell(), erase ? 'eraser' : state.tool); },
     release: () => { held?.end(); held = null; },
     pick: () => pickAt(cursorCell()),
   });
@@ -402,7 +403,8 @@ export function editorView() {
     if (state.tool !== 'select') selection.clear();
     settings.set(d);
     settings.setAxes(state.axes);
-    pad.color(hex(d.colors[state.color] ?? 0));
+    const puts = state.tool === 'pen' || state.tool === 'fill' || state.tool === 'shapes';
+    pad.mode(t(`ed.precise.${state.tool}`), puts ? hex(d.colors[state.color] ?? 0) : null);
     el.classList.toggle('precise', state.precise);
     canvas.el.classList.toggle('playing', state.playing);
     if (state.precise) {

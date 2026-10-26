@@ -108,6 +108,7 @@
 .ed-round { width: 60px; height: 60px; border-radius: 50%; border: 0; background: var(--raise2); color: var(--text); display: grid; place-items: center; }
 .ed-put { width: 96px; height: 96px; border-radius: 50%; border: 0; background: var(--put, var(--cobalt)); color: #fff; font-weight: 600;
   text-shadow: 0 1px 2px #0008; box-shadow: 0 0 0 4px var(--raise), 0 0 0 6px var(--text); margin-left: auto; }
+.ed-put.plain { background: var(--raise2); text-shadow: none; }
 .ed-view.precise .ed-pad { display: flex; }
 .ed-view.precise .ed-frames { display: none; }
 .ed-view.precise .ed-lower { min-height: 0; }
