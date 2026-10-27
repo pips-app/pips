@@ -226,49 +226,40 @@ def cactus():
     # PICO-8: 0 black, 1 navy, 2 plum, 3 green, 4 brown, 5 grey, 6 light grey, 7 white,
     # 8 red, 9 orange, 10 yellow, 11 lime, 12 blue, 13 lavender, 14 pink, 15 peach
     p = Pic(24)
-    body = [(9, 4, 6, 14)]
-    for x, y, w, h in body:
-        p.rect(x, y, w, h, 3)
-    p.rect(10, 3, 4, 1, 3)
-    p.rect(4, 9, 3, 6, 3)
+    p.rect(9, 5, 6, 13, 3)        # the stem
+    p.rect(10, 4, 4, 1, 3)
+    p.rect(4, 10, 3, 5, 3)        # left arm, and where it joins
     p.rect(4, 14, 5, 2, 3)
-    p.rect(16, 7, 3, 5, 3)
+    p.rect(16, 8, 3, 4, 3)        # right arm
     p.rect(15, 11, 4, 2, 3)
-    for y in range(4, 18):
+    for y in range(5, 18):
         p.set(11, y, 11)
-    for x, y in ((10, 6), (13, 8), (10, 11), (13, 13), (5, 11), (17, 9), (12, 15)):
+    for x, y in ((10, 7), (13, 9), (10, 12), (13, 14), (5, 11), (17, 9), (12, 16)):
         p.set(x, y, 7)
-    p.disc(11.5, 2.5, 1.6, 14)
-    p.set(11, 2, 10)
+    p.disc(11.5, 3.5, 1.6, 14)    # the flower
+    p.set(11, 3, 10)
     p.outline(0, inside={3, 11, 7, 14, 10})
-    p.rect(6, 18, 12, 2, 9)
-    p.rect(7, 20, 10, 3, 4)
+    p.rect(6, 18, 12, 2, 9)       # the pot: rim, then body
+    p.rect(7, 20, 10, 2, 4)
     p.rect(7, 20, 10, 1, 2)
     p.outline(0, inside={9, 4, 2})
     return 16, [p]
 
 
 def heart():
-    """A heart that beats: two frames, small and big."""
+    """A heart with a highlight, outlined all round and centred."""
     colors = ['#3a0f1e', '#d6304f', '#ff7a8a', '#ffd3d8']
-    small = ['................', '................', '................', '................',
-             '....11....11....', '...1221..1111...', '...1231111111...', '...1211111111...',
-             '....11111111....', '.....111111.....', '......1111......', '.......11.......',
-             '................', '................', '................', '................']
-    big = ['................', '................', '...111....111...', '..12221..11111..',
-           '..12331111111111', '..12311111111111', '..12111111111111', '...111111111111.',
-           '....1111111111..', '.....11111111...', '......111111....', '.......1111.....',
-           '........11......', '................', '................', '................']
-    frames = []
-    for rows in (small, big, big, small):
-        p = Pic(16)
-        for y, r in enumerate(rows):
-            for x, ch in enumerate(r):
-                if ch != '.':
-                    p.set(x, y, int(ch))
-        p.outline(0)
-        frames.append(p)
-    return colors, frames
+    rows = ['................', '................', '................', '................',
+            '....11....11....', '...1221..1111...', '...1231111111...', '...1211111111...',
+            '....11111111....', '.....111111.....', '......1111......', '.......11.......',
+            '................', '................', '................', '................']
+    p = Pic(16)
+    for y, r in enumerate(rows):
+        for x, ch in enumerate(r):
+            if ch != '.':
+                p.set(x, y, int(ch))
+    p.outline(0)
+    return colors, [p]
 
 
 def heart_gameboy(frames):
@@ -288,18 +279,19 @@ def key():
     """A brass key, for the app that keeps one."""
     colors = ['#2c1b0e', '#b07a2a', '#e3b04b', '#fbe3a1']
     p = Pic(24)
-    p.disc(7, 8, 5.2, 1)
-    p.disc(7, 8, 2.2, EMPTY)
-    p.rect(11, 7, 10, 3, 1)
-    p.rect(17, 10, 2, 3, 1)
-    p.rect(20, 10, 1, 4, 1)
+    y0 = 4  # drawn from the top, then lowered to sit in the middle
+    p.disc(7, 8 + y0, 5.2, 1)
+    p.disc(7, 8 + y0, 2.2, EMPTY)
+    p.rect(11, 7 + y0, 10, 3, 1)
+    p.rect(17, 10 + y0, 2, 3, 1)
+    p.rect(20, 10 + y0, 1, 4, 1)
     for x in range(12, 21):
-        p.set(x, 7, 2)
+        p.set(x, 7 + y0, 2)
     for x, y in ((4, 5), (5, 4), (6, 4), (3, 6), (3, 7)):
-        p.set(x, y, 3)
+        p.set(x, y + y0, 3)
     for x, y in ((8, 4), (9, 4), (10, 5), (4, 11), (10, 11)):
-        p.set(x, y, 2)
-    p.set(13, 7, 3)
+        p.set(x, y + y0, 2)
+    p.set(13, 7 + y0, 3)
     p.outline(0)
     return colors, [p]
 
@@ -360,8 +352,8 @@ def samples():
         drawn('Горная ночь', mountains_night(mo[0]), mo[1], shade=6),
         drawn('Северное сияние', *aurora(), shade=7),
         drawn('Кактус', *cactus(), shade=4),
-        drawn('Сердечко', hc, hf, shade=3, delay=160),
-        drawn('Сердечко · Game Boy', *heart_gameboy(hf), shade=0, delay=160),
+        drawn('Сердечко', hc, hf, shade=3),
+        drawn('Сердечко · Game Boy', *heart_gameboy(hf), shade=0),
         drawn('Ключик', *key(), shade=5, mine=True),
         drawn('Кораблик', *boat(), shade=2, delay=320, mine=True),
     ]
@@ -383,6 +375,13 @@ def main():
     drawn_list, files = samples()
     for s in drawn_list:
         assert len(s['frames'][0]) == s['size'], s['title']
+        # A picture with empty cells is drawn whole: only its outline (colour 0)
+        # may touch the edge — a fill running into it reads as cut off.
+        for k, rows in enumerate(s['frames']):
+            if not any('.' in r for r in rows):
+                continue
+            border = rows[0] + rows[-1] + ''.join(r[0] + r[-1] for r in rows)
+            assert set(border) <= {'.', '0'}, f"{s['title']}, frame {k + 1}: cut off at the edge"
     for s in drawn_list + files:
         assert len(s['title'].encode()) <= 32, f"{s['title']}: a title is at most 32 bytes (pips-format MAX_TITLE)"
     body = (
