@@ -2,7 +2,7 @@
    phone a column (card, frames, palette, tools); on a wide screen the tools
    in a rail on the left and the palette and settings on the right. */
 
-.view.ed-view { inset: 0; background: var(--void); overflow: clip; } /* closed sheets wait below, out of sight */
+.view.ed-view { inset: 0; background: var(--void); } /* closed sheets wait below, out of sight: .view clips */
 .ed-bar { gap: 6px; padding-left: 8px; }
 .ed-bar .ib { width: 44px; height: 44px; background: var(--raise2); color: var(--text); }
 .ed-bar .ib.plain { background: none; margin-left: 0; }

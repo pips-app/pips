@@ -258,7 +258,11 @@ test('numbered copies: issued once each, until the run is complete', async () =>
   await saved.cancel();
   await ownCard(a, 'Сердце');
   await act(a, 'share');
+  // The sheet keeps its place and size from the copy's code to the panel.
+  const sheetBox = async () => { await a.waitForTimeout(700); return a.locator('.top-sheet').boundingBox(); }; // once it has come down
+  const asCopy = await sheetBox();
   await a.click('.top-sheet button:text("Экземпляр №")');
+  assert.deepEqual(await sheetBox(), asCopy, 'nothing jumps between «Копия» and «Экземпляр №»');
   await a.fill('.edition-panel input', '2');
 
   await tab(b, 'receive');

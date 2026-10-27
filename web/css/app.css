@@ -52,14 +52,17 @@ button { cursor: pointer; }
 [hidden] { display: none !important; }
 svg.i { width: 22px; height: 22px; stroke: currentColor; fill: none; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; flex: 0 0 auto; }
 
-#app { position: fixed; inset: 0; overflow: hidden; }
+#app { position: fixed; inset: 0; overflow: clip; } /* never scrolled, not even to show a focused control */
 .dev { --safe-t: calc(env(safe-area-inset-top, 0px) + 16px); }
 .dev-banner { position: fixed; top: env(safe-area-inset-top, 0px); left: 50%; transform: translateX(-50%); z-index: 2000;
   background: #5a3a12; color: #ffd9a0; font-size: 11px; font-weight: 600; letter-spacing: .06em;
   padding: 2px 10px; border-radius: 0 0 8px 8px; pointer-events: none; }
 
 /* ---------------------------------------------------------------- views -- */
-.view { position: absolute; inset: 0 0 calc(var(--tabs) + var(--safe-b)); display: flex; flex-direction: column; }
+/* A screen's frame never scrolls — its own .scroll does. `clip`, not
+   `hidden`: a hidden box can still be scrolled by the browser, to bring a
+   focused control into view, and the whole screen then shifts. */
+.view { position: absolute; inset: 0 0 calc(var(--tabs) + var(--safe-b)); display: flex; flex-direction: column; overflow: clip; }
 .bar { flex: 0 0 auto; display: flex; align-items: center; gap: 4px; min-height: 60px;
   padding: calc(10px + var(--safe-t)) 10px 8px 20px; }
 .bar .title { flex: 1; min-width: 0; }

@@ -1,7 +1,7 @@
 /* The collection screen (src/collection/). Everything here is positioned by
    script each frame; the styles only say what things look like. */
 
-.view.collection-view { inset: 0; touch-action: none; -webkit-user-select: none; user-select: none; overflow: hidden; }
+.view.collection-view { inset: 0; touch-action: none; -webkit-user-select: none; user-select: none; }
 .bar.collection-bar { position: absolute; z-index: 50; left: 0; right: 0; top: 0; gap: 8px;
   padding-left: max(20px, calc((100% - 1100px) / 2 + 16px)); padding-right: max(16px, calc((100% - 1100px) / 2 + 16px));
   background: linear-gradient(var(--void) 72%, #1a1b2100); pointer-events: none; }
