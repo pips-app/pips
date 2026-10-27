@@ -22,6 +22,9 @@ const cards = (p) => p.evaluate(async () => (await import('/src/state.js')).app.
 async function ownCard(p, title) {
   await tab(p, 'import');
   await choose(p, () => p.click('.import-preview'), await heart(env.dir));
+  // The file is read in the background and puts its name in the title:
+  // type over it only after that, as a person would.
+  await p.waitForFunction(() => document.querySelector('.import-body input:not([type])')?.value === 'heart-x6');
   await p.locator('.import-body input:not([type])').fill(title);
   await p.click('text=Подписать и добавить');
   await p.locator('.turn:not([hidden])').waitFor();
