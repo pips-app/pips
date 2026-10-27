@@ -203,7 +203,7 @@ export function importView() {
 
   /** Plays an animated card inside its frame. @param {HTMLElement} el @param {any} card */
   function animate(el, card) {
-    if (card.frames < 2) return;
+    if (card.frames < 2 || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
     const cv = /** @type {HTMLCanvasElement|null} */ (el.querySelector('.art canvas'));
     if (!cv) return;
     const g = /** @type {CanvasRenderingContext2D} */ (cv.getContext('2d'));
@@ -211,6 +211,7 @@ export function importView() {
       const r = app.core.render(card, i);
       return new ImageData(new Uint8ClampedArray(r.rgba), r.width, r.height);
     });
+    el.querySelector('.art')?.classList.add('playing'); // it plays here: no mark
     let i = 0;
     timer = window.setInterval(() => g.putImageData(images[(i = (i + 1) % images.length)], 0, 0), Math.max(card.delay_ms, 20));
   }

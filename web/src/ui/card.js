@@ -35,7 +35,7 @@ export function artCanvas(card, key) {
     img = new ImageData(new Uint8ClampedArray(r.rgba), r.width, r.height);
     if (key) artCache.set(key, img);
   }
-  const cv = /** @type {HTMLCanvasElement} */ (h('canvas', { width: img.width, height: img.height }));
+  const cv = /** @type {HTMLCanvasElement} */ (h('canvas', { width: img.width, height: img.height, dataset: key ? { art: key } : {} }));
   /** @type {CanvasRenderingContext2D} */ (cv.getContext('2d')).putImageData(img, 0, 0);
   return cv;
 }
@@ -66,7 +66,8 @@ export const cardTitle = (card) => card.title || t('card.untitled');
 export function frame(entry, opts = {}) {
   const { card, rec } = entry;
   const front = h('div', { class: 'face front' },
-    h('div', { class: 'art' }, artCanvas(card, rec.digest)),
+    // An animated card says so in its corner: in the grid it holds still.
+    h('div', { class: 'art' }, artCanvas(card, rec.digest), card.frames > 1 ? h('span', { class: 'anim-mark', title: t('card.animated', card.frames) }) : ''),
     h('div', { class: 'cap' }, h('b', { class: card.title ? '' : 'untitled' }, cardTitle(card)), h('i', {}, `${byline(card)} · ${date(rec.received, { day: '2-digit', month: '2-digit' })}`)));
   const flip = h('div', { class: 'flip' }, front);
   const el = h('div', { class: `frame${opts.bare ? ' bare' : ''}` }, flip);

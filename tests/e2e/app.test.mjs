@@ -1043,3 +1043,33 @@ test('the editor grid lies exactly on the cells, from edge to edge', async () =>
     await p.context().close();
   }
 });
+
+test('an animated card holds still in the grid, with a mark, and plays when looked at', async () => {
+  const p = await env.phone('pixelfox');
+  await tab(p, 'me');
+  await samples(p);
+  await p.waitForTimeout(1200);
+  await tab(p, 'collection');
+  await p.waitForTimeout(800);
+  const id = await p.evaluate(async () => [...(await import('/src/state.js')).app.cards.values()].find((e) => e.card.title === 'Кораблик')?.rec.digest);
+  const art = `.on-stage .art canvas[data-art="${id}"]`;
+  const pixels = () => p.$eval(art, (cv) => /** @type {HTMLCanvasElement} */ (cv).toDataURL());
+  // The grid: the first frame, still, and the mark in the corner.
+  assert.ok(await p.isVisible(`.on-stage .art:has(${art.split(' ').pop()}) .anim-mark`), 'marked as animated');
+  const still = await pixels();
+  await p.waitForTimeout(800);
+  assert.equal(await pixels(), still, 'still in the grid');
+  // Looked at: it plays (the boat rocks, the waves move).
+  await p.locator(art).scrollIntoViewIfNeeded();
+  const box = await p.locator(art).boundingBox();
+  await p.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+  await p.waitForTimeout(1000);
+  const seen = new Set();
+  for (let k = 0; k < 6; k++) { seen.add(await pixels()); await p.waitForTimeout(170); }
+  assert.ok(seen.size > 1, 'it plays in the feed');
+  // Back to the grid: still again, on its first frame.
+  await p.keyboard.press('Escape');
+  await p.waitForTimeout(900);
+  assert.equal(await pixels(), still, 'the first frame again');
+  await p.context().close();
+});

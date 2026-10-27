@@ -46,7 +46,7 @@ export function cardBack(entry, o) {
   }
   fact(t('back.k.sign'), author ? `✓ ${t('back.sign.ok')} · ${author.short}` : t('back.sign.none'), author ? 'ok' : 'bad');
   for (const l of links(card)) fact(l.k, l.v);
-  fact(t('back.k.pic'), t('back.tech', card.width, card.height, rec.payload.length));
+  fact(t('back.k.pic'), t('back.tech', card.width, card.height, rec.payload.length, card.frames));
   if (rec.state === 'trash') fact(t('back.k.bin'), t('back.bin-left', daysLeft(rec)), 'bad');
   // More by the same artist (by key, not by name): a tap shows them all.
   const others = author && !rec.mine ? [...app.cards.values()].filter((e) => e.author?.hex === author.hex && e.rec.digest !== rec.digest).length : 0;

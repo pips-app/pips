@@ -199,3 +199,46 @@ test('copy numbers: two logs of one card are joined, never chosen between', asyn
   assert.equal(joinLogs(undefined, b).of, 10, 'a run fixed by the other log');
   assert.equal(joinLogs({ of: 0, issued: [] }, b).of, 10);
 });
+
+test('the pen: corners come out of a curve, never out of what was already drawn', async () => {
+  const { createStrokes } = await import('../../web/src/editor/strokes.js');
+  const setup = (axes = { x: false, y: false }, pen = 'solid') => {
+    const m = createModel(blank(8, PAL));
+    const strokes = createStrokes({
+      model: m, pick() {}, selection: /** @type {any} */ ({}),
+      now: () => ({ frame: 0, color: 1, shape: 'line', pen, mirror: axes.x || axes.y, axes }),
+    });
+    const at = (/** @type {number} */ x, /** @type {number} */ y) => m.doc.frames[0][y * 8 + x];
+    return { m, strokes, at };
+  };
+  const draw = (/** @type {any} */ strokes, /** @type {number[][]} */ cells) => {
+    const hnd = strokes.start({ x: cells[0][0], y: cells[0][1] }, 'pen');
+    for (const [x, y] of cells.slice(1)) hnd.move({ x, y });
+    hnd.end();
+  };
+
+  // A staircase: the cells that only turn a corner go (pixel-perfect).
+  let { strokes, at } = setup();
+  draw(strokes, [[0, 0], [1, 0], [1, 1], [2, 1], [2, 2]]);
+  assert.deepEqual([at(0, 0), at(1, 0), at(1, 1), at(2, 1), at(2, 2)], [1, T, 1, T, 1]);
+
+  // Along a line and back, then off it: the line keeps every cell.
+  ({ strokes, at } = setup());
+  draw(strokes, [[0, 3], [1, 3], [2, 3], [3, 3], [2, 3], [2, 4]]);
+  assert.deepEqual([at(0, 3), at(1, 3), at(2, 3), at(3, 3)], [1, 1, 1, 1], 'no hole where the finger turned back');
+
+  // Crossing an earlier part of the stroke at a corner: no hole there either.
+  ({ strokes, at } = setup());
+  draw(strokes, [[1, 1], [2, 1], [3, 1], [3, 2], [3, 3], [2, 3], [2, 2], [2, 1], [1, 1], [1, 0]]);
+  assert.equal(at(2, 1), 1, 'the cell where the stroke crossed itself');
+
+  // With the mirror, the same holds for the mirrored half.
+  ({ strokes, at } = setup({ x: true, y: false }));
+  draw(strokes, [[0, 3], [1, 3], [2, 3], [1, 3], [1, 4]]);
+  assert.deepEqual([at(1, 3), at(6, 3)], [1, 1]);
+
+  // The square pen keeps every cell: a corner drawn on purpose stays.
+  ({ strokes, at } = setup(undefined, 'square'));
+  draw(strokes, [[0, 0], [1, 0], [1, 1], [2, 1], [2, 2]]);
+  assert.deepEqual([at(0, 0), at(1, 0), at(1, 1), at(2, 1), at(2, 2)], [1, 1, 1, 1, 1]);
+});

@@ -1,15 +1,16 @@
 // @ts-check
 // The tool bar: what a finger on the canvas does, and two switches — the
 // mirror and the precise mode. A second tap on the pen or the shapes tool
-// shows its kinds: a plain pen or a dithering one; a line, rectangles,
-// ellipses.
+// shows its kinds: a pen that smooths the corners out of a curve (pixel-
+// perfect), one that keeps every cell it passes, a dithering one; a line,
+// rectangles, ellipses.
 
 import { h, icon } from '../dom.js';
 import { t } from '../i18n.js';
 
 /** @typedef {'pen'|'eraser'|'fill'|'shapes'|'select'|'pick'} Tool */
 /** @typedef {'line'|'rect'|'rect-fill'|'ellipse'|'ellipse-fill'} Shape */
-/** @typedef {'solid'|'dither'} PenMode */
+/** @typedef {'solid'|'square'|'dither'} PenMode solid: pixel-perfect (corners of a curve taken out); square: every cell kept */
 
 /** Tools with their keys (shown on a computer). */
 export const TOOLS = /** @type {const} */ ([
@@ -21,7 +22,7 @@ export const TOOLS = /** @type {const} */ ([
   { id: 'pick', icon: 'pick', key: 'I' },
 ]);
 export const SHAPES = /** @type {const} */ (['line', 'rect', 'rect-fill', 'ellipse', 'ellipse-fill']);
-export const PENS = /** @type {const} */ ([{ id: 'solid', icon: 'brush' }, { id: 'dither', icon: 'dither' }]);
+export const PENS = /** @type {const} */ ([{ id: 'solid', icon: 'brush' }, { id: 'square', icon: 'pen-square' }, { id: 'dither', icon: 'dither' }]);
 
 /**
  * @param {{
@@ -68,7 +69,7 @@ export function toolBar(o) {
     set(s) {
       current = s.tool;
       TOOLS.forEach((tl, k) => tools[k].setAttribute('aria-pressed', String(tl.id === s.tool)));
-      tools[0].replaceChildren(icon(s.pen === 'dither' ? 'dither' : 'brush'), h('kbd', {}, 'B'));
+      tools[0].replaceChildren(icon(s.pen === 'dither' ? 'dither' : s.pen === 'square' ? 'pen-square' : 'brush'), h('kbd', {}, 'B'));
       tools[3].replaceChildren(icon(s.shape === 'line' ? 'shapes' : s.shape), h('kbd', {}, 'U'));
       for (const b of shapes.buttons) b.setAttribute('aria-pressed', String(b.dataset.kind === s.shape));
       for (const b of pens.buttons) b.setAttribute('aria-pressed', String(b.dataset.kind === s.pen));

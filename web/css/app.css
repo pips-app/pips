@@ -135,6 +135,13 @@ svg.i { width: 22px; height: 22px; stroke: currentColor; fill: none; stroke-widt
 .front { padding: 3.6cqw 3.6cqw 0; }
 .art { aspect-ratio: 1; background: color-mix(in srgb, var(--shade) 88%, #000); overflow: hidden; }
 .art canvas { display: block; width: 100%; height: 100%; object-fit: contain; image-rendering: pixelated; }
+/* An animated card, held still: a small "play" in its corner. */
+.art { position: relative; }
+.anim-mark { position: absolute; right: 5%; bottom: 5%; width: 9%; aspect-ratio: 1; min-width: 7px; border-radius: 50%;
+  background: color-mix(in srgb, var(--shade) 85%, transparent); box-shadow: 0 0 0 1px color-mix(in srgb, var(--shade-ink) 25%, transparent); }
+.art.playing .anim-mark { opacity: 0; }
+.anim-mark::after { content: ''; position: absolute; inset: 28% 24% 28% 36%; background: var(--shade-ink); opacity: .75;
+  clip-path: polygon(0 0, 100% 50%, 0 100%); }
 .cap { height: calc(19cqw + 10px); min-height: 34px; display: flex; flex-direction: column; justify-content: center; overflow: hidden; }
 .cap b { font: 600 max(11px, 6.2cqw)/1.3 var(--serif); color: var(--shade-ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .cap i { font-style: normal; font-size: max(10px, 4.6cqw); line-height: 1.35; color: var(--shade-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

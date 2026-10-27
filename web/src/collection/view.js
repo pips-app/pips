@@ -21,6 +21,7 @@ import { app, subscribe } from '../state.js';
 import { getMeta, setMeta } from '../store.js';
 import { frame, FRAME_SHADES } from '../ui/card.js';
 import { go, hideTabs } from '../ui/shell.js';
+import { playOnly } from '../ui/player.js';
 import { loop, clamp } from '../kit/motion.js';
 import { iconButton } from '../kit/icon-button.js';
 import { segmented } from '../kit/segmented.js';
@@ -310,6 +311,8 @@ export function collectionView(o) {
     searchPanel.style.transform = `translate3d(0,${stage.frame.top - stage.scroll[0].v}px,0)`;
     const inFeed = z > 1.6 && !busy.n && !stage.dragY.v && !!c;
     feedBar.show(inFeed);
+    // The card looked at plays, if it moves; in the grid, none does.
+    playOnly(z > 1.6 && !busy.n && c ? c.id : null);
     if (MOUSE) {
       const i = Math.round(stage.feed.to), n = stage.list.length;
       if (feedNav.hidden === inFeed) feedNav.hidden = !inFeed;
@@ -495,6 +498,6 @@ export function collectionView(o) {
         stage.kick();
       }
     },
-    hide() { hideTabs(false); sheet.close(); },
+    hide() { hideTabs(false); sheet.close(); playOnly(null); },
   };
 }
