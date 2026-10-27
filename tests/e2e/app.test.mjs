@@ -259,7 +259,7 @@ test('numbered copies: issued once each, until the run is complete', async () =>
   await a.fill('.edition-panel input', '2');
 
   await tab(b, 'receive');
-  await b.click('text=Мой код получателя');
+  await b.click('text=Код получателя');
   const rc = await photo(b, '.overlay .qr-box', env.dir, 'recipient');
   await b.click('.overlay .icon-btn');
 
@@ -746,4 +746,66 @@ test('a backup restores cards, notes and the copy log, only for its key', async 
   await writeFile(join(env.dir, 'bad.pipsbak'), bytes);
   assert.match(await restore(b, join(env.dir, 'bad.pipsbak')), /Копия повреждена/);
   for (const p of [a, b, c]) await p.context().close();
+});
+
+/**
+ * Controls on screen that cover one another, or the tab bar's raised scan
+ * button: [what, what] pairs. Only what is visible and not inside another.
+ */
+const overlaps = (p) => p.evaluate(() => {
+  const sel = 'section.view:not([hidden]) :is(button, input, select, textarea, .hint, .coach, .idcard), .coach:not([hidden])';
+  const els = [...document.querySelectorAll(sel)].filter((e) => {
+    const r = e.getBoundingClientRect(), s = getComputedStyle(e);
+    if (!(r.width > 0 && r.height > 0) || s.visibility === 'hidden' || e.closest('[hidden]')) return false;
+    if (r.bottom <= 0 || r.top >= innerHeight || r.right <= 0 || r.left >= innerWidth) return false; // parked off screen
+    for (let a = e; a; a = a.parentElement) if (getComputedStyle(a).opacity === '0') return false; // faded out
+    return true;
+  });
+  const out = [];
+  const name = (e) => `${e.tagName.toLowerCase()}.${[...e.classList].join('.')} «${(e.textContent ?? '').trim().slice(0, 24)}»`;
+  const hit = (a, b) => a.left < b.right - 0.5 && b.left < a.right - 0.5 && a.top < b.bottom - 0.5 && b.top < a.bottom - 0.5;
+  for (let i = 0; i < els.length; i++) for (let j = i + 1; j < els.length; j++) {
+    const a = els[i], b = els[j];
+    if (a.contains(b) || b.contains(a)) continue;
+    if (hit(a.getBoundingClientRect(), b.getBoundingClientRect())) out.push([name(a), name(b)]);
+  }
+  // The scan button and its ring stand above the bar: nothing floating may touch them.
+  const fab = document.querySelector('.tabs:not(.away) .main i')?.getBoundingClientRect();
+  const coach = document.querySelector('.coach:not([hidden])')?.getBoundingClientRect();
+  if (fab && coach && coach.bottom > fab.top - 5) out.push(['.coach', 'the scan button']);
+  return out;
+});
+
+test('nothing on screen covers anything else, and the hint shows only when it applies', async () => {
+  for (const desk of [false, true]) {
+    const p = await env.phone('pixelfox', undefined, desk);
+    await p.waitForTimeout(600);
+    // An empty collection: nothing to zoom, so no word about zooming.
+    assert.ok(await p.locator('.first-run').isVisible());
+    assert.equal(await p.locator('.coach').isVisible(), false, 'no zoom hint without cards');
+    for (const t of ['me', 'receive', 'import', 'draw']) {
+      await tab(p, t);
+      await p.waitForTimeout(500);
+      assert.deepEqual(await overlaps(p), [], `${t}, ${desk ? 'computer' : 'phone'}`);
+    }
+    // Two-up rows keep their labels on one line.
+    await tab(p, 'me');
+    await p.waitForTimeout(400);
+    for (const b of await p.$$('section.view:not([hidden]) .row-btns .btn')) assert.ok((await b.boundingBox()).height <= 50, await b.textContent());
+    await p.click('text=Добавить образцы карточек');
+    await p.waitForTimeout(1500);
+    await tab(p, 'collection');
+    await p.waitForTimeout(800);
+    // With cards: the hint, clear of the scan button; gone once used.
+    assert.ok(await p.locator('.coach').isVisible(), 'the zoom hint, now that there is somewhere to go');
+    assert.deepEqual(await overlaps(p), []);
+    await p.keyboard.press('-'); // a step out: weeks → months
+    await p.waitForTimeout(600);
+    assert.equal(await p.locator('.coach').isVisible(), false, 'learnt: gone');
+    await p.reload();
+    await p.locator('nav.tabs').waitFor();
+    await p.waitForTimeout(800);
+    assert.equal(await p.locator('.coach').isVisible(), false, 'and stays gone');
+    await p.context().close();
+  }
 });

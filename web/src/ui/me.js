@@ -1,7 +1,7 @@
 // @ts-check
 // Me: identity, what goes on the back of your cards, secrets, settings.
 
-import { h, icon, replace, byteLimit } from '../dom.js';
+import { h, replace, byteLimit } from '../dom.js';
 import { t, reason, language, date } from '../i18n.js';
 import { app, setProfile, addOwn, receive, backdate, makeBackup, restoreBackup, lastBackup } from '../state.js';
 import { isPersisted, setMeta, memoryOnly } from '../store.js';
@@ -64,7 +64,7 @@ export function meView() {
     const wordsBtn = h('button', { class: 'btn', onclick: () => reveal('words') });
     const paperBtn = h('button', { class: 'btn', onclick: () => reveal('paper') });
     const labels = () => {
-      wordsBtn.replaceChildren(icon('key'), t(shown === 'words' ? 'me.words.hide' : 'me.words'));
+      wordsBtn.replaceChildren(t(shown === 'words' ? 'me.words.hide' : 'me.words'));
       paperBtn.replaceChildren(t(shown === 'paper' ? 'me.paper.hide' : 'me.paper'));
     };
     labels();
@@ -190,8 +190,8 @@ async function backupGroup(switchKey) {
       ? t('backup.never')
       : `${t('backup.last', date(last.at, { day: 'numeric', month: 'long', year: 'numeric' }), last.count)}${changes ? ` · ${t('backup.since', changes)}` : ''}`;
     box.replaceChildren(h('h2', {}, t('backup.title')),
-      h('p', { class: `hint${stale ? ' warn-text' : ''}`, style: { marginTop: '0' } }, status),
-      last && p.issued ? h('p', { class: 'hint warn-text', style: { marginTop: '0' } }, t('backup.issued', p.issued)) : '',
+      h('p', { class: `hint lead${stale ? ' warn-text' : ''}` }, status),
+      last && p.issued ? h('p', { class: 'hint lead warn-text' }, t('backup.issued', p.issued)) : '',
       h('div', { class: 'row-btns' },
         h('button', { class: `btn${stale ? ' key' : ''}`, onclick: save }, t('backup.save')),
         h('button', { class: 'btn', onclick: () => input.click() }, t('backup.restore'))),

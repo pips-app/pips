@@ -7,7 +7,8 @@
   background: linear-gradient(var(--void) 72%, #1a1b2100); pointer-events: none; }
 .collection-bar > * { pointer-events: auto; }
 .collection-bar .sub { display: flex; gap: 8px; align-items: center; min-height: 18px; white-space: nowrap; overflow: hidden; }
-.level-switch { border: 0; background: none; padding: 0; font: inherit; color: inherit; text-align: left; }
+.level-switch { border: 0; background: none; padding: 0; font: inherit; color: inherit; text-align: left;
+  display: block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .level-switch:disabled { cursor: default; }
 .filter-chip { border: 0; border-radius: 99px; padding: 1px 9px; font-size: 12px; font-weight: 500; background: #6d8fd62e; color: var(--cobalt-hi);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
@@ -25,6 +26,9 @@
 
 /* Mouse controls: closer and further in the bar, along the feed at its sides. */
 .collection-bar .zoom { display: flex; gap: 4px; flex: none; }
+/* A narrow window with a mouse: the title keeps its room; clicks, keys and
+   the wheel still zoom. */
+@media (max-width: 520px) { .collection-bar .zoom { display: none; } }
 .collection-bar .zoom .ib:disabled, .feed-nav .ib:disabled { opacity: .35; cursor: default; }
 .feed-nav { position: absolute; z-index: 42; left: 0; right: 0; top: 50%; pointer-events: none; display: flex; justify-content: space-between;
   padding: 0 max(16px, calc((100% - 1100px) / 2 + 16px)); }
@@ -133,7 +137,8 @@ input.tag.add::placeholder { color: var(--shade-dim); }
 .place-empty { position: absolute; z-index: 4; left: 32px; right: 32px; top: 44%; margin: 0; text-align: center; color: var(--text3);
   font-size: 14px; line-height: 1.45; pointer-events: none; }
 .coach { position: absolute; z-index: 35; left: 50%; transform: translateX(-50%); width: max-content; max-width: calc(100% - 32px);
-  bottom: calc(var(--tabs) + var(--safe-b) + 20px); padding: 8px 14px; border-radius: 12px; background: var(--raise2); text-align: center;
+  /* Clear of the raised scan button, which stands ~20px above --tabs. */
+  bottom: calc(var(--tabs) + var(--safe-b) + 36px); padding: 8px 14px; border-radius: 12px; background: var(--raise2); text-align: center;
   font-size: 12.5px; color: var(--text2); pointer-events: none; box-shadow: 0 8px 20px -10px #000; }
 
 /* An empty collection: the person's own calling card, and two ways to begin. */

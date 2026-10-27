@@ -315,7 +315,7 @@ export function collectionView(o) {
   function levelChanged(level) {
     if (level >= 2) selection.stop();
     if (level < 3 && editing) setEditing(false);
-    if (coachShown) { coachShown = false; coach.hidden = true; setMeta('coached', true); }
+    if (coachWanted) { coachWanted = false; coach.hidden = true; setMeta('coached', true); } // learnt: done with it
     paintChrome();
   }
 
@@ -347,7 +347,7 @@ export function collectionView(o) {
     tagChips.update(tagCounts(inPlace(filter.place).map(asItem)).map(([tag, n]) => ({ value: tag, text: `#${tag}`, count: n, on: words(filter.query).includes(`#${tag}`) })));
     none.hidden = !filtered || count > 0;
     first.el.hidden = !firstRun;
-    if (firstRun) coach.hidden = true; else if (coachShown) coach.hidden = false;
+    paintCoach(lv, firstRun, selecting);
     searchPanel.hidden = firstRun;
     placeEmpty.hidden = filter.place === 'collection' || inPlace(filter.place).length > 0;
     placeEmpty.textContent = t(filter.place === 'archive' ? 'place.archive.empty' : 'place.trash.empty');
@@ -440,8 +440,26 @@ export function collectionView(o) {
   el.addEventListener('mousedown', (e) => { if (e.button === 3) e.preventDefault(); });
   addEventListener('resize', () => { measure(); stage.relayout(); });
 
-  let coachShown = false;
-  getMeta('coached').then((done) => { if (!done) { coachShown = true; coach.hidden = false; } });
+  // The coach says how to move along the zoom axis — only while there is
+  // somewhere to move (cards in the collection, seen by weeks or months),
+  // and only until the person has moved once, or seen it on three starts.
+  // Each time, it leaves by itself after a while: it covers cards.
+  const COACH_STARTS = 3, COACH_MS = 12_000;
+  let coachWanted = false;
+  let coachTimer = 0;
+  /** @param {number} lv @param {boolean} firstRun @param {boolean} selecting */
+  function paintCoach(lv, firstRun, selecting) {
+    const show = coachWanted && !firstRun && !selecting && filter.place === 'collection' && lv <= 1 && stage.list.length > 0;
+    coach.hidden = !show;
+    if (show && !coachTimer) coachTimer = window.setTimeout(() => { coachWanted = false; coach.hidden = true; }, COACH_MS);
+  }
+  getMeta('coached').then((v) => {
+    const seen = v === true ? COACH_STARTS : Number(v) || 0;
+    if (seen >= COACH_STARTS) return;
+    coachWanted = true;
+    setMeta('coached', seen + 1);
+    paintChrome();
+  });
 
   subscribe(() => { if (!el.hidden) sync(); });
   return {

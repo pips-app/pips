@@ -13,7 +13,9 @@ export function h(tag, props = {}, ...children) {
   for (const [k, v] of Object.entries(props)) {
     if (v == null || v === false) continue;
     if (k === 'class') el.className = v;
-    else if (k === 'style') for (const [p, val] of Object.entries(v)) el.style.setProperty(p, String(val));
+    // Style keys as in CSS (`margin-top`, `--shade`) or in JS (`marginTop`):
+    // setProperty takes only the first, and silently ignores the second.
+    else if (k === 'style') for (const [p, val] of Object.entries(v)) el.style.setProperty(p.startsWith('--') ? p : p.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`), String(val));
     else if (k.startsWith('on') && typeof v === 'function') el.addEventListener(k.slice(2), v);
     else if (k === 'dataset') Object.assign(el.dataset, v);
     else if (k in el && typeof v !== 'string') /** @type {any} */ (el)[k] = v;
