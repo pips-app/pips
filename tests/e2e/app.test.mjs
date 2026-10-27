@@ -996,15 +996,26 @@ test('a card is signed with a name; one that came without shows «Без наз�
 test('the tab bar waits for the card to land in the archive and the strip to go', async () => {
   const p = await env.phone('pixelfox');
   await ownCard(p, 'Последняя');
+  // Watch the page itself, not a stopwatch: when the strip goes down, and
+  // when the tabs come back. Timings differ from machine to machine; the
+  // order must not.
+  await p.evaluate(() => {
+    const w = /** @type {any} */ (window), tabs = document.querySelector('nav.tabs'), strip = document.querySelector('.strip');
+    w.seen = { stripDown: 0, tabsBack: 0, flying: false };
+    new MutationObserver(() => { if (!tabs?.classList.contains('away') && !w.seen.tabsBack && w.seen.flying) w.seen.tabsBack = performance.now(); })
+      .observe(/** @type {Element} */ (tabs), { attributes: true });
+    new MutationObserver(() => {
+      const up = !/101%/.test(/** @type {HTMLElement} */ (strip).style.transform);
+      if (up) w.seen.flying = true;
+      else if (w.seen.flying && !w.seen.stripDown) w.seen.stripDown = performance.now();
+    }).observe(/** @type {Element} */ (strip), { attributes: true, attributeFilter: ['style'] });
+  });
   await act(p, 'down'); // the only card: to the archive, from the feed
-  const away = () => p.locator('nav.tabs').evaluate((n) => n.classList.contains('away'));
-  // Through the flight and while the strip shows where it landed, the tabs stay out of its way…
-  for (const ms of [300, 700, 900]) {
-    await p.waitForTimeout(ms);
-    assert.equal(await away(), true, `still away after ${ms} ms more`);
-  }
-  // …and come back once the strip has gone down.
-  await p.waitForFunction(() => !document.querySelector('nav.tabs')?.classList.contains('away'), null, { timeout: 4000 });
+  await p.waitForFunction(() => /** @type {any} */ (window).seen.tabsBack > 0, null, { timeout: 6000 });
+  const seen = await p.evaluate(() => /** @type {any} */ (window).seen);
+  assert.ok(seen.stripDown > 0, 'the strip showed, then went down');
+  // (In the same moment counts: both change in one step.)
+  assert.ok(seen.tabsBack >= seen.stripDown - 5, `the tabs came back only as the strip went (${JSON.stringify(seen)})`);
   assert.equal(await p.evaluate(async () => [...(await import('/src/state.js')).app.cards.values()][0].rec.state), 'archive');
   await p.context().close();
 });
