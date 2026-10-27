@@ -75,7 +75,7 @@ test('restoring on a new phone: the backup and the key in one step', async () =>
   // The backup first: whose it is shows before any key.
   const b = await fresh();
   await choose(b, () => b.click('text=Выбрать файл копии'), file);
-  assert.equal(await b.textContent('.onb-file-row span'), `Копия ключа ${await short(a)}`);
+  assert.equal(await b.textContent('.onb-file .idcard small'), `Ключ ${await short(a)}`);
   // A typo shows in its cell at once; a swap, once all 24 are in.
   await b.fill('.words-entry input >> nth=0', list.join(' '));
   await b.fill('.words-entry input >> nth=5', 'qqq');
@@ -87,7 +87,7 @@ test('restoring on a new phone: the backup and the key in one step', async () =>
   // Four letters of each word are enough; they are written out in full.
   await b.fill('.words-entry input >> nth=0', list.map((w) => w.slice(0, 4)).join(' '));
   assert.equal(await b.inputValue('.words-entry input >> nth=23'), list[23]);
-  assert.equal(await status(b), `Ключ ${await short(a)}`);
+  assert.equal(await b.textContent('.onb-status .idcard small'), `Ключ ${await short(a)} · подходит к копии`);
   await b.click('.onb-go');
   await b.locator('nav.tabs').waitFor(); // no nick asked: it came with the backup
   const facts = await b.evaluate(async () => {
@@ -105,15 +105,15 @@ test('restoring on a new phone: the backup and the key in one step', async () =>
   await d.fill('.words-entry input >> nth=0', other);
   assert.match(await status(d), /а копия — от другого/);
   assert.equal(await go(d), false);
-  await d.click('text=Убрать'); // without the file, the key alone will do
+  await d.click('[aria-label="Убрать"]'); // without the file, the key alone will do
   assert.equal(await go(d), true);
 
   // The paper key, from a photo of it.
   const e = await fresh();
   await e.click('.onb .seg >> text=Бумажный ключ');
   await fromPicture(e, '.onb', paper);
-  await e.waitForFunction(() => document.querySelector('.onb-status')?.textContent?.startsWith('Ключ'));
-  assert.equal(await status(e), `Ключ ${await short(a)}`);
+  await e.locator('.onb-status .idcard').waitFor();
+  assert.equal(await e.textContent('.onb-status .idcard small'), `Ключ ${await short(a)}`);
   await e.click('.onb-go');
   await e.fill('.field input', 'pixelfox'); // no backup: the nick is asked
   await e.click('text=Готово');

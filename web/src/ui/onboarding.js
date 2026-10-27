@@ -4,10 +4,12 @@
 // Nothing is stored until the person has confirmed the words, or until the
 // key and the backup have both checked out.
 
-import { h, replace, byteLimit, icon } from '../dom.js';
+import { h, replace, byteLimit } from '../dom.js';
 import { t, reason } from '../i18n.js';
 import { app, setIdentity, setProfile, applyBackup } from '../state.js';
 import { segmented } from '../kit/segmented.js';
+import { identicon } from '../kit/identicon.js';
+import { iconButton } from '../kit/icon-button.js';
 import { wordsEntry } from './words-entry.js';
 import { scanner } from './scan.js';
 
@@ -41,6 +43,14 @@ export function onboarding(root, done) {
   }
 
   /**
+   * A key as Profile shows it: its mark, a title, the key in short.
+   * @param {{hex: string, short: string}} k @param {string} title @param {string} extra after the key
+   * @param {Element} [end] a control at the end
+   */
+  const idCard = (k, title, extra, end) => h('div', { class: 'idcard' }, identicon(k.hex),
+    h('div', { class: 'grow' }, h('b', {}, title), h('small', {}, `${t('me.key')} ${k.short}${extra ? ` · ${extra}` : ''}`)), end);
+
+  /**
    * Getting back what there was: the backup first, if there is one, so the
    * key can be checked against it before anything is stored; then the key,
    * from its words or its paper QR. Both come back in one step, and the
@@ -49,20 +59,24 @@ export function onboarding(root, done) {
   function restore() {
     /** @type {any} the identity the words or the paper give, once they do */
     let key = null;
-    /** @type {{bytes: Uint8Array, owner: {hex: string, short: string}}|null} */
+    /** @type {{bytes: Uint8Array, name: string, owner: {hex: string, short: string}}|null} */
     let file = null;
     let fileError = '';
     /** What the key part has to say. @type {{text: string, wrong: boolean}} */
     let note = { text: '', wrong: false };
 
-    const status = h('p', { class: 'onb-status', role: 'status' });
+    const status = h('div', { class: 'onb-status', role: 'status' });
     const go = /** @type {HTMLButtonElement} */ (h('button', { class: 'btn key wide onb-go', disabled: true, onclick: () => finish() }, t('onb.restore.go')));
     /** Where things stand; the restore goes only with a key that fits the file. */
     function paint() {
-      const mismatch = !!(key && file && key.publicKey().hex !== file.owner.hex);
-      status.textContent = mismatch ? t('onb.key.mismatch', key.publicKey().short) : note.text;
+      const k = key?.publicKey();
+      const mismatch = !!(k && file && k.hex !== file.owner.hex);
+      // A key that will do is shown as Profile shows it: its mark beside it,
+      // the same mark as the backup's when they belong together.
+      if (k && !mismatch) replace(status, idCard(k, t('onb.key.found'), file ? t('onb.key.fits') : ''));
+      else replace(status, mismatch ? t('onb.key.mismatch', k.short) : note.text);
       status.classList.toggle('wrong', mismatch || note.wrong);
-      go.disabled = !key || mismatch;
+      go.disabled = !k || mismatch;
     }
 
     // ------------------------------------------------------- the backup --
@@ -74,7 +88,7 @@ export function onboarding(root, done) {
       if (!f) return;
       try {
         const bytes = new Uint8Array(await f.arrayBuffer());
-        file = { bytes, owner: app.core.backupOwner(bytes) };
+        file = { bytes, name: f.name, owner: app.core.backupOwner(bytes) };
         fileError = '';
       } catch (e) {
         file = null;
@@ -86,8 +100,7 @@ export function onboarding(root, done) {
     function paintFile() {
       replace(fileBox,
         file
-          ? h('div', { class: 'onb-file-row' }, icon('key'), h('span', {}, t('onb.restore.file.of', file.owner.short)),
-            h('button', { type: 'button', class: 'btn', onclick: () => { file = null; paintFile(); paint(); } }, t('onb.restore.file.drop')))
+          ? idCard(file.owner, file.name, '', iconButton({ icon: 'close', label: t('onb.restore.file.drop'), onClick: () => { file = null; paintFile(); paint(); } }).el)
           : h('button', { type: 'button', class: 'btn wide', onclick: () => fileInput.click() }, t('onb.restore.file.pick')),
         fileError ? h('p', { class: 'onb-status wrong' }, fileError) : h('p', { class: 'hint' }, t(file ? 'onb.restore.file.on' : 'onb.restore.file.off')));
     }
@@ -96,14 +109,13 @@ export function onboarding(root, done) {
     // ---------------------------------------------------------- the key --
     /** @param {any} k @param {{text: string, wrong: boolean}} n */
     const setKey = (k, n) => { key = k; note = n; paint(); };
-    const ok = () => ({ text: t('onb.key.ok', key.publicKey().short), wrong: false });
-
+    
     const words = wordsEntry(app.core.recoveryWords(), (s) => {
       if (s.bad >= 0) return setKey(null, { text: t('onb.key.unknown', s.bad + 1), wrong: true });
       if (!s.words) return setKey(null, { text: s.named ? t('onb.key.count', s.named) : '', wrong: false });
       try {
         key = app.core.Identity.fromWords(s.words.join(' '));
-        setKey(key, ok());
+        setKey(key, { text: '', wrong: false });
       } catch {
         setKey(null, { text: t('onb.key.sum'), wrong: true });
       }
@@ -114,7 +126,7 @@ export function onboarding(root, done) {
       try {
         key = app.core.Identity.fromPaper(text);
         scan.stop();
-        setKey(key, ok());
+        setKey(key, { text: '', wrong: false });
       } catch {
         scan.say(t('onb.key.bad-paper'));
       }

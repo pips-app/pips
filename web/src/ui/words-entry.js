@@ -23,13 +23,14 @@ export function wordsEntry(list, onChange) {
     type: 'text', autocomplete: 'off', autocapitalize: 'none', autocorrect: 'off', spellcheck: 'false',
     enterkeyhint: k < COUNT - 1 ? 'next' : 'done', 'aria-label': t('words.cell', k + 1),
   })));
-  const el = h('ol', { class: 'word-grid words-entry' }, cells.map((c) => h('li', {}, c)));
+  const el = h('ol', { class: 'word-grid words-entry' }, cells.map((c, k) => h('li', {}, h('span', { 'aria-hidden': 'true' }, k + 1), c)));
 
   /** Marks a cell: wrong if it can no longer become a word (typing), or names none (left). @param {number} k @param {boolean} left */
   function mark(k, left) {
     const v = cells[k].value.trim();
     const bad = v !== '' && (left ? !book.resolve(v) : !book.possible(v));
     cells[k].classList.toggle('bad', bad);
+    cells[k].parentElement?.classList.toggle('bad', bad);
     cells[k].setAttribute('aria-invalid', String(bad));
   }
   /** The cell left: a short form becomes the word. @param {number} k */

@@ -167,30 +167,35 @@ svg.i { width: 22px; height: 22px; stroke: currentColor; fill: none; stroke-widt
 .idcard b { display: block; font: 600 18px var(--serif); }
 .idcard small { color: var(--text3); font-size: 12px; letter-spacing: .02em; }
 .word-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; counter-reset: w; }
-.word-grid span { background: var(--raise); border-radius: 9px; padding: 8px 8px 8px 28px; position: relative; font-size: 14px;
+.word-grid > span { background: var(--raise); border-radius: 9px; padding: 8px 8px 8px 28px; position: relative; font-size: 14px;
   box-shadow: inset 0 0 0 1px var(--line); user-select: text; -webkit-user-select: text; }
-.word-grid span::before { counter-increment: w; content: counter(w); position: absolute; left: 8px; color: var(--text3); font-size: 11px; top: 10px; }
+.word-grid > span::before { counter-increment: w; content: counter(w); position: absolute; left: 8px; color: var(--text3); font-size: 11px; top: 10px; }
 /* The same grid, to type into: a numbered cell per word. */
 .words-entry { list-style: none; margin: 0; padding: 0; }
-.words-entry li { position: relative; }
-.words-entry li::before { counter-increment: w; content: counter(w); position: absolute; left: 8px; top: 11px; color: var(--text3); font-size: 11px; pointer-events: none; }
-.words-entry input { width: 100%; min-width: 0; border: 0; border-radius: 9px; padding: 8px 6px 8px 28px; font: 14px var(--sans); color: var(--text);
+/* The number sits on the word's baseline, as on the grid it was copied from. */
+.words-entry li { min-width: 0; display: flex; align-items: baseline; gap: 6px; padding-left: 8px; border-radius: 9px;
   background: var(--raise); box-shadow: inset 0 0 0 1px var(--line); }
-.words-entry input:focus-visible { outline: none; box-shadow: inset 0 0 0 2px var(--cobalt-hi); }
-.words-entry input.bad { box-shadow: inset 0 0 0 2px var(--warn); }
+.words-entry li:focus-within { box-shadow: inset 0 0 0 2px var(--cobalt-hi); }
+.words-entry li.bad { box-shadow: inset 0 0 0 2px var(--warn); }
+.words-entry span { min-width: 14px; color: var(--text3); font-size: 11px; user-select: none; }
+.words-entry input { flex: 1; min-width: 0; border: 0; background: none; padding: 8px 6px 8px 0; font: 14px var(--sans); color: var(--text); }
+.words-entry input:focus-visible { outline: none; }
 
 /* ------------------------------------------------------------ onboarding -- */
 .onb { position: fixed; inset: 0; overflow-y: auto; padding: calc(40px + var(--safe-t)) 22px calc(28px + var(--safe-b)); display: flex; flex-direction: column; }
+/* A long page scrolls; its parts never squeeze into each other. */
+.onb > * { flex-shrink: 0; }
 .onb h1 { font: 600 32px/1.1 var(--serif); margin: 0 0 12px; letter-spacing: -.015em; }
 .onb p { color: var(--text2); margin: 0 0 14px; }
 .onb .grow { flex: 1; }
 .onb h2 { margin: 22px 0 8px; font-size: 12px; font-weight: 500; color: var(--text3); letter-spacing: .02em; }
 .onb .seg { width: 100%; margin: 0 0 10px; }
-.onb .hint { margin: 0 2px 10px; }
-.onb-file-row { display: flex; align-items: center; gap: 10px; min-height: 48px; }
-.onb-file-row span { flex: 1; font-size: 14px; }
-.onb-file-row .i { color: var(--text3); }
+.onb .hint { margin: 8px 2px 10px; }
+.onb .seg + div > .hint { margin-top: 0; }
+.onb .idcard canvas { width: 40px; height: 40px; border-radius: 8px; }
+.onb .idcard b { font-size: 16px; overflow-wrap: anywhere; }
 .onb .onb-status { min-height: 1.5em; margin: 10px 2px 14px; font-size: 13.5px; color: var(--text2); }
+.onb .onb-status:has(.idcard) { margin: 12px 0 14px; color: var(--text); }
 .onb .onb-status.wrong { color: var(--warn); }
 .onb .logo { width: 72px; height: 72px; image-rendering: pixelated; margin-bottom: 22px; }
 .check { display: flex; gap: 10px; align-items: flex-start; font-size: 14px; color: var(--text2); margin: 16px 0; }
