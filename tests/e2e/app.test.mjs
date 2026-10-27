@@ -75,6 +75,7 @@ test('restoring on a new phone: the backup and the key in one step', async () =>
   // The backup first: whose it is shows before any key.
   const b = await fresh();
   await choose(b, () => b.click('text=Выбрать файл копии'), file);
+  await b.locator('.onb-file .idcard').waitFor(); // the file is read in the background
   assert.equal(await b.textContent('.onb-file .idcard small'), `Ключ ${await short(a)}`);
   // A typo shows in its cell at once; a swap, once all 24 are in.
   await b.fill('.words-entry input >> nth=0', list.join(' '));
@@ -102,6 +103,7 @@ test('restoring on a new phone: the backup and the key in one step', async () =>
   const other = await words(c);
   const d = await fresh();
   await choose(d, () => d.click('text=Выбрать файл копии'), file);
+  await d.locator('.onb-file .idcard').waitFor(); // the file is read in the background
   await d.fill('.words-entry input >> nth=0', other);
   assert.match(await status(d), /а копия — от другого/);
   assert.equal(await go(d), false);
