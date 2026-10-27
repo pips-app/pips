@@ -15,8 +15,10 @@ scripts/serve.sh            # http://localhost:8000 — opening index.html as a 
 Open http://localhost:8000. Without `web/pkg/`, on localhost only, the app
 falls back to `src/stub-core.js`: same interface, **no real cryptography**, a
 "DEV STUB" banner, and a separate database. Elsewhere it refuses to start
-without the real core. Add `?dev` to the URL (or use the stub) to get the
-"Add sample cards" button on the Me tab — on localhost only.
+without the real core. Sample cards for trying the app out live in
+Profile → «For developers», behind the exact phrase `I am a developer`
+(anywhere, the published site too); they are drawn by `scripts/samples.py`
+into `samples/`, and removable as a set.
 
 The published site is assembled by `scripts/build-site.sh` into `_site/`:
 without `dev/` and the stub, and with the service worker's cache version and
