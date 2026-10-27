@@ -179,6 +179,7 @@ test('an import under way survives a look at another tab', async () => {
   const p = await env.phone('pixelfox');
   await tab(p, 'import');
   await choose(p, () => p.click('.import-preview'), await heart(env.dir));
+  await p.waitForFunction(() => document.querySelector('.import-body input:not([type])')?.value === 'heart-x6'); // read, and named after the file
   await p.locator('.import-body input:not([type])').fill('Сердце');
   await tab(p, 'receive');
   await tab(p, 'collection');
