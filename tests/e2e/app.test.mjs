@@ -994,3 +994,27 @@ test('the tab bar waits for the card to land in the archive and the strip to go'
   assert.equal(await p.evaluate(async () => [...(await import('/src/state.js')).app.cards.values()][0].rec.state), 'archive');
   await p.context().close();
 });
+
+test('the editor grid lies exactly on the cells, from edge to edge', async () => {
+  for (const desk of [false, true]) {
+    const p = await env.phone('pixelfox', undefined, desk);
+    await tab(p, 'draw');
+    await p.locator('.ed-art').waitFor();
+    await p.waitForTimeout(400);
+    const m = await p.evaluate(() => {
+      const art = document.querySelector('.ed-art').getBoundingClientRect();
+      const lines = /** @type {HTMLCanvasElement} */ (document.querySelector('.ed-lines'));
+      const v = lines.getBoundingClientRect(), d = lines.getContext('2d').getImageData(0, 0, lines.width, lines.height).data;
+      let x0 = Infinity, y0 = Infinity, x1 = -1, y1 = -1;
+      for (let y = 0; y < lines.height; y++) for (let x = 0; x < lines.width; x++) {
+        if (!d[(y * lines.width + x) * 4 + 3]) continue;
+        x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y);
+      }
+      const k = devicePixelRatio;
+      return { art: [art.left - v.left, art.top - v.top, art.right - v.left, art.bottom - v.top], grid: [x0 / k, y0 / k, (x1 + 1) / k, (y1 + 1) / k] };
+    });
+    // The grid's lines start and end on the art's edges (within a pixel).
+    m.art.forEach((a, i) => assert.ok(Math.abs(a - m.grid[i]) <= 1.5, `${desk ? 'computer' : 'phone'}: ${JSON.stringify(m)}`));
+    await p.context().close();
+  }
+});
