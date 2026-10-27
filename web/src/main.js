@@ -7,7 +7,7 @@ import { loadCore, isDevHost } from './core.js';
 import { t, setLanguage, defaultLanguage } from './i18n.js';
 import { load, hasIdentity } from './state.js';
 import { getMeta } from './store.js';
-import { mountShell, go } from './ui/shell.js';
+import { mountShell, go, toast } from './ui/shell.js';
 import { collectionView } from './collection/view.js';
 import { editorView } from './editor/view.js';
 import { importView } from './ui/import.js';
@@ -41,7 +41,32 @@ async function main() {
   if (hasIdentity()) start();
   else onboarding(root, start);
 
-  if ('serviceWorker' in navigator && !isDevHost()) navigator.serviceWorker.register('sw.js').catch(() => {});
+  if ('serviceWorker' in navigator && !isDevHost()) offerUpdates().catch(() => {});
+}
+
+/**
+ * A new version installs in the background and waits for the next start
+ * (see sw.js). Once it is ready the person may take it now: the page then
+ * reloads as one piece, never half old and half new.
+ */
+async function offerUpdates() {
+  const reg = await navigator.serviceWorker.register('sw.js');
+  const offer = () => {
+    const ready = reg.waiting;
+    // Only an update: a first install has no page of an older version to replace.
+    if (!ready || !navigator.serviceWorker.controller) return;
+    toast(t('app.update'), {
+      label: t('app.update.go'),
+      run: () => {
+        navigator.serviceWorker.addEventListener('controllerchange', () => location.reload(), { once: true });
+        ready.postMessage('take-over');
+      },
+    });
+  };
+  offer();
+  reg.addEventListener('updatefound', () => {
+    reg.installing?.addEventListener('statechange', (e) => { if (/** @type {ServiceWorker} */ (e.target).state === 'installed') offer(); });
+  });
 }
 
 main();

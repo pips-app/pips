@@ -5,7 +5,7 @@ import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { setup, photo, fromPicture, choose, tab, toast, heart, gradient, textMatching } from './helpers.mjs';
+import { setup, photo, fromPicture, choose, tab, toast, heart, gradient, wide, textMatching } from './helpers.mjs';
 
 /** @type {Awaited<ReturnType<typeof setup>>} */
 let env;
@@ -142,6 +142,12 @@ test('import keeps its layout and reports what it did', async () => {
   assert.match(await textMatching(p, '.import-status', /палитра PICO-8 · 512 пикселей сменили цвет/), /палитра PICO-8 · 512 пикселей сменили цвет/);
   assert.equal(await buttonsAt(), empty);
 
+  // Wider than any canvas of the app: the editor's rule, said here too.
+  await choose(p, () => p.click('text=Другой файл'), await wide(env.dir));
+  assert.match(await textMatching(p, '.import-status', /до 64×64/), /^80×8: в приложении карточка до 64×64/);
+  assert.ok(await p.locator('.import-actions .btn.key').isDisabled(), 'not signed');
+  assert.equal(await buttonsAt(), empty);
+
   await choose(p, () => p.click('text=Другой файл'), await heart(env.dir));
   assert.match(await textMatching(p, '.import-status', /60×48 → 10×8 \(снято увеличение ×6\)/), /60×48 → 10×8 \(снято увеличение ×6\)/);
   assert.equal(await buttonsAt(), empty);
@@ -190,8 +196,26 @@ test('a card goes from one phone to another and is checked on arrival', async ()
   await fromPicture(b, 'section.view:visible', code);
   await b.waitForTimeout(500);
   assert.equal(await cards(b), 1);
-  await a.context().close();
-  await b.context().close();
+
+  // Passed on once more: the code names its last sender, not the hands
+  // before, so the path leaves a gap rather than claim a direct one.
+  const c = await env.phone('lumen');
+  const relay = await b.evaluate(async () => {
+    const s = await import('/src/state.js');
+    const [e] = [...s.app.cards.values()];
+    return s.app.core.qrPlan(s.app.identity.sealAsSender(e.rec.payload, s.app.profile.nick)).text;
+  });
+  await c.evaluate(async (text) => {
+    const s = await import('/src/state.js');
+    await s.receive(s.app.core.openEnvelope(s.app.core.classify(text).bytes));
+  }, relay);
+  await tab(c, 'collection');
+  assert.match(await c.evaluate(async () => {
+    const { cardBack } = await import('/src/collection/back.js');
+    const [e] = [...(await import('/src/state.js')).app.cards.values()];
+    return cardBack(e, { editing: false, onEdit() {}, onTag() {}, onAuthor() {} }).el.textContent;
+  }), /@pixelfox → … → @mossfern → вам/);
+  for (const p of [a, b, c]) await p.context().close();
 });
 
 test('damaged and forged codes are refused with their reason', async () => {
@@ -223,6 +247,10 @@ test('damaged and forged codes are refused with their reason', async () => {
 test('numbered copies: issued once each, until the run is complete', async () => {
   const a = await env.phone('pixelfox');
   const b = await env.phone('mossfern');
+  // A backup before the copies: they make it stale at once.
+  await tab(a, 'me');
+  const [saved] = await Promise.all([a.waitForEvent('download'), a.click('text=Сохранить копию')]);
+  await saved.cancel();
   await ownCard(a, 'Сердце');
   await act(a, 'share');
   await a.click('.top-sheet button:text("Экземпляр №")');
@@ -249,6 +277,11 @@ test('numbered copies: issued once each, until the run is complete', async () =>
   }
   assert.equal(await a.textContent('.edition-panel .hint'), 'Выдано 2 из 2');
   assert.ok(await a.locator('.edition-panel .btn').isDisabled());
+  await a.keyboard.press('Escape');
+  await tab(a, 'me');
+  // (Profile draws itself anew when shown: wait for it.)
+  assert.match(await textMatching(a, '.group:has(h2:text("Резервная копия"))', /После копии/), /изменений после неё: 1.*После копии выданы 2 номерных экземпляра/s);
+  assert.ok(await a.locator('.group:has(h2:text("Резервная копия")) .btn.key').isVisible(), 'saving is the main action now');
   await a.context().close();
   await b.context().close();
 });
@@ -667,7 +700,7 @@ test('a backup restores cards, notes and the copy log, only for its key', async 
     await p.waitForTimeout(800);
     return toast(p);
   };
-  const b = await env.phone('новый телефон', await words(a));
+  const b = await env.phone('новый', await words(a));
   await tab(b, 'me');
   assert.equal(await restore(b, file), 'Восстановлено: 22');
   const facts = await b.evaluate(async () => {
@@ -675,12 +708,37 @@ test('a backup restores cards, notes and the copy log, only for its key', async 
     const r = [...s.app.cards.values()].map((e) => e.rec);
     return { notes: r.filter((x) => x.note).length, tags: r.flatMap((x) => x.tags ?? []).join(' '), archived: r.filter((x) => x.state === 'archive').length, nick: s.app.profile.nick };
   });
-  assert.deepEqual(facts, { notes: 1, tags: 'фестиваль совы', archived: 1, nick: 'pixelfox' });
+  // The profile fills only what is empty: this phone's own nick stays.
+  assert.deepEqual(facts, { notes: 1, tags: 'фестиваль совы', archived: 1, nick: 'новый' });
   assert.match(await b.locator('.group:has(h2:text("Резервная копия")) .hint').first().textContent(), /Последняя/);
 
+  // Another key's backup: the way to it is to switch to that key, from here.
   const c = await env.phone('чужой');
+  await ownCard(c, 'Луна');
   await tab(c, 'me');
   assert.match(await restore(c, file), /Это копия другого ключа/);
+  await c.click('.toast .text-btn'); // «Сменить ключ»
+  assert.match(await c.locator('.dialog').textContent(), /1 ваша карточка подписана нынешним ключом/);
+  await c.click('.dialog button:text-is("Сменить ключ")');
+  assert.equal(await c.textContent('.onb h1'), 'Другой ключ');
+  assert.match(await c.textContent('.onb-file .idcard small'), /Ключ /, 'the backup comes along');
+  await c.fill('.words-entry input >> nth=0', await words(a));
+  await c.click('.onb-go');
+  await c.locator('.onb').waitFor({ state: 'detached' });
+  assert.equal(await toast(c), 'Ключ сменён');
+  const after = await c.evaluate(async () => {
+    const s = await import('/src/state.js');
+    const all = [...s.app.cards.values()];
+    const me = s.app.identity.publicKey().hex;
+    return {
+      cards: all.length,
+      mineIsMyKey: all.every((e) => e.rec.mine === (e.author?.hex === me)),
+      moon: all.find((e) => e.card.title === 'Луна')?.rec.mine,
+      nick: s.app.profile.nick,
+    };
+  });
+  assert.deepEqual(after, { cards: 23, mineIsMyKey: true, moon: false, nick: 'чужой' });
+  assert.equal(await c.textContent('.idcard small'), `Ключ ${await c.evaluate(async () => (await import('/src/state.js')).app.identity.publicKey().short)}`);
   const bytes = await readFile(file);
   bytes[bytes.length - 5] ^= 1;
   await writeFile(join(env.dir, 'bad.pipsbak'), bytes);

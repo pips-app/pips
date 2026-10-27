@@ -3,6 +3,10 @@
 // key from its 24 words or its paper QR, with the backup if there is one.
 // Nothing is stored until the person has confirmed the words, or until the
 // key and the backup have both checked out.
+//
+// The same restore, opened from Profile, puts another key in place of the
+// present one (a key made by mistake on a new phone, say); the cards on
+// the device stay.
 
 import { h, replace, byteLimit } from '../dom.js';
 import { t, reason } from '../i18n.js';
@@ -13,8 +17,12 @@ import { iconButton } from '../kit/icon-button.js';
 import { wordsEntry } from './words-entry.js';
 import { scanner } from './scan.js';
 
-/** @param {HTMLElement} root @param {() => void} done */
-export function onboarding(root, done) {
+/**
+ * @param {HTMLElement} root @param {() => void} done
+ * @param {{switching?: {file: {bytes: Uint8Array, name: string}|null, cancel: () => void}}} [opts]
+ *   switching: from Profile, only the restore, maybe with a backup already chosen
+ */
+export function onboarding(root, done, opts = {}) {
   const page = h('div', { class: 'onb' });
   root.append(page);
 
@@ -85,10 +93,12 @@ export function onboarding(root, done) {
     async function pick() {
       const f = fileInput.files?.[0];
       fileInput.value = '';
-      if (!f) return;
+      if (f) take(new Uint8Array(await f.arrayBuffer()), f.name);
+    }
+    /** @param {Uint8Array} bytes @param {string} name */
+    function take(bytes, name) {
       try {
-        const bytes = new Uint8Array(await f.arrayBuffer());
-        file = { bytes, name: f.name, owner: app.core.backupOwner(bytes) };
+        file = { bytes, name, owner: app.core.backupOwner(bytes) };
         fileError = '';
       } catch (e) {
         file = null;
@@ -104,7 +114,8 @@ export function onboarding(root, done) {
           : h('button', { type: 'button', class: 'btn wide', onclick: () => fileInput.click() }, t('onb.restore.file.pick')),
         fileError ? h('p', { class: 'onb-status wrong' }, fileError) : h('p', { class: 'hint' }, t(file ? 'onb.restore.file.on' : 'onb.restore.file.off')));
     }
-    paintFile();
+    if (opts.switching?.file) take(opts.switching.file.bytes, opts.switching.file.name);
+    else paintFile();
 
     // ---------------------------------------------------------- the key --
     /** @param {any} k @param {{text: string, wrong: boolean}} n */
@@ -167,11 +178,18 @@ export function onboarding(root, done) {
       } else name(key);
     }
 
-    replace(page, h('h1', {}, t('onb.restore.title')), h('p', {}, t('onb.restore.lead')),
+    const back = () => {
+      scan.stop();
+      if (!opts.switching) return welcome();
+      page.remove();
+      opts.switching.cancel();
+    };
+    const switching = !!opts.switching;
+    replace(page, h('h1', {}, t(switching ? 'onb.switch.title' : 'onb.restore.title')), h('p', {}, t(switching ? 'onb.switch.lead' : 'onb.restore.lead')),
       h('h2', {}, t('onb.restore.file')), fileBox, fileInput,
       h('h2', {}, t('onb.restore.key')), how.el, keyBox, status,
       h('div', { class: 'grow' }), go,
-      h('div', { style: { height: '8px' } }), h('button', { class: 'btn wide', onclick: () => { scan.stop(); welcome(); } }, '←'));
+      h('div', { style: { height: '8px' } }), h('button', { class: 'btn wide', 'aria-label': t('onb.back'), onclick: back }, '←'));
   }
 
   /** The nick, for a new key or one restored without it. Whatever else the profile holds stays. @param {any} identity */
@@ -188,5 +206,6 @@ export function onboarding(root, done) {
     nick.focus();
   }
 
-  welcome();
+  if (opts.switching) restore();
+  else welcome();
 }

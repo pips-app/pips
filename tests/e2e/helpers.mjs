@@ -155,3 +155,5 @@ export const heart = (dir) => png(dir, 'heart-x6.png', 60, 48, (x, y) => {
 
 /** 512 colours: needs a palette. */
 export const gradient = (dir) => png(dir, 'gradient.png', 64, 8, (x, y) => [x * 4, y * 30, 128, 255]);
+/** Wider than the app's largest canvas, and not an upscaled export. */
+export const wide = (dir) => png(dir, 'wide.png', 80, 8, (x, y) => [x * 3, y * 30, 64, 255]);

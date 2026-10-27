@@ -1,5 +1,10 @@
 // @ts-check
-// How long a card takes to pass from phone to phone, by its size in bytes.
+// What a card may be to be signed in the app, whichever way it was made
+// (drawn or imported): at most MAX_EDGE pixels a side, and quick enough to
+// pass from phone to phone. The format allows more (128 a side, 64 KB);
+// the app holds itself to what is pleasant to hand over.
+//
+// How long a card takes to pass, by its size in bytes.
 //
 // Up to SINGLE bytes it is one QR code. Beyond, a carousel: fragments of
 // FRAGMENT bytes, each shown for 220 ms; a camera with our own decoder takes
@@ -21,4 +26,19 @@ export function budget(bytes) {
   const codes = one ? 1 : Math.ceil(bytes / FRAGMENT);
   const seconds = Math.round(one ? AIM_S : AIM_S + PER_CODE_S * (codes + SPARE));
   return { bytes, codes, seconds: Math.max(1, seconds), level: bytes > LIMIT ? 'over' : one ? 'one' : 'loop' };
+}
+
+/** The app's largest canvas, a side (the format allows 128; see DECISIONS.md). */
+export const MAX_EDGE = 64;
+
+/**
+ * Whether a card may be signed here, and what passing it on costs.
+ * @param {{width: number, height: number}} card
+ * @param {number} bytes the signed card in its envelope (core.shareSize)
+ * @returns {{cost: ReturnType<typeof budget>, refused: null | 'too_big' | 'too_slow'}}
+ */
+export function issuable(card, bytes) {
+  const cost = budget(bytes);
+  const refused = Math.max(card.width, card.height) > MAX_EDGE ? 'too_big' : cost.level === 'over' ? 'too_slow' : null;
+  return { cost, refused };
 }

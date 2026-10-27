@@ -36,6 +36,8 @@ src/store.js                              IndexedDB: meta + cards
 src/state.js                              the one place that changes data
 src/i18n.js                               ru / en strings, core errors in words
 src/words.js                              the recovery words as typed: whole or four letters
+src/budget.js                             what a card may be to be signed, drawn or imported
+src/editions.js                           copy-number logs: joined, and the next number
 src/dom.js                                DOM without innerHTML, the icon set
 src/kit/                                  the bricks: motion, gestures, buttons, fields, sheets
 src/collection/                           the collection screen, built from the bricks
@@ -72,8 +74,8 @@ thing, with one way of fitting together:
      `collection/query.js` (cards in, rectangles or lists out); in the editor
      `color.js`, `raster.js` (where tools put pixels), `history.js` (the undo
      tree), `model.js` (the picture and its changes), `to-card.js`,
-     `budget.js` (how long a card takes to pass on), and the input
-     arbiters.
+     and the input arbiters; for both ways of making a card, `budget.js`
+     (what a card may be to be signed, how long it takes to pass on).
   4. `kit/*` controls — icon button, segmented switch, chips, search field,
      top and bottom sheets, strip, action bar, identicon.
   5. Screen parts — `collection/stage.js` (the zoom axis), `turn.js` (the card

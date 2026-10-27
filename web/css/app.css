@@ -182,7 +182,7 @@ svg.i { width: 22px; height: 22px; stroke: currentColor; fill: none; stroke-widt
 .words-entry input:focus-visible { outline: none; }
 
 /* ------------------------------------------------------------ onboarding -- */
-.onb { position: fixed; inset: 0; overflow-y: auto; padding: calc(40px + var(--safe-t)) 22px calc(28px + var(--safe-b)); display: flex; flex-direction: column; }
+.onb { position: fixed; inset: 0; z-index: 500; background: var(--void); overflow-y: auto; padding: calc(40px + var(--safe-t)) 22px calc(28px + var(--safe-b)); display: flex; flex-direction: column; }
 /* A long page scrolls; its parts never squeeze into each other. */
 .onb > * { flex-shrink: 0; }
 .onb h1 { font: 600 32px/1.1 var(--serif); margin: 0 0 12px; letter-spacing: -.015em; }

@@ -10,6 +10,7 @@ import { qrText } from './qr.js';
 import { isDevHost } from '../core.js';
 import { identicon } from '../kit/identicon.js';
 import { BLANK_CARD } from './card.js';
+import { onboarding } from './onboarding.js';
 
 const NETWORKS = ['telegram', 'instagram', 'x', 'bluesky', 'mastodon', 'vk', 'tiktok', 'other'];
 
@@ -97,8 +98,9 @@ export function meView() {
         h('button', { class: 'btn key wide', onclick: save }, t('me.save'))),
       h('div', { class: 'group' }, h('h2', {}, t('me.key')),
         h('div', { class: 'row-btns' }, wordsBtn, paperBtn),
-        secret),
-      await backupGroup(),
+        secret,
+        h('button', { class: 'btn wide', style: { marginTop: '8px' }, onclick: () => switchKey(null) }, t('me.switch'))),
+      await backupGroup(switchKey),
       h('div', { class: 'group' }, h('h2', {}, t('me.language')), h('div', { class: 'field' }, lang)),
       h('div', { class: 'group' }, h('h2', {}, t('me.storage')),
         h('p', { class: 'hint' }, t(memoryOnly ? 'me.storage.memory' : persisted ? 'me.storage.persisted' : 'me.storage.not-persisted'))),
@@ -121,23 +123,42 @@ export function meView() {
         : null);
   }
 
+  /**
+   * Another key in place of this one, through the same restore as on a new
+   * phone. Own cards stay, but become a former key's: say so first.
+   * @param {{bytes: Uint8Array, name: string}|null} file a backup already chosen
+   */
+  async function switchKey(file) {
+    const own = [...app.cards.values()].filter((e) => e.rec.mine).length;
+    if (own && !(await ask(t('me.switch.confirm', own), { yes: t('me.switch.go'), danger: true }))) return;
+    const before = app.identity.publicKey().hex;
+    onboarding(document.body, () => {
+      render();
+      toast(app.identity.publicKey().hex === before ? t('me.switch.same') : t('me.switch.done'));
+    }, { switching: { file, cancel: () => {} } });
+  }
+
   return { el, show: render };
 }
 
 /** Backup: save, restore, and how stale the last copy is. The group redraws
  * itself after each action, so its status is never out of date. */
-async function backupGroup() {
+/** @param {(file: {bytes: Uint8Array, name: string}) => void} switchKey for another key's backup */
+async function backupGroup(switchKey) {
   const box = h('div', { class: 'group' });
   const input = /** @type {HTMLInputElement} */ (h('input', { type: 'file', accept: '.pipsbak,application/octet-stream', hidden: true }));
   input.addEventListener('change', async () => {
     const f = input.files?.[0];
     input.value = '';
     if (!f) return;
+    const bytes = new Uint8Array(await f.arrayBuffer());
     try {
-      const r = await restoreBackup(new Uint8Array(await f.arrayBuffer()));
+      const r = await restoreBackup(bytes);
       toast(t('backup.restored', r.added, r.known));
     } catch (e) {
-      toast(backupError(/** @type {any} */ (e)));
+      // Another key's backup opens only with that key: offer to switch to it.
+      const other = /** @type {any} */ (e)?.code === 'other_owner';
+      toast(backupError(/** @type {any} */ (e)), other ? { label: t('backup.switch'), run: () => switchKey({ bytes, name: f.name }) } : undefined);
     }
     await draw();
   });
@@ -160,14 +181,17 @@ async function backupGroup() {
 
   async function draw() {
     const last = await lastBackup();
-    const total = app.cards.size;
-    const fresh = last ? Math.max(0, total - last.count) : total;
-    const stale = total > 0 && (!last || fresh >= 10);
+    const p = app.pending;
+    const changes = p.cards.length + (p.profile ? 1 : 0);
+    // Copy numbers handed out since are what a stale backup would repeat
+    // after a restore: those make it urgent at once; anything else, in time.
+    const stale = last ? p.issued > 0 || changes >= 10 : app.cards.size > 0;
     const status = !last
       ? t('backup.never')
-      : `${t('backup.last', date(last.at, { day: 'numeric', month: 'long', year: 'numeric' }), last.count)}${fresh ? ` · ${t('backup.since', fresh)}` : ''}`;
+      : `${t('backup.last', date(last.at, { day: 'numeric', month: 'long', year: 'numeric' }), last.count)}${changes ? ` · ${t('backup.since', changes)}` : ''}`;
     box.replaceChildren(h('h2', {}, t('backup.title')),
       h('p', { class: `hint${stale ? ' warn-text' : ''}`, style: { marginTop: '0' } }, status),
+      last && p.issued ? h('p', { class: 'hint warn-text', style: { marginTop: '0' } }, t('backup.issued', p.issued)) : '',
       h('div', { class: 'row-btns' },
         h('button', { class: `btn${stale ? ' key' : ''}`, onclick: save }, t('backup.save')),
         h('button', { class: 'btn', onclick: () => input.click() }, t('backup.restore'))),

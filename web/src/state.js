@@ -5,6 +5,7 @@
 
 import * as store from './store.js';
 import { fitBytes } from './dom.js';
+import { joinLogs, nextNumber } from './editions.js';
 
 /** @typedef {import('./store.js').CardRecord} CardRecord */
 /** @typedef {{nick: string, handle: {network: string, text: string}|null, link: string}} Profile */
@@ -21,7 +22,11 @@ export const app = {
   /** @type {any} */ identity: null,
   /** @type {Profile} */ profile: { nick: '', handle: null, link: '' },
   /** @type {Map<string, Entry>} */ cards: new Map(),
+  /** What changed since the last backup. @type {Pending} */ pending: { cards: [], profile: false, issued: 0 },
 };
+
+/** @typedef {{cards: string[], profile: boolean, issued: number}} Pending
+ * cards: digests changed (added, moved, noted, removed); issued: numbered copies handed out */
 
 /** @type {Set<() => void>} */
 const listeners = new Set();
@@ -42,6 +47,7 @@ export async function load(core, stub) {
   const seed = await store.getMeta('seed');
   if (seed) app.identity = core.Identity.fromSeed(seed);
   app.profile = (await store.getMeta('profile')) ?? app.profile;
+  app.pending = (await store.getMeta('pending')) ?? app.pending;
 
   const now = Date.now();
   for (const rec of await store.allCards()) {
@@ -57,14 +63,58 @@ export async function load(core, stub) {
       console.warn('pips: stored card failed inspection', rec.digest, e);
     }
   }
+  if (app.identity) await reown();
+}
+
+/** Whether a card is the person's own: signed by their key. @param {{hex: string}|null} author */
+const isMine = (author) => !!author && author.hex === app.identity?.publicKey().hex;
+
+/**
+ * Marks as their own exactly the cards their key signed — after the key
+ * changes, the old key's cards are someone else's (a former self's) and
+ * can no longer be issued from here.
+ */
+async function reown() {
+  for (const e of app.cards.values()) {
+    const mine = isMine(e.author);
+    if (e.rec.mine === mine) continue;
+    e.rec = { ...e.rec, mine };
+    await store.putCard(e.rec);
+  }
+}
+
+/**
+ * Notes a change the last backup does not have. Typing a note is many
+ * calls for one card, so cards are counted, not calls.
+ * @param {{card?: string, profile?: boolean, issued?: number}} what
+ */
+async function touch(what) {
+  const p = app.pending;
+  const fresh = (what.card && !p.cards.includes(what.card)) || (what.profile && !p.profile) || what.issued;
+  if (!fresh) return;
+  app.pending = {
+    cards: what.card && !p.cards.includes(what.card) ? [...p.cards, what.card] : p.cards,
+    profile: p.profile || !!what.profile,
+    issued: p.issued + (what.issued ?? 0),
+  };
+  await store.setMeta('pending', app.pending);
 }
 
 export const hasIdentity = () => app.identity != null;
 
 /** @param {any} identity */
 export async function setIdentity(identity) {
+  const before = app.identity?.publicKey().hex;
   await store.setMeta('seed', identity.seed());
   app.identity = identity;
+  if (before && before !== identity.publicKey().hex) {
+    // Another key: its cards are now the own ones, and the last backup —
+    // of the old key — no longer opens here.
+    await reown();
+    await store.setMeta('lastBackup', null);
+    app.pending = { cards: [], profile: false, issued: 0 };
+    await store.setMeta('pending', app.pending);
+  }
   // Asked, not awaited: Firefox answers only after the person replies to its
   // prompt, and the app must not wait on that to start.
   store.persist().catch(() => {});
@@ -75,6 +125,7 @@ export async function setIdentity(identity) {
 export async function setProfile(profile) {
   app.profile = profile;
   await store.setMeta('profile', profile);
+  await touch({ profile: true });
   changed();
 }
 
@@ -107,6 +158,7 @@ async function add(partial) {
   const rec = { ...partial, digest: i.digest };
   await store.putCard(rec);
   app.cards.set(i.digest, { rec, card: i.card, author: i.author ?? null });
+  await touch({ card: i.digest });
   changed();
   return { status: 'added', digest: i.digest };
 }
@@ -119,7 +171,7 @@ export function receive(opened) {
     edition: opened.certificate
       ? { edition: opened.certificate.edition, of: opened.certificate.of, holder: opened.certificate.holder.hex, day: opened.certificate.issued_day }
       : null,
-    mine: opened.author?.hex === app.identity.publicKey().hex,
+    mine: isMine(opened.author),
     state: 'collection',
     received: Date.now(),
     trashedAt: null,
@@ -139,6 +191,7 @@ export async function move(digest, state) {
   if (!e) return;
   e.rec = { ...e.rec, state, trashedAt: state === 'trash' ? Date.now() : null };
   await store.putCard(e.rec);
+  await touch({ card: digest });
   changed();
 }
 
@@ -146,6 +199,7 @@ export async function move(digest, state) {
 export async function purge(digest) {
   await store.deleteCard(digest);
   app.cards.delete(digest);
+  await touch({ card: digest });
   changed();
 }
 
@@ -156,6 +210,7 @@ export async function setTags(digest, tags) {
   if (!e) return;
   e.rec = { ...e.rec, tags: [...new Set(tags)].slice(0, 16) };
   await store.putCard(e.rec);
+  await touch({ card: digest });
   changed();
 }
 
@@ -165,11 +220,12 @@ export async function setNote(digest, note) {
   if (!e) return;
   e.rec = { ...e.rec, note: fitBytes(note, NOTE_BYTES) };
   await store.putCard(e.rec);
+  await touch({ card: digest });
 }
 
 // -------------------------------------------------------------- editions --
 
-/** @typedef {{of: number, issued: {edition: number, nick: string, holder: string, day: number}[]}} EditionLog */
+/** @typedef {import('./editions.js').EditionLog} EditionLog */
 
 /** What the author has issued of a card. Kept beside the card, since only
  * the author's own device can count. @param {string} digest @returns {EditionLog} */
@@ -180,7 +236,8 @@ export function editionLog(digest) {
 /**
  * Issues the next copy of an own card to a scanned recipient code and
  * records it. The number and the run size are fixed here, from the log, so
- * a copy number is never handed out twice from this device.
+ * a copy number is never handed out twice from this device; a backup keeps
+ * the log for the next one (see editions.js).
  * @param {string} digest @param {number} of run size, 0 for open; fixed by the first copy
  * @param {{bytes: Uint8Array, nick: string, key: {hex: string}}} recipient
  * @returns {Promise<{envelope: Uint8Array, edition: number, of: number}>}
@@ -190,13 +247,14 @@ export async function issueEdition(digest, of, recipient) {
   if (!e?.rec.mine) throw new Error('not an own card');
   const log = editionLog(digest);
   const run = log.issued.length ? log.of : of;
-  const edition = log.issued.length + 1;
+  const edition = nextNumber(log);
   if (run && edition > run) throw { code: 'run_out' };
   const day = Math.floor(Date.now() / DAY);
   const cert = app.identity.issue(e.rec.payload, edition, run, recipient.bytes, day);
   const envelope = app.identity.sealAsAuthor(e.rec.payload, cert);
   e.rec = { ...e.rec, editions: { of: run, issued: [...log.issued, { edition, nick: recipient.nick, holder: recipient.key.hex, day }] } };
   await store.putCard(e.rec);
+  await touch({ card: digest, issued: 1 });
   changed();
   return { envelope, edition, of: run };
 }
@@ -210,6 +268,8 @@ export async function makeBackup() {
   const data = { created: Date.now(), profile: app.profile, cards };
   const bytes = app.identity.sealBackup(data, crypto.getRandomValues(new Uint8Array(24)));
   await store.setMeta('lastBackup', { at: data.created, count: cards.length });
+  app.pending = { cards: [], profile: false, issued: 0 };
+  await store.setMeta('pending', app.pending);
   return { bytes, count: cards.length };
 }
 
@@ -224,56 +284,68 @@ export const restoreBackup = (bytes) => applyBackup(app.identity.openBackup(byte
 
 /**
  * Adds an opened backup's cards to this device. Nothing here is
- * overwritten: a card already on the device keeps its place, and gains the
- * backup's note only if it has none. The profile is taken only if this
- * device has no handle and no link yet (a fresh install restored from the
- * words). Opened apart, so that a first run can check the file before it
- * stores the key.
+ * overwritten: a card already on the device keeps its place, its note and
+ * its tags, gaining the backup's only where it has none; issue logs are
+ * joined, so no copy number is lost. The profile fills only the fields
+ * this device has empty. Opened apart, so that a first run can check the
+ * file before it stores the key.
  * @param {any} b what `Identity.openBackup` gives
  * @returns {Promise<{added: number, known: number, profile: boolean}>}
  */
 export async function applyBackup(b) {
+  // Restored onto nothing, the device now holds exactly the file: it is
+  // as good as a backup just made. Onto other cards, it is a change.
+  const fresh = app.cards.size === 0;
   let added = 0, known = 0;
   for (const c of b.cards) {
     const i = app.core.inspectCard(c.payload);
     const here = app.cards.get(i.digest);
     if (here) {
       known++;
-      const note = !here.rec.note && c.note ? c.note : here.rec.note;
-      const tags = here.rec.tags?.length ? here.rec.tags : c.tags ?? [];
-      // The longer issue log wins: copy numbers must never be reused.
-      const longer = (c.editions?.issued.length ?? 0) > (here.rec.editions?.issued.length ?? 0);
-      if (note !== here.rec.note || longer || tags !== here.rec.tags) {
-        here.rec = { ...here.rec, note, tags, ...(longer ? { editions: c.editions } : {}) };
+      const r = here.rec;
+      const note = r.note || c.note || '';
+      const tags = r.tags?.length ? r.tags : c.tags ?? [];
+      const editions = r.editions || c.editions ? joinLogs(r.editions, c.editions) : undefined;
+      const more = (editions?.issued.length ?? 0) > (r.editions?.issued.length ?? 0);
+      if (note !== r.note || tags !== r.tags || more) {
+        here.rec = { ...r, note, tags, ...(editions ? { editions } : {}) };
         await store.putCard(here.rec);
+        await touch({ card: i.digest });
       }
       continue;
     }
     const rec = {
-      digest: i.digest, payload: c.payload, cert: c.cert ?? null, edition: c.edition ?? null, mine: c.mine,
+      digest: i.digest, payload: c.payload, cert: c.cert ?? null, edition: c.edition ?? null, mine: isMine(i.author ?? null),
       state: c.state, received: c.received, trashedAt: c.trashedAt ?? null, from: c.from ?? null, note: c.note, tags: c.tags ?? [],
       ...(c.editions ? { editions: c.editions } : {}),
     };
     await store.putCard(rec);
     app.cards.set(i.digest, { rec, card: i.card, author: i.author ?? null });
+    await touch({ card: i.digest });
     added++;
   }
-  // The file restored from is a backup holding these cards: as far as the
-  // reminder goes, it counts like one just made, unless a newer one exists.
-  const last = await lastBackup();
-  if (!last || last.at < b.created) await store.setMeta('lastBackup', { at: b.created, count: b.cards.length });
-  const p = app.profile;
-  const takeProfile = !p.handle && !p.link && (b.profile.handle || b.profile.link || b.profile.nick);
-  if (takeProfile) await setProfile({ nick: b.profile.nick || p.nick, handle: b.profile.handle ?? null, link: b.profile.link });
+  const p = app.profile, f = b.profile;
+  const profile = {
+    nick: p.nick || f.nick || '',
+    handle: p.handle ?? f.handle ?? null,
+    link: p.link || f.link || '',
+  };
+  const took = profile.nick !== p.nick || profile.handle !== p.handle || profile.link !== p.link;
+  if (took) await setProfile(profile);
+  if (fresh) {
+    await store.setMeta('lastBackup', { at: b.created, count: b.cards.length });
+    app.pending = { cards: [], profile: false, issued: 0 };
+    await store.setMeta('pending', app.pending);
+  }
   changed();
-  return { added, known, profile: !!takeProfile };
+  return { added, known, profile: took };
 }
 
 /** Saves a card from a `.pips` file (no envelope, so no sender or certificate). @param {Uint8Array} payload */
 export function receivePayload(payload) {
   const i = app.core.inspectCard(payload);
   return add({
-    payload, cert: null, edition: null, mine: i.author?.hex === app.identity.publicKey().hex,
+    payload, cert: null, edition: null, mine: isMine(i.author ?? null),
     state: 'collection', received: Date.now(), trashedAt: null, from: null, note: '',
   });
 }

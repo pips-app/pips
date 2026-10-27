@@ -37,10 +37,13 @@ export function cardBack(entry, o) {
 
   const facts = h('dl');
   const fact = (/** @type {string} */ k, /** @type {any} */ v, /** @type {string} */ cls = '') => facts.append(h('dt', {}, k), h('dd', { class: cls }, v));
+  // A code names only its last sender, not the hands before: between the
+  // artist and a sender who is not the artist, there may have been others.
+  const via = rec.from && rec.from.key !== author?.hex;
   const chain = rec.mine
     ? t('back.yours')
-    : [by, rec.from ? `@${rec.from.nick}` : null, t('back.to-you')].filter(Boolean).join(' → ');
-  fact(t('back.k.path'), chain);
+    : [by, via ? '…' : null, via ? `@${rec.from?.nick}` : null, t('back.to-you')].filter(Boolean).join(' → ');
+  fact(t('back.k.path'), via ? h('span', { title: t('back.path.gap') }, chain) : chain);
   fact(t('back.k.when'), date(rec.received, { day: 'numeric', month: 'long', year: 'numeric' }));
   const me = app.identity.publicKey().hex;
   if (rec.edition) {

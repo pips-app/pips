@@ -7,6 +7,7 @@
 import { h, icon } from '../dom.js';
 import { t, date } from '../i18n.js';
 import { app, editionLog, issueEdition } from '../state.js';
+import { nextNumber } from '../editions.js';
 import { qrFor, qrText, keepAwake, codeSize } from './qr.js';
 import { scanner } from './scan.js';
 import { ask, toast } from './shell.js';
@@ -51,7 +52,8 @@ export function editionPanel(digest) {
   const n = log.issued.length;
   const run = /** @type {HTMLInputElement} */ (h('input', { type: 'number', min: '1', max: '65535', inputMode: 'numeric', placeholder: t('edition.run.open') }));
   const runOf = () => (n ? log.of : Math.min(65535, Math.max(0, Math.floor(Number(run.value) || 0))));
-  const out = log.of > 0 && n >= log.of;
+  const following = nextNumber(log);
+  const out = log.of > 0 && following > log.of;
 
   const status = n
     ? h('p', { class: 'hint' }, log.of ? t('edition.status.of', n, log.of) : t('edition.status.open', n))
@@ -60,7 +62,7 @@ export function editionPanel(digest) {
   const next = h('button', {
     class: 'btn key wide', disabled: out,
     onclick: () => scanRecipient(digest, runOf()),
-  }, out ? t('edition.run-out') : t('edition.issue', n + 1));
+  }, out ? t('edition.run-out') : t('edition.issue', following));
 
   const list = n
     ? h('div', { class: 'issued' }, ...[...log.issued].reverse().map((i) => h('div', { class: 'issued-row' },
@@ -85,8 +87,9 @@ function scanRecipient(digest, of) {
     if (r.kind !== 'recipient') return toast(t('edition.not-recipient'));
     done = true;
     s.stop();
-    const n = editionLog(digest).issued.length + 1;
-    const run = editionLog(digest).issued.length ? editionLog(digest).of : of;
+    const log = editionLog(digest);
+    const n = nextNumber(log);
+    const run = log.issued.length ? log.of : of;
     const label = run ? t('edition.copy.of', n, run) : t('edition.copy', n);
     if (!(await ask(t('edition.confirm', label, r.nick, r.key.short), { yes: t('edition.yes') }))) {
       done = false;

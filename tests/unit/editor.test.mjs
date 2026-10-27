@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 
 const { parseHex, hex, toHsv, fromHsv, nearest, ramp } = await import('../../web/src/editor/color.js');
 const { line, rect, ellipse, fill, mirror, corner, span, within, lift, flip, turn, place, dithered } = await import('../../web/src/editor/raster.js');
-const { budget, LIMIT } = await import('../../web/src/editor/budget.js');
+const { budget, LIMIT, issuable, MAX_EDGE } = await import('../../web/src/budget.js');
 const { createHistory } = await import('../../web/src/editor/history.js');
 const { blank, createModel, T } = await import('../../web/src/editor/model.js');
 const { toCard } = await import('../../web/src/editor/to-card.js');
@@ -57,6 +57,13 @@ test('budget: one code, a loop, too long', () => {
   assert.equal(b.level, 'loop');
   assert.ok(b.seconds >= 5 && b.seconds <= 7);
   assert.equal(budget(LIMIT + 1).level, 'over');
+});
+
+test('what may be signed: the same rule for drawn and imported cards', () => {
+  assert.equal(issuable({ width: 64, height: 64 }, 900).refused, null);
+  assert.equal(issuable({ width: 64, height: 65 }, 900).refused, 'too_big', 'a side over the app canvas');
+  assert.equal(issuable({ width: 32, height: 32 }, LIMIT + 1).refused, 'too_slow');
+  assert.equal(issuable({ width: MAX_EDGE * 2, height: 8 }, LIMIT + 1).refused, 'too_big', 'size first');
 });
 
 test('undo tree: nothing done is lost', () => {
@@ -173,4 +180,22 @@ test('selections: a box, lifted, mirrored, turned and put down', () => {
   const holey = { w: 2, h: 1, cells: Uint8Array.from([7, 255]) };
   assert.deepEqual(place(holey, 3, 0, 4, 255), [{ i: 3, v: 7 }]);
   assert.ok(dithered({ x: 0, y: 0 }) && !dithered({ x: 1, y: 0 }) && dithered({ x: 1, y: 1 }));
+});
+
+test('copy numbers: two logs of one card are joined, never chosen between', async () => {
+  const { joinLogs, nextNumber } = await import('../../web/src/editions.js');
+  const a = { of: 10, issued: [{ edition: 1, nick: 'a', holder: 'k1', day: 1 }, { edition: 2, nick: 'b', holder: 'k2', day: 2 }] };
+  // An older backup, and a second phone that issued №3 the backup lacks.
+  const b = { of: 10, issued: [{ edition: 1, nick: 'a', holder: 'k1', day: 1 }, { edition: 3, nick: 'c', holder: 'k3', day: 3 }] };
+  const j = joinLogs(a, b);
+  assert.deepEqual(j.issued.map((i) => i.edition), [1, 2, 3]);
+  assert.equal(j.of, 10);
+  assert.equal(nextNumber(j), 4, 'one past the highest, not the count');
+  assert.equal(nextNumber({ of: 0, issued: [{ edition: 5, nick: '', holder: 'x', day: 0 }] }), 6);
+  assert.equal(nextNumber({ of: 0, issued: [] }), 1);
+  // The same number to two people (two phones, one key): both are kept.
+  const twice = joinLogs(a, { of: 10, issued: [{ edition: 2, nick: 'z', holder: 'k9', day: 2 }] });
+  assert.equal(twice.issued.length, 3);
+  assert.equal(joinLogs(undefined, b).of, 10, 'a run fixed by the other log');
+  assert.equal(joinLogs({ of: 0, issued: [] }, b).of, 10);
 });

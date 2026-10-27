@@ -15,7 +15,7 @@
 //   settings.js        size, frame colour, delay, grid, mirror
 //   *-sheet.js         palettes, a colour, the history
 //   to-card.js         the picture as a card, when signed
-//   budget.js          how long it takes to pass on
+//   ../budget.js       what a card may be, and how long it takes to pass on
 //
 // This file puts them together, keeps them in step with the picture,
 // keeps the draft, and signs.
@@ -44,7 +44,7 @@ import { palettesSheet } from './palettes-sheet.js';
 import { colorSheet } from './color-sheet.js';
 import { historySheet } from './history-sheet.js';
 import { toCard } from './to-card.js';
-import { budget } from './budget.js';
+import { issuable } from '../budget.js';
 
 /** @typedef {import('./tools.js').Tool} Tool */
 /** @typedef {import('./tools.js').Shape} Shape */
@@ -317,14 +317,18 @@ export function editorView() {
   const by = () => app.profile;
 
   let measure = 0;
-  /** @type {ReturnType<typeof budget>|null} */
+  /** @type {ReturnType<typeof issuable>['cost']|null} */
   let cost = null;
+  /** @type {ReturnType<typeof issuable>['refused']} */
+  let refused = null;
   /** The size of the signed card, a moment after the last change. */
   function weigh() {
     clearTimeout(measure);
     measure = window.setTimeout(() => {
       const r = toCard(model.doc, by());
-      cost = 'card' in r ? budget(app.core.shareSize(r.card)) : null;
+      const c = 'card' in r ? issuable(r.card, app.core.shareSize(r.card)) : null;
+      cost = c?.cost ?? null;
+      refused = c?.refused ?? null;
       paintMeter();
     }, 150);
   }
@@ -334,7 +338,7 @@ export function editorView() {
       : cost.level === 'over' ? t('ed.budget.over', cost.seconds)
         : t('ed.budget', cost.codes, cost.seconds)));
     meter.setAttribute('aria-label', `${t('ed.budget.label')}: ${meter.textContent}`);
-    sign.disabled = !cost || cost.level === 'over';
+    sign.disabled = !cost || !!refused;
   }
   function explainBudget() {
     if (!cost) return toast(t('ed.budget.colors.why'));
