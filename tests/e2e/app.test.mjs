@@ -1186,7 +1186,7 @@ test('stored data: an older layout is upgraded in place, a newer one is never hi
   const ctx = a.context();
   const b = await ctx.browser().newContext({ viewport: { width: 390, height: 844 }, locale: 'ru-RU' });
   const p = await b.newPage();
-  await p.goto(`${env.url}no-app-here`); // the same site, without the app (a 404 page)
+  await p.goto(`${env.url}sw.js`); // the same site, without the app (a plain text page)
   await p.evaluate((d) => new Promise((ok, fail) => {
     const req = indexedDB.open(d.name, 1);
     req.onupgradeneeded = () => { req.result.createObjectStore('meta'); req.result.createObjectStore('cards', { keyPath: 'digest' }); };
@@ -1216,7 +1216,7 @@ test('stored data: an older layout is upgraded in place, a newer one is never hi
 
   // Another tab with a newer app takes the data: this one steps aside, and says so.
   const q = await b.newPage();
-  await q.goto(`${env.url}no-app-here`);
+  await q.goto(`${env.url}sw.js`);
   await q.evaluate((name) => new Promise((ok) => { const r = indexedDB.open(name, 3); r.onsuccess = () => { r.result.close(); ok(); }; }), dump.name);
   assert.match(await p.textContent('.halt'), /В другой вкладке открыта новая версия/);
   // And now this app finds data newer than it knows: it says so instead of starting empty.
