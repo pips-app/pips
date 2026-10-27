@@ -85,7 +85,20 @@ test('restoring on a new phone: the backup and the key in one step', async () =>
   await b.fill('.words-entry input >> nth=5', 'qqq');
   assert.match(await status(b), /Слова № 6 нет в списке/);
   assert.equal(await b.getAttribute('.words-entry input >> nth=5', 'aria-invalid'), 'true');
-  await b.fill('.words-entry input >> nth=5', `${list[6]} ${list[5]}`); // two words, swapped, from cell 6 on
+  // Two words swapped. The checksum is 8 bits: one swap in 256 still adds
+  // up, so the pair is one the core itself rejects.
+  const k = await b.evaluate(async (w) => {
+    const { app } = await import('/src/state.js');
+    for (let i = 5; i < 23; i++) {
+      if (w[i] === w[i + 1]) continue;
+      const s = [...w];
+      [s[i], s[i + 1]] = [s[i + 1], s[i]];
+      try { app.core.Identity.fromWords(s.join(' ')); } catch { return i; }
+    }
+    return -1;
+  }, list);
+  assert.ok(k >= 5);
+  await b.fill('.words-entry input >> nth=5', list.slice(5, k).concat([list[k + 1], list[k]]).join(' ')); // from cell 6 on
   assert.match(await status(b), /не сходятся/);
   assert.equal(await go(b), false);
   // Four letters of each word are enough; they are written out in full.
