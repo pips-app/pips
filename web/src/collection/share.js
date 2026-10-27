@@ -14,7 +14,7 @@ import { qrFor, keepAwake, codeSize } from '../ui/qr.js';
 import { editionPanel } from '../ui/edition.js';
 import { segmented } from '../kit/segmented.js';
 import { topSheet } from '../kit/top-sheet.js';
-import { FRAME_SHADES } from '../ui/card.js';
+import { FRAME_SHADES, cardTitle } from '../ui/card.js';
 
 /**
  * Fills `body` and returns a function that stops what keeps running
@@ -39,11 +39,11 @@ export function fillShare(body, entry) {
     code.replaceChildren(q.el,
       h('p', {}, note),
       h('p', { class: 'small' }, q.plan.kind === 'single' ? t('give.single', env.length) : t('give.carousel', q.plan.fragments)),
-      h('button', { type: 'button', class: 'share-link', onclick: () => sendLink(env, entry.card.title) }, icon('link'), t('share.link')));
+      h('button', { type: 'button', class: 'share-link', onclick: () => sendLink(env, cardTitle(entry.card)) }, icon('link'), t('share.link')));
   };
   const copy = () => showCode(app.identity.sealAsAuthor(entry.rec.payload, undefined), t('share.hint'));
 
-  const title = h('b', {}, entry.card.title || '—');
+  const title = h('b', {}, cardTitle(entry.card));
   if (entry.rec.mine) {
     const mode = segmented({
       label: t('share.title'), value: 'copy',
@@ -77,7 +77,7 @@ async function sendLink(env, title) {
   const url = app.core.cardLink(linkBase(location), env);
   if (navigator.share) {
     try {
-      await navigator.share({ title: title || 'Pips', text: t('share.link.text', title || '—'), url });
+      await navigator.share({ title, text: t('share.link.text', title), url });
       return;
     } catch (e) {
       if (/** @type {any} */ (e)?.name === 'AbortError') return; // the person changed their mind

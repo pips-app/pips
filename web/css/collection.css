@@ -119,8 +119,6 @@ input.tag.add::placeholder { color: var(--shade-dim); }
 .back-in textarea[readonly] { pointer-events: none; }
 .back-in textarea:focus-visible { outline: 2px solid color-mix(in srgb, var(--shade-ink) 30%, transparent); outline-offset: 0; }
 .back-in .tech { font-size: .78em; color: var(--shade-dim); }
-.shake { animation: shake .32s; }
-@keyframes shake { 20%, 60% { transform: translateX(-4px); } 40%, 80% { transform: translateX(4px); } }
 
 /* ----------------------------------------------------- search panel -- */
 .search-panel { position: absolute; z-index: 30; left: 0; right: 0; top: 0; padding: 0 max(16px, calc((100% - 1100px) / 2 + 16px)); will-change: transform; }

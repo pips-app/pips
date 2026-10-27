@@ -202,7 +202,8 @@ const ru = {
   'back.more': (/** @type {number} */ n) => `ещё ${n} ${plural(n, 'работа', 'работы', 'работ')} автора у вас →`,
   'share.title': 'Поделиться', 'share.hint': 'Пусть другой телефон отсканирует код. Смахните вверх, чтобы убрать.',
   // The editor.
-  'ed.close': 'Закрыть редактор', 'ed.sign': 'Подписать', 'ed.title': 'Название карточки', 'ed.title.ph': 'Без названия',
+  'ed.close': 'Закрыть редактор', 'ed.sign': 'Подписать', 'ed.title': 'Название карточки', 'ed.title.ph': 'Как назвать карточку',
+  'card.untitled': 'Без названия', 'card.need-title': 'Сначала назовите карточку: название останется с ней у всех, к кому она попадёт',
   'ed.tools': 'Инструменты', 'ed.tool.pen': 'Карандаш', 'ed.tool.eraser': 'Ластик', 'ed.tool.fill': 'Заливка',
   'ed.tool.shapes': 'Линия и фигуры', 'ed.tool.pick': 'Пипетка',
   'ed.tool.select': 'Выделение', 'ed.pen.solid': 'Карандаш', 'ed.pen.dither': 'Шахматкой (дизеринг)',
@@ -455,7 +456,8 @@ const en = {
   'back.more': (/** @type {number} */ n) => `${n} more by this artist →`,
   'share.title': 'Share', 'share.hint': 'Let the other phone scan the code. Swipe up to put it away.',
   // The editor.
-  'ed.close': 'Close the editor', 'ed.sign': 'Sign', 'ed.title': 'Card title', 'ed.title.ph': 'Untitled',
+  'ed.close': 'Close the editor', 'ed.sign': 'Sign', 'ed.title': 'Card title', 'ed.title.ph': 'Name the card',
+  'card.untitled': 'Untitled', 'card.need-title': 'Name the card first: the name stays with it, for everyone it reaches',
   'ed.tools': 'Tools', 'ed.tool.pen': 'Pencil', 'ed.tool.eraser': 'Eraser', 'ed.tool.fill': 'Fill',
   'ed.tool.shapes': 'Line and shapes', 'ed.tool.pick': 'Pipette',
   'ed.tool.select': 'Selection', 'ed.pen.solid': 'Pencil', 'ed.pen.dither': 'Checkered (dither)',

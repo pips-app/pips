@@ -30,8 +30,8 @@ const SERIES_MS = 5000;
  *   host: HTMLElement, fly: HTMLElement, busy: {n: number},
  *   place: () => Place, sync: () => void,
  *   selection: ReturnType<typeof import('./selection.js').createSelection>,
- *   beforeFlight: () => void, pulling: () => boolean,
- * }} o
+ *   beforeFlight: () => void, pulling: () => boolean, stripMoved: (up: boolean) => void,
+ * }} o stripMoved: the strip went up or down (the tab bar keeps out of its way)
  */
 export function createMoves(o) {
   const { stage, strip } = o;
@@ -42,11 +42,13 @@ export function createMoves(o) {
   // The strip is up while a card is pulled down, while cards fly to it and
   // a moment after they landed — unless another pull or flight took it on.
   let stripTimer = 0;
+  let stripUp = false;
 
   /** @param {number} f @param {boolean} [anim] */
   function showStrip(f, anim = false) {
     clearTimeout(stripTimer);
     strip.reveal(f, anim);
+    if (stripUp !== f > 0) { stripUp = f > 0; o.stripMoved(stripUp); }
   }
 
   /** @param {number} [room] @param {string} [landed] @param {Place} [target] */
@@ -124,7 +126,7 @@ export function createMoves(o) {
       o.selection.stop();
       o.sync();
       moved(list.map((c) => c.id), from, to);
-      stripTimer = window.setTimeout(() => { if (!o.pulling() && !o.busy.n) strip.reveal(0, true); }, 1300);
+      stripTimer = window.setTimeout(() => { if (!o.pulling() && !o.busy.n) showStrip(0, true); }, 1300);
     }, start - now + (list.length - 1) * gap + dur + 40);
   }
 

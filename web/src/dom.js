@@ -143,3 +143,11 @@ export function reveal(box, child) {
   if (c.left < b.left) box.scrollLeft -= b.left - c.left;
   else if (c.right > b.right) box.scrollLeft += c.right - b.right;
 }
+
+/** A short shake (and a tick of vibration): "not like that". @param {Element} el */
+export function shake(el) {
+  el.classList.remove('shake');
+  void (/** @type {HTMLElement} */ (el)).offsetWidth; // restart the animation
+  el.classList.add('shake');
+  navigator.vibrate?.(8);
+}

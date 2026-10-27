@@ -944,3 +944,53 @@ test('a card sent as a link opens the app and arrives, even before the first run
   assert.equal(await cards(b), 1);
   for (const p of [a, b, c]) await p.context().close();
 });
+
+test('a card is signed with a name; one that came without shows «Без названия»', async () => {
+  const p = await env.phone('pixelfox');
+  // The import: the title emptied, signing asks for one instead.
+  await tab(p, 'import');
+  await choose(p, () => p.click('.import-preview'), await heart(env.dir));
+  await p.waitForFunction(() => document.querySelector('.import-body input:not([type])')?.value === 'heart-x6');
+  await p.fill('.import-body input:not([type])', '   ');
+  await p.click('text=Подписать и добавить');
+  assert.match(await toast(p), /Сначала назовите карточку/);
+  assert.equal(await p.evaluate(() => document.activeElement?.matches('.import-body input:not([type])')), true, 'the title field, ready to type');
+  assert.equal(await cards(p), 0);
+  // The editor: the same.
+  await tab(p, 'draw');
+  await p.locator('.ed-art').waitFor();
+  await p.click('.ed-sign');
+  assert.match(await textMatching(p, '.toast span', /назовите/), /Сначала назовите карточку/);
+  assert.equal(await p.evaluate(() => document.activeElement?.classList.contains('ed-title')), true);
+  assert.equal(await cards(p), 0);
+
+  // A card without a name from elsewhere (the format allows it): named for the eye.
+  await p.click('[aria-label="Закрыть редактор"]');
+  await p.evaluate(async () => {
+    const s = await import('/src/state.js');
+    const other = s.app.core.Identity.fromSeed(crypto.getRandomValues(new Uint8Array(32)));
+    const card = { width: 8, height: 8, opaque: true, palette: { builtin: 0 }, frame: 0, frames: 1, delay_ms: 0, title: '', author: 'kitsu', handle: null, link: '', pixels: new Uint8Array(64).fill(3) };
+    await s.receive(s.app.core.openEnvelope(other.sealAsAuthor(other.signCard(card), undefined)));
+  });
+  await tab(p, 'collection');
+  await p.waitForTimeout(600);
+  assert.equal(await p.textContent('.on-stage .cap b'), 'Без названия');
+  assert.ok(await p.$eval('.on-stage .cap b', (b) => b.classList.contains('untitled')));
+  await p.context().close();
+});
+
+test('the tab bar waits for the card to land in the archive and the strip to go', async () => {
+  const p = await env.phone('pixelfox');
+  await ownCard(p, 'Последняя');
+  await act(p, 'down'); // the only card: to the archive, from the feed
+  const away = () => p.locator('nav.tabs').evaluate((n) => n.classList.contains('away'));
+  // Through the flight and while the strip shows where it landed, the tabs stay out of its way…
+  for (const ms of [300, 700, 900]) {
+    await p.waitForTimeout(ms);
+    assert.equal(await away(), true, `still away after ${ms} ms more`);
+  }
+  // …and come back once the strip has gone down.
+  await p.waitForFunction(() => !document.querySelector('nav.tabs')?.classList.contains('away'), null, { timeout: 4000 });
+  assert.equal(await p.evaluate(async () => [...(await import('/src/state.js')).app.cards.values()][0].rec.state), 'archive');
+  await p.context().close();
+});

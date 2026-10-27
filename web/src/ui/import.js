@@ -10,7 +10,7 @@
 // and passes the options back. Each change re-runs the import from the
 // original bytes, so options never compound.
 
-import { h, icon, byteLimit, fitBytes } from '../dom.js';
+import { h, icon, byteLimit, fitBytes, shake } from '../dom.js';
 import { t, reason } from '../i18n.js';
 import { app, addOwn } from '../state.js';
 import { frame, FRAME_SHADES, BLANK_CARD } from './card.js';
@@ -255,6 +255,11 @@ export function importView() {
 
   async function sign() {
     if (!result || save.disabled) return;
+    if (!title.value.trim()) {
+      title.focus();
+      shake(title.closest('.field') ?? title);
+      return toast(t('card.need-title'));
+    }
     const p = app.profile;
     const card = { ...result.card, title: title.value.trim(), frame: shade, author: p.nick, handle: p.handle, link: p.link };
     try {

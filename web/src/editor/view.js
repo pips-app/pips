@@ -20,7 +20,7 @@
 // This file puts them together, keeps them in step with the picture,
 // keeps the draft, and signs.
 
-import { h, icon, byteLimit } from '../dom.js';
+import { h, icon, byteLimit, shake } from '../dom.js';
 import { t, date } from '../i18n.js';
 import { app, addOwn } from '../state.js';
 import { getMeta, setMeta } from '../store.js';
@@ -352,6 +352,13 @@ export function editorView() {
     stop();
     const r = toCard(model.doc, by());
     if (!('card' in r)) return toast(t('ed.budget.colors.why'));
+    // A card keeps its name for good, with everyone it reaches: ask for one
+    // where it is written, rather than sign it nameless.
+    if (!r.card.title) {
+      title.focus();
+      shake(title);
+      return toast(t('card.need-title'));
+    }
     try {
       const added = await addOwn(app.identity.signCard(r.card));
       await setMeta(DRAFT, null);

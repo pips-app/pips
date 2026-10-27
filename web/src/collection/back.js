@@ -7,19 +7,13 @@
 // tags (the rest behind a "+N" chip), and a ruled box that
 // takes what fits and no more.
 
-import { h, icon, fitBytes } from '../dom.js';
+import { h, icon, fitBytes, shake } from '../dom.js';
 import { t, date } from '../i18n.js';
+import { cardTitle } from '../ui/card.js';
 import { app, setNote, setTags, daysLeft, NOTE_BYTES } from '../state.js';
 import { toast, ask } from '../ui/shell.js';
 import { normalTag, MAX_TAGS } from './query.js';
 
-/** @param {Element} el */
-const shake = (el) => {
-  el.classList.remove('shake');
-  void (/** @type {HTMLElement} */ (el)).offsetWidth;
-  el.classList.add('shake');
-  navigator.vibrate?.(8);
-};
 
 /**
  * @param {import('../state.js').Entry} entry
@@ -33,7 +27,7 @@ export function cardBack(entry, o) {
   // face inside a 3D turn leaves stale paint behind in Firefox).
   let editing = o.editing;
   const pen = h('button', { type: 'button', class: 'pen', onclick: () => o.onEdit(!editing) });
-  const head = h('header', {}, h('div', {}, h('h3', {}, card.title || '—'), h('div', { class: 'by' }, by)), pen);
+  const head = h('header', {}, h('div', {}, h('h3', { class: card.title ? '' : 'untitled' }, cardTitle(card)), h('div', { class: 'by' }, by)), pen);
 
   const facts = h('dl');
   const fact = (/** @type {string} */ k, /** @type {any} */ v, /** @type {string} */ cls = '') => facts.append(h('dt', {}, k), h('dd', { class: cls }, v));

@@ -146,6 +146,7 @@ export function collectionView(o) {
     place: () => filter.place, sync,
     beforeFlight: () => { sheet.follow(0, true); sheet.drop(); },
     pulling: () => pulling,
+    stripMoved: (up) => { stripUp = up; paintTabs(); },
   });
 
   // ------------------------------------------------------------- the cards --
@@ -285,7 +286,17 @@ export function collectionView(o) {
   }
 
   // ----------------------------------------------------------------- chrome --
-  let tabsAway = false, drawnLevel = -1;
+  let tabsAway = false, drawnLevel = -1, stripUp = false;
+  /**
+   * The tab bar steps aside for whatever needs the bottom: a card close up,
+   * a selection, another place — and the strip, while cards fly to it and
+   * a moment after they land, so a card is never seen landing under the
+   * tabs. They come back once it has gone down. @param {number} [z]
+   */
+  function paintTabs(z = stage.Z.v) {
+    const away = z > 1.4 || selection.active || filter.place !== 'collection' || stripUp;
+    if (away !== tabsAway) { tabsAway = away; if (!el.hidden) hideTabs(away); }
+  }
   /** Things that follow the zoom every frame: cheap writes only. @param {number} z */
   function drawn(z) {
     const c = stage.current();
@@ -305,8 +316,7 @@ export function collectionView(o) {
       if (prevBtn.el.disabled !== i <= 0) prevBtn.el.disabled = i <= 0;
       if (nextBtn.el.disabled !== i >= n - 1) nextBtn.el.disabled = i >= n - 1;
     }
-    const away = z > 1.4 || selection.active || filter.place !== 'collection';
-    if (away !== tabsAway) { tabsAway = away; if (!el.hidden) hideTabs(away); }
+    paintTabs(z);
     const lv = Math.round(z);
     if (lv !== drawnLevel) { drawnLevel = lv; paintChrome(); }
   }

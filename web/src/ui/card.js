@@ -3,7 +3,7 @@
 // collection, is collection/back.js.)
 
 import { h } from '../dom.js';
-import { date } from '../i18n.js';
+import { t, date } from '../i18n.js';
 import { app } from '../state.js';
 
 /** A blank card: the exact frame size of an empty preview, or how large a profile makes a code. */
@@ -52,6 +52,13 @@ function applyShade(el, shade) {
 const byline = (card) => (card.author ? `@${card.author}` : '—');
 
 /**
+ * A card's title as shown. The app gives every card it signs a name, but
+ * the format allows none (another app, an old card): such a card is
+ * called «Untitled» everywhere, never shown blank. @param {any} card
+ */
+export const cardTitle = (card) => card.title || t('card.untitled');
+
+/**
  * A card frame.
  * @param {import('../state.js').Entry} entry
  * @param {{ bare?: boolean }} [opts]
@@ -60,7 +67,7 @@ export function frame(entry, opts = {}) {
   const { card, rec } = entry;
   const front = h('div', { class: 'face front' },
     h('div', { class: 'art' }, artCanvas(card, rec.digest)),
-    h('div', { class: 'cap' }, h('b', {}, card.title || '—'), h('i', {}, `${byline(card)} · ${date(rec.received, { day: '2-digit', month: '2-digit' })}`)));
+    h('div', { class: 'cap' }, h('b', { class: card.title ? '' : 'untitled' }, cardTitle(card)), h('i', {}, `${byline(card)} · ${date(rec.received, { day: '2-digit', month: '2-digit' })}`)));
   const flip = h('div', { class: 'flip' }, front);
   const el = h('div', { class: `frame${opts.bare ? ' bare' : ''}` }, flip);
   applyShade(el, card.frame);
