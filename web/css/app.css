@@ -122,7 +122,8 @@ svg.i { width: 22px; height: 22px; stroke: currentColor; fill: none; stroke-widt
 .saved-mark { margin-left: 8px; color: var(--cobalt-hi); opacity: 0; }
 .saved-mark.on { animation: saved-mark 1.8s ease-out; }
 @keyframes saved-mark { 0%, 70% { opacity: 1; } 100% { opacity: 0; } }
-@media (prefers-reduced-motion: reduce) { .saved-mark.on { animation-duration: .01s; animation-delay: 1.2s; } }
+/* Without motion the mark simply stays, until the group is drawn again. */
+@media (prefers-reduced-motion: reduce) { .saved-mark.on { opacity: 1; } }
 .group { margin-top: 24px; }
 .group h2 { margin: 0 0 8px; font-size: 12px; font-weight: 500; color: var(--text3); letter-spacing: .02em; }
 .error { color: var(--warn); font-size: 13px; margin: 8px 2px 0; min-height: 1em; }

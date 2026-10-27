@@ -465,7 +465,7 @@ export function editorView() {
     else if (e.key === '-') canvas.zoomBy(0.8, centre());
     else if (e.key === '0') canvas.fit();
     else if (/^[1-9]$/.test(e.key) && Number(e.key) <= model.doc.colors.length) { state.color = Number(e.key) - 1; paint(); }
-    else if (e.key === 'Escape') { if (state.playing) stop(); else if (state.precise) { state.precise = false; paint(); } else go('collection'); }
+    else if (e.key === 'Escape') { if (tools.closeKinds()) { /* the menu goes, the editor stays */ } else if (state.playing) stop(); else if (state.precise) { state.precise = false; paint(); } else go('collection'); }
     else return;
     e.preventDefault();
     follow(); // a zoom moves the canvas under a still mouse

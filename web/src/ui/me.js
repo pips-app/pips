@@ -3,7 +3,7 @@
 
 import { h, replace, byteLimit } from '../dom.js';
 import { t, reason, language, date } from '../i18n.js';
-import { app, setProfile, makeBackup, restoreBackup, lastBackup } from '../state.js';
+import { app, setProfile, makeBackup, restoreBackup, lastBackup, backupBytes } from '../state.js';
 import { isPersisted, persist, setMeta, memoryOnly } from '../store.js';
 import { toast, ask } from './shell.js';
 import { qrText } from './qr.js';
@@ -175,8 +175,10 @@ async function backupGroup(switchKey) {
     const f = input.files?.[0];
     input.value = '';
     if (!f) return;
-    const bytes = new Uint8Array(await f.arrayBuffer());
+    /** @type {Uint8Array} */
+    let bytes = new Uint8Array();
     try {
+      bytes = await backupBytes(f);
       const r = await restoreBackup(bytes);
       toast(t('backup.restored', r.added, r.known));
     } catch (e) {

@@ -63,8 +63,37 @@ export function toolBar(o) {
     o.tool(id);
   }
 
+  // A row of kinds is a small menu: a tap anywhere else puts it away, as
+  // Esc does, and nothing under it is pressed by the same tap.
+  const rows = [shapes.el, pens.el];
+  let swallow = false;
+  document.addEventListener('pointerdown', (e) => {
+    swallow = false;
+    const at = /** @type {Node} */ (e.target);
+    for (const r of rows) {
+      if (r.hidden || r.contains(at) || tools.some((b) => b.contains(at))) continue;
+      r.hidden = true;
+      swallow = true;
+      e.preventDefault();
+      e.stopPropagation();
+    }
+  }, true);
+  // The click that follows the same tap.
+  document.addEventListener('click', (e) => {
+    if (!swallow) return;
+    swallow = false;
+    e.preventDefault();
+    e.stopPropagation();
+  }, true);
+
   return {
     el,
+    /** Puts away an open row of kinds. @returns {boolean} whether one was open */
+    closeKinds() {
+      const open = rows.some((r) => !r.hidden);
+      for (const r of rows) r.hidden = true;
+      return open;
+    },
     /** @param {{tool: Tool, shape: Shape, pen: PenMode, mirror: boolean, precise: boolean}} s */
     set(s) {
       current = s.tool;

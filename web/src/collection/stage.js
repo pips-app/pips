@@ -14,7 +14,7 @@
 import { h } from '../dom.js';
 import { Spring, SPRINGS, loop, mix, clamp, ease, rubber } from '../kit/motion.js';
 import { gestures } from '../kit/gestures.js';
-import { grid, feedRect, feedWidth, runs, groupKey } from './layout.js';
+import { grid, feedRect, feedWidth, feedTarget, runs, groupKey } from './layout.js';
 
 /**
  * One card on the stage.
@@ -298,11 +298,8 @@ export function createStage(o) {
         return {
           move: (q) => { feed.set(rubber(f0 - q.dx / step, 0, n, 0.3)); kick(); },
           end: (_q, v) => {
-            // A flick carries on as a thrown card would: the faster, the
-            // further (up to a few cards), then the spring settles it.
-            const throwBy = clamp((-v.x / step) * 0.75, -5, 5);
-            feed.to = clamp(Math.round(feed.v + throwBy), 0, n);
-            feed.vel = clamp(-v.x / step, -12, 12); // it keeps the finger's speed
+            feed.to = clamp(feedTarget(feed.v, -v.x / step, f0), 0, n);
+            feed.vel = clamp(-v.x / step, -20, 20); // it keeps the finger's speed
             kick();
           },
         };

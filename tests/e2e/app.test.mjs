@@ -1107,3 +1107,60 @@ test('the profile keeps itself as it is typed, and the scanner frame turns the c
   assert.ok(await p.isVisible('section.view:visible .scanner-start'), 'and the frame still offers to try again');
   await p.context().close();
 });
+
+test('the feed under a finger: held still before lifting it stays, a flick carries on', async () => {
+  const p = await env.phone('flickfox');
+  await tab(p, 'me');
+  await samples(p);
+  await tab(p, 'collection');
+  await p.waitForTimeout(800);
+  await p.keyboard.press('+');
+  await p.waitForTimeout(900);
+  const centre = () => p.$eval('.stage-host .on-stage.centre', (e) => [...e.parentElement.children].indexOf(e));
+  /** A touch across the feed: `dx` in `ms`, then `still` ms without moving before the lift. */
+  const swipe = (dx, ms, still = 0) => p.evaluate(async ([dx, ms, still]) => {
+    const host = document.querySelector('.stage-host'), x0 = 195 - dx / 2, y = 400;
+    const fire = (type, x) => host.dispatchEvent(new PointerEvent(type, { bubbles: true, pointerId: 9, pointerType: 'touch', isPrimary: true, clientX: x, clientY: y }));
+    fire('pointerdown', x0);
+    for (let i = 1; i <= 10; i++) { await new Promise((r) => setTimeout(r, ms / 10)); fire('pointermove', x0 + (dx * i) / 10); }
+    await new Promise((r) => setTimeout(r, still));
+    fire('pointerup', x0 + dx);
+  }, [dx, ms, still]);
+  const settle = () => p.waitForTimeout(1500);
+
+  const c0 = await centre();
+  // Fast across a third of a card, then held: no throw, back where it was.
+  await swipe(-60, 60, 250);
+  await settle();
+  assert.equal(await centre(), c0, 'a finger that stopped throws nothing');
+  // A short quick swipe: one card on.
+  await swipe(-60, 80);
+  await settle();
+  assert.equal(await centre(), c0 + 1, 'a swipe: the next card');
+  // A hard flick: several cards.
+  await swipe(-260, 70);
+  await settle();
+  assert.ok((await centre()) >= c0 + 4, `a flick carries on (now ${await centre()})`);
+  await p.context().close();
+});
+
+test('a row of kinds in the editor is a small menu: Esc or a tap elsewhere puts only it away', async () => {
+  const p = await env.phone('kindfox');
+  await tab(p, 'draw');
+  await p.locator('.ed-art').waitFor();
+  const row = 'section.view:visible .ed-shapes:not([hidden])';
+  await p.click('.ed-tool-pen'); // the pen is already chosen: a second tap opens its kinds
+  await p.locator(row).waitFor();
+  await p.keyboard.press('Escape');
+  assert.equal(await p.locator(row).count(), 0, 'the menu went');
+  assert.ok(await p.isVisible('.ed-tools'), 'the editor stayed');
+  // A tap on a colour under the menu only closes the menu.
+  await p.click('.ed-tool-pen');
+  const chosen = () => p.$eval('.ed-swatch[aria-pressed="true"]', (b) => b.getAttribute('aria-label')).catch(() => null);
+  const before = await chosen();
+  const sw = await p.locator('.ed-swatch').nth(10).boundingBox();
+  await p.mouse.click(sw.x + sw.width / 2, sw.y + sw.height / 2);
+  assert.equal(await p.locator(row).count(), 0, 'the menu went');
+  assert.equal(await chosen(), before, 'and nothing under it was pressed');
+  await p.context().close();
+});

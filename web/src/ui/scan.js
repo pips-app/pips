@@ -78,7 +78,8 @@ export function scanner(onText, hint = t('receive.point')) {
     if (!f) return;
     const r = await reader();
     if (!r) return;
-    const texts = await r.read(await createImageBitmap(f)).catch(() => /** @type {string[]} */ ([]));
+    // A file that is not a picture, or one too big to decode, simply holds no code.
+    const texts = await createImageBitmap(f).then((b) => r.read(b)).catch(() => /** @type {string[]} */ ([]));
     if (!texts.length) return say(t('scan.none'));
     for (const text of texts) onText(text);
   }

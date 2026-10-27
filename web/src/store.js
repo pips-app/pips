@@ -63,19 +63,35 @@ function tx(store, mode) {
   return db.transaction(store, mode).objectStore(store);
 }
 
+/**
+ * A write, done once it is on disk: a request succeeds before its
+ * transaction commits, and a commit can still fail (the disk is full), so
+ * waiting for the request alone would report a save that never happened.
+ * @param {string} store @param {(s: IDBObjectStore) => IDBRequest} op
+ */
+function write(store, op) {
+  return new Promise((resolve, reject) => {
+    const t = db.transaction(store, 'readwrite');
+    op(t.objectStore(store));
+    t.oncomplete = () => resolve(undefined);
+    t.onerror = () => reject(t.error);
+    t.onabort = () => reject(t.error ?? new DOMException('transaction aborted', 'AbortError'));
+  });
+}
+
 /** @param {string} key */
 export const getMeta = async (key) => (memoryOnly ? mem.meta.get(key) : done(tx('meta', 'readonly').get(key)));
 /** @param {string} key @param {any} value */
-export const setMeta = async (key, value) => (memoryOnly ? void mem.meta.set(key, value) : done(tx('meta', 'readwrite').put(value, key)));
+export const setMeta = async (key, value) => (memoryOnly ? void mem.meta.set(key, value) : write('meta', (m) => m.put(value, key)));
 
 /** @returns {Promise<CardRecord[]>} */
 export const allCards = async () => (memoryOnly ? [...mem.cards.values()] : done(tx('cards', 'readonly').getAll()));
 /** @param {string} digest @returns {Promise<CardRecord|undefined>} */
 export const getCard = async (digest) => (memoryOnly ? mem.cards.get(digest) : done(tx('cards', 'readonly').get(digest)));
 /** @param {CardRecord} rec */
-export const putCard = async (rec) => (memoryOnly ? void mem.cards.set(rec.digest, rec) : done(tx('cards', 'readwrite').put(rec)));
+export const putCard = async (rec) => (memoryOnly ? void mem.cards.set(rec.digest, rec) : write('cards', (c) => c.put(rec)));
 /** @param {string} digest */
-export const deleteCard = async (digest) => (memoryOnly ? void mem.cards.delete(digest) : done(tx('cards', 'readwrite').delete(digest)));
+export const deleteCard = async (digest) => (memoryOnly ? void mem.cards.delete(digest) : write('cards', (c) => c.delete(digest)));
 
 /** Asks the browser not to evict our data under storage pressure. */
 export async function persist() {

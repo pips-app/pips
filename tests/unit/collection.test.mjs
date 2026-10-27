@@ -3,7 +3,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { normalTag, matches, select, toggleTag, tagCounts } from '../../web/src/collection/query.js';
-import { grid, feedRect, runs, groupKey, weekStart, columns } from '../../web/src/collection/layout.js';
+import { grid, feedRect, feedTarget, runs, groupKey, weekStart, columns } from '../../web/src/collection/layout.js';
 import { Spring, flight, rubber } from '../../web/src/kit/motion.js';
 
 const DAY = 86_400_000;
@@ -76,4 +76,21 @@ test('springs settle; a flight ends where it was sent', () => {
   const f = flight({ x: 0, y: 0, w: 100 }, { x: 50, y: 300, w: 56 }, { start: 0, dur: 600 });
   assert.deepEqual(f.at(600), { x: 50, y: 300, w: 56, t: 1 });
   assert.equal(rubber(110, 0, 100), 103.5);
+});
+
+test('the feed after a lift: a slow hand stays in control, a swipe goes one card, a flick carries on', () => {
+  // Slow: the nearest card, whichever way the finger was going.
+  assert.equal(feedTarget(3.4, 0.5, 3), 3);
+  assert.equal(feedTarget(3.6, -0.5, 3), 4);
+  // A swipe: one card on from the start, however short the drag…
+  assert.equal(feedTarget(3.1, 3, 3), 4);
+  assert.equal(feedTarget(2.9, -3, 3), 2);
+  // …but not past the card it has nearly reached.
+  assert.equal(feedTarget(3.95, 3, 3), 4);
+  assert.equal(feedTarget(5.5, 3, 3), 6);
+  // A flick: the faster, the further, within a limit.
+  const far = (v) => feedTarget(3, v, 3) - 3;
+  assert.ok(far(8) >= 2 && far(8) < far(20), 'faster goes further');
+  assert.ok(far(1000) <= 10, 'never more than ten cards');
+  assert.equal(far(-20), -far(20), 'the same both ways');
 });
