@@ -6,7 +6,9 @@ import { install, attach, locate, onUncaught } from './diagnostics.js';
 import { h } from './dom.js';
 import { loadCore, isDevHost } from './core.js';
 import { t, setLanguage, defaultLanguage } from './i18n.js';
-import { load, hasIdentity } from './state.js';
+import { app, load, hasIdentity } from './state.js';
+import { cardInAddress } from './links.js';
+import { arrive, peek } from './ui/arrival.js';
 import { getMeta } from './store.js';
 import { mountShell, go, toast, currentView } from './ui/shell.js';
 import { openJournal } from './ui/journal-view.js';
@@ -38,6 +40,10 @@ async function main() {
   if (loaded.stub) document.documentElement.classList.add('dev');
   if (loaded.stub) document.body.append(h('div', { class: 'dev-banner' }, 'DEV STUB — NOT SECURE'));
 
+  // A card in the address — a link someone sent — is taken out of it at
+  // once (a reload must not bring it in again) and kept until the app is
+  // ready for it: after the first run, if there is one.
+  let incoming = fromAddress();
   const start = () => {
     mountShell(root, {
       collection: collectionView({ draw: () => go('draw') }), draw: editorView(), import: importView(), receive: receiveView(), me: meView(),
@@ -52,11 +58,35 @@ async function main() {
       told = true;
       toast(t('journal.toast'), { label: t('journal.toast.go'), run: () => openJournal() });
     });
+    take();
+    // Another link opened while the app is up (the same tab, a new address).
+    addEventListener('hashchange', () => { incoming = fromAddress(); take(); });
+  };
+  /** The card from a link, now that there is a key to keep it under. */
+  const take = () => {
+    if (incoming === 'bad') toast(t('link.bad'));
+    else if (incoming) arrive(incoming, 'link');
+    incoming = null;
   };
   if (hasIdentity()) start();
-  else onboarding(root, start);
+  else onboarding(root, start, { arrival: incoming && incoming !== 'bad' ? peek(incoming) : null });
 
   if ('serviceWorker' in navigator && !isDevHost()) offerUpdates().catch(() => {});
+}
+
+/**
+ * The envelope in the address, taken out of it; 'bad' for a link that is
+ * not whole (cut short by a messenger, say). @returns {Uint8Array|'bad'|null}
+ */
+function fromAddress() {
+  const found = cardInAddress(location.href);
+  if (!found) return null;
+  history.replaceState(null, '', found.rest);
+  try {
+    return app.core.parseLink(found.link);
+  } catch {
+    return 'bad';
+  }
 }
 
 /**

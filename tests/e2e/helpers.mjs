@@ -72,7 +72,7 @@ export async function setup() {
     return p;
   }
   return {
-    phone, blank, dir, errors,
+    phone, blank, dir, errors, url: site.url,
     async close() {
       await browser.close();
       site.close();

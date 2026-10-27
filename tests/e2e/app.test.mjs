@@ -892,3 +892,48 @@ test('developer mode opens only for its phrase, and its samples come and go as a
   await group.locator('.dev-gate').waitFor();
   await p.context().close();
 });
+
+test('a card sent as a link opens the app and arrives, even before the first run', async () => {
+  const a = await env.phone('pixelfox');
+  await ownCard(a, 'Сердце');
+  // The device's share sheet, stood in for: what it is handed is kept.
+  await a.evaluate(() => { /** @type {any} */ (navigator).share = async (d) => { /** @type {any} */ (window).shared = d; }; });
+  await act(a, 'share');
+  await a.click('.top-sheet .share-link');
+  const sent = await a.evaluate(() => /** @type {any} */ (window).shared);
+  assert.match(sent.url, /^https:\/\/pips-app\.github\.io\/pips\/#[A-Za-z0-9_-]+$/, 'the published app (this one is not on https)');
+  assert.equal(sent.title, 'Сердце');
+  const fragment = sent.url.slice(sent.url.indexOf('#'));
+
+  // Someone with the app: it opens on the card, and the address forgets it.
+  const b = await env.phone('mossfern');
+  await b.goto('about:blank');
+  await b.goto(env.url + fragment);
+  await b.locator('.turn:not([hidden])').waitFor();
+  assert.equal(await toast(b), 'Карточка в коллекции');
+  assert.equal(await b.evaluate(() => location.hash), '', 'a reload will not bring it in again');
+  assert.match(await backText(b), /@pixelfox → вам/);
+
+  // Someone new: the first screen says a card waits, and after the key it is there.
+  const c = await env.blank('lumen');
+  await c.goto('about:blank');
+  await c.goto(env.url + fragment);
+  assert.match(await c.textContent('.onb-arrival'), /Вам прислали карточку «Сердце» от @pixelfox/);
+  await c.click('text=Создать ключ');
+  await c.check('.check input');
+  await c.click('text=Дальше');
+  await c.fill('.field input', 'lumen');
+  await c.click('text=Готово');
+  await c.locator('.turn:not([hidden])').waitFor();
+  assert.equal(await cards(c), 1);
+
+  // A link cut short says so, and adds nothing.
+  await b.goto('about:blank');
+  for (const cut of [fragment.slice(0, 40), fragment.slice(0, 41)]) { // whole base64 or not
+    await b.goto('about:blank');
+    await b.goto(env.url + cut);
+    assert.match(await textMatching(b, '.toast span', /Ссылка/), /Ссылка на карточку неполная/, cut.length);
+  }
+  assert.equal(await cards(b), 1);
+  for (const p of [a, b, c]) await p.context().close();
+});

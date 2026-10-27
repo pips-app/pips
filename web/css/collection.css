@@ -158,6 +158,9 @@ input.tag.add::placeholder { color: var(--shade-dim); }
 .share-code p { margin: 0; font-size: 13px; text-align: center; max-width: 34ch; color: var(--shade-dim); }
 .share-code p.small { font-size: 11.5px; }
 .share-code .qr-box { box-shadow: none; }
+.share-link { margin-top: 4px; display: inline-flex; align-items: center; gap: 6px; border: 0; border-radius: 99px; padding: 8px 14px;
+  background: color-mix(in srgb, var(--shade-ink) 8%, transparent); color: var(--shade-ink); font: 500 13px var(--sans); }
+.share-link .i { width: 16px; height: 16px; }
 /* The numbered-copy panel inside the sheet takes the paper's colours. */
 .share-code .field { background: color-mix(in srgb, var(--shade-ink) 7%, transparent); box-shadow: none; }
 .share-code .field:focus-within { box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--shade-ink) 40%, transparent); }

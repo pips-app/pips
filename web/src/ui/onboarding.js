@@ -20,8 +20,10 @@ import { caught } from '../diagnostics.js';
 
 /**
  * @param {HTMLElement} root @param {() => void} done
- * @param {{switching?: {file: {bytes: Uint8Array, name: string}|null, cancel: () => void}}} [opts]
- *   switching: from Profile, only the restore, maybe with a backup already chosen
+ * @param {{switching?: {file: {bytes: Uint8Array, name: string}|null, cancel: () => void},
+ *   arrival?: {title: string, author: string}|null}} [opts]
+ *   switching: from Profile, only the restore, maybe with a backup already chosen;
+ *   arrival: a card from a link, waiting for the key it will be kept under
  */
 export function onboarding(root, done, opts = {}) {
   const page = h('div', { class: 'onb' });
@@ -36,7 +38,10 @@ export function onboarding(root, done, opts = {}) {
   };
 
   function welcome() {
-    replace(page, logo(), h('h1', {}, t('onb.title')), h('p', {}, t('onb.lead')), h('div', { class: 'grow' }),
+    // Someone sent a card: say so, and that it waits for the first run.
+    const a = opts.arrival;
+    const waiting = a ? h('p', { class: 'onb-arrival' }, t('onb.arrival', a.title, a.author)) : '';
+    replace(page, logo(), h('h1', {}, t('onb.title')), h('p', {}, t('onb.lead')), waiting, h('div', { class: 'grow' }),
       h('button', { class: 'btn key wide', onclick: create }, t('onb.create')),
       h('div', { style: { height: '8px' } }),
       h('button', { class: 'btn wide', onclick: restore }, t('onb.restore')));

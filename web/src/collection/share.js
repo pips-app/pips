@@ -1,10 +1,14 @@
 // @ts-check
-// What the share sheet holds for a card: its code, ready to be scanned.
+// What the share sheet holds for a card: its code, ready to be scanned,
+// and the same envelope as a link, for someone who is not in the room.
 // An own card goes out signed by its author, as a plain copy or as a
 // numbered one; someone else's card goes out as a copy passed on by you.
 
-import { h } from '../dom.js';
+import { h, icon } from '../dom.js';
 import { t } from '../i18n.js';
+import { linkBase } from '../links.js';
+import { toast } from '../ui/shell.js';
+import { caught } from '../diagnostics.js';
 import { app, subscribe } from '../state.js';
 import { qrFor, keepAwake, codeSize } from '../ui/qr.js';
 import { editionPanel } from '../ui/edition.js';
@@ -25,7 +29,7 @@ export function fillShare(body, entry) {
   // numbered-copy panel, so switching between them does not jump.
   const size = codeSize();
   const code = h('div', { class: 'share-code' });
-  code.style.height = `${size + 28 + 72}px`;
+  code.style.height = `${size + 28 + 72 + 44}px`; // + the link button
 
   /** @param {Uint8Array} env @param {string} note */
   const showCode = (env, note) => {
@@ -34,7 +38,8 @@ export function fillShare(body, entry) {
     stop = q.stop;
     code.replaceChildren(q.el,
       h('p', {}, note),
-      h('p', { class: 'small' }, q.plan.kind === 'single' ? t('give.single', env.length) : t('give.carousel', q.plan.fragments)));
+      h('p', { class: 'small' }, q.plan.kind === 'single' ? t('give.single', env.length) : t('give.carousel', q.plan.fragments)),
+      h('button', { type: 'button', class: 'share-link', onclick: () => sendLink(env, entry.card.title) }, icon('link'), t('share.link')));
   };
   const copy = () => showCode(app.identity.sealAsAuthor(entry.rec.payload, undefined), t('share.hint'));
 
@@ -60,6 +65,31 @@ export function fillShare(body, entry) {
     showCode(app.identity.sealAsSender(entry.rec.payload, app.profile.nick || 'pips'), t('give.copy-of', entry.card.author ? `@${entry.card.author}` : '—'));
   }
   return () => { stop(); release(); };
+}
+
+/**
+ * The envelope as a link, the device's way: its share sheet (a messenger),
+ * else the clipboard. Links point at this app (or the published one, when
+ * this one is not on https), with the card after '#'.
+ * @param {Uint8Array} env @param {string} title
+ */
+async function sendLink(env, title) {
+  const url = app.core.cardLink(linkBase(location), env);
+  if (navigator.share) {
+    try {
+      await navigator.share({ title: title || 'Pips', text: t('share.link.text', title || '—'), url });
+      return;
+    } catch (e) {
+      if (/** @type {any} */ (e)?.name === 'AbortError') return; // the person changed their mind
+    }
+  }
+  try {
+    await navigator.clipboard.writeText(url);
+    toast(t('share.link.copied'));
+  } catch (e) {
+    caught(e, 'share');
+    toast(t('share.link.failed'));
+  }
 }
 
 /**
