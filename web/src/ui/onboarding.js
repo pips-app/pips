@@ -16,6 +16,7 @@ import { identicon } from '../kit/identicon.js';
 import { iconButton } from '../kit/icon-button.js';
 import { wordsEntry } from './words-entry.js';
 import { scanner } from './scan.js';
+import { caught } from '../diagnostics.js';
 
 /**
  * @param {HTMLElement} root @param {() => void} done
@@ -101,6 +102,7 @@ export function onboarding(root, done, opts = {}) {
         file = { bytes, name, owner: app.core.backupOwner(bytes) };
         fileError = '';
       } catch (e) {
+        caught(e, 'restore');
         file = null;
         fileError = reason('backup.err', e, /** @type {any} */ (e)?.message);
       }
@@ -164,6 +166,7 @@ export function onboarding(root, done, opts = {}) {
         try {
           opened = key.openBackup(file.bytes); // every card and certificate checked, nothing stored yet
         } catch (e) {
+          caught(e, 'restore');
           fileError = reason('backup.err', e, /** @type {any} */ (e)?.message);
           paintFile();
           return paint();

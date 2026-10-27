@@ -38,6 +38,8 @@ src/i18n.js                               ru / en strings, core errors in words
 src/words.js                              the recovery words as typed: whole or four letters
 src/budget.js                             what a card may be to be signed, drawn or imported
 src/editions.js                           copy-number logs: joined, and the next number
+src/journal.js, src/diagnostics.js        the error journal: what is kept, and wiring it to the page
+src/version.js                            the version, written by scripts/build-site.sh
 src/dom.js                                DOM without innerHTML, the icon set
 src/kit/                                  the bricks: motion, gestures, buttons, fields, sheets
 src/collection/                           the collection screen, built from the bricks

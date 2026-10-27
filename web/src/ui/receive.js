@@ -8,6 +8,7 @@ import { t } from '../i18n.js';
 import { app, receive, receivePayload } from '../state.js';
 import { go, toast } from './shell.js';
 import { scanner } from './scan.js';
+import { caught } from '../diagnostics.js';
 import { showRecipientCode } from './edition.js';
 
 const MAGIC = [0x50, 0x50, 0x1a, 0x0a];
@@ -116,6 +117,7 @@ export function receiveView() {
       toast(t('receive.not-pips'));
     } catch (e) {
       // A damaged or forged code lands here: openEnvelope checks every signature.
+      caught(e, 'receive');
       const code = /** @type {any} */ (e)?.code;
       toast(t(FORGED.has(code) ? 'receive.forged' : looksPips ? 'receive.damaged' : 'receive.not-pips'));
     }

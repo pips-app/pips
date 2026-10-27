@@ -809,3 +809,47 @@ test('nothing on screen covers anything else, and the hint shows only when it ap
     await p.context().close();
   }
 });
+
+test('a fault nobody caught is written down, told once, and can be read and sent', async () => {
+  const p = await env.phone('pixelfox');
+  const before = env.errors.length;
+  const words = await p.evaluate(async () => (await import('/src/state.js')).app.identity.words());
+  const boom = () => p.evaluate(() => { setTimeout(() => { throw new Error('boom in a test'); }); });
+  await boom();
+  assert.match(await textMatching(p, '.toast span', /журнал/), /Что-то пошло не так — это записано в журнал/);
+  await boom(); // the same again: one entry, counted
+  await p.waitForTimeout(300);
+  env.errors.splice(before); // thrown on purpose
+
+  // The toast leads to the journal.
+  await p.click('.toast .text-btn');
+  await p.locator('.overlay .journal-row').first().waitFor();
+  assert.equal(await p.locator('.overlay .journal-row').count(), 1);
+  assert.match(await p.textContent('.overlay .journal-row'), /Ошибка×2collection.*boom in a test/s);
+  // The report, as it would go: facts and the entry — and nothing secret.
+  await p.click('.journal-report summary');
+  const text = await textMatching(p, '.journal-report pre', /boom/);
+  assert.match(text, /^Pips — error report\nversion: pips-dev\n/);
+  assert.match(text, /error ×2 \[collection\] boom in a test/);
+  assert.ok(!text.includes(words.split(' ')[0] + ' ' + words.split(' ')[1]), 'no recovery words');
+  assert.ok(!text.includes('pixelfox'), 'no nick');
+  // It survives a restart (written a moment after it happened).
+  await p.keyboard.press('Escape');
+  await p.locator('.overlay').waitFor({ state: 'detached' });
+  await p.waitForTimeout(1200);
+  await p.reload();
+  await p.locator('nav.tabs').waitFor();
+  await tab(p, 'me');
+  assert.match(await textMatching(p, '.journal-group', /1 запись/), /1 запись, последняя —/);
+  // Sent the device's way (here: the clipboard, or a file where there is none).
+  await p.context().grantPermissions(['clipboard-read', 'clipboard-write']).catch(() => {});
+  await p.click('.journal-group >> text=Отправить отчёт');
+  assert.match(await textMatching(p, '.toast span', /Отчёт/), /Отчёт (скопирован|сохранён файлом)/);
+  // Cleared from its page.
+  await p.click('.journal-group >> text=Открыть журнал');
+  await p.click('.overlay >> text=Очистить журнал');
+  assert.equal(await p.textContent('.overlay .sheet-body > p.hint'), 'Записей нет.');
+  await p.click('.overlay .bar .icon-btn');
+  assert.match(await textMatching(p, '.journal-group', /Ошибок не было/), /Ошибок не было/);
+  await p.context().close();
+});

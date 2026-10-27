@@ -3,7 +3,7 @@
 // so either language can change wording without touching code.
 
 const ru = {
-  'ask.cancel': 'Отмена', 'ask.open': 'Открыть', 'ask.show': 'Показать', 'ask.delete': 'Удалить',
+  'sheet.close': 'Закрыть', 'ask.cancel': 'Отмена', 'ask.open': 'Открыть', 'ask.show': 'Показать', 'ask.delete': 'Удалить',
   'tab.collection': 'Коллекция',
   'collection.title': 'Коллекция',
   'collection.count': (/** @type {number} */ n) => `${n} ${plural(n, 'карточка', 'карточки', 'карточек')}`,
@@ -103,6 +103,16 @@ const ru = {
   'me.switch.go': 'Сменить ключ', 'me.switch.done': 'Ключ сменён', 'me.switch.same': 'Это тот же ключ: копия добавлена',
   'me.words.hide': 'Скрыть слова', 'me.paper.hide': 'Скрыть ключ', 'me.paper.text': 'Показать ключ текстом',
   'me.secret.confirm': 'Покажите это только себе. Кто увидит — сможет подписывать карточки от вашего имени. Показать?',
+  'journal.title': 'Журнал ошибок',
+  'journal.none': 'Ошибок не было. Если что-то пойдёт не так, здесь появится запись — её можно отправить.',
+  'journal.status': (/** @type {number} */ n, /** @type {string} */ d) => `${n} ${plural(n, 'запись', 'записи', 'записей')}, последняя — ${d}`,
+  'journal.open': 'Открыть журнал', 'journal.send': 'Отправить отчёт', 'journal.clear': 'Очистить журнал',
+  'journal.hint': (/** @type {string} */ v) => `В отчёте — тексты ошибок, версия приложения и устройство. Ключа, слов, карточек и заметок в нём нет; текст ошибки может повторять то, что вы ввели. Версия: ${v}.`,
+  'journal.error': 'Ошибка', 'journal.warn': 'Предупреждение', 'journal.stack': 'Место в коде',
+  'journal.empty': 'Записей нет.', 'journal.preview': 'Текст отчёта целиком',
+  'journal.cleared': 'Журнал очищен', 'journal.copied': 'Отчёт скопирован', 'journal.saved': 'Отчёт сохранён файлом',
+  'journal.share-title': 'Отчёт об ошибке Pips',
+  'journal.toast': 'Что-то пошло не так — это записано в журнал', 'journal.toast.go': 'Журнал',
   'me.storage': 'Хранилище', 'me.storage.persisted': 'Данные защищены от автоочистки браузера',
   'me.storage.not-persisted': 'Браузер может очистить данные при нехватке места — делайте резервные копии',
   'me.storage.memory': 'Хранилище браузера недоступно: всё пропадёт, когда страница закроется',
@@ -233,7 +243,7 @@ const ru = {
 };
 
 const en = {
-  'ask.cancel': 'Cancel', 'ask.open': 'Open', 'ask.show': 'Show', 'ask.delete': 'Delete',
+  'sheet.close': 'Close', 'ask.cancel': 'Cancel', 'ask.open': 'Open', 'ask.show': 'Show', 'ask.delete': 'Delete',
   'tab.collection': 'Collection',
   'collection.title': 'Collection',
   'collection.count': (/** @type {number} */ n) => `${n} card${n === 1 ? '' : 's'}`,
@@ -333,6 +343,16 @@ const en = {
   'me.switch.go': 'Switch key', 'me.switch.done': 'Key switched', 'me.switch.same': 'The same key: the backup was added',
   'me.words.hide': 'Hide the words', 'me.paper.hide': 'Hide the key', 'me.paper.text': 'Show the key as text',
   'me.secret.confirm': 'Show this only to yourself. Anyone who sees it can sign cards as you. Show it?',
+  'journal.title': 'Error journal',
+  'journal.none': 'Nothing has gone wrong. If something does, an entry appears here and can be sent.',
+  'journal.status': (/** @type {number} */ n, /** @type {string} */ d) => `${n} entr${n === 1 ? 'y' : 'ies'}, the last ${d}`,
+  'journal.open': 'Open the journal', 'journal.send': 'Send a report', 'journal.clear': 'Clear the journal',
+  'journal.hint': (/** @type {string} */ v) => `The report holds error messages, the app's version and the device. No key, words, cards or notes; a message may repeat something you typed. Version: ${v}.`,
+  'journal.error': 'Error', 'journal.warn': 'Warning', 'journal.stack': 'Where in the code',
+  'journal.empty': 'No entries.', 'journal.preview': 'The whole report',
+  'journal.cleared': 'Journal cleared', 'journal.copied': 'Report copied', 'journal.saved': 'Report saved as a file',
+  'journal.share-title': 'Pips error report',
+  'journal.toast': 'Something went wrong — it is in the journal', 'journal.toast.go': 'Journal',
   'me.storage': 'Storage', 'me.storage.persisted': 'Protected from automatic browser clean-up',
   'me.storage.not-persisted': 'The browser may clear data when space runs low — keep backups',
   'me.storage.memory': 'Browser storage is unavailable: everything is lost when this page closes',

@@ -45,6 +45,7 @@ import { colorSheet } from './color-sheet.js';
 import { historySheet } from './history-sheet.js';
 import { toCard } from './to-card.js';
 import { issuable } from '../budget.js';
+import { caught } from '../diagnostics.js';
 
 /** @typedef {import('./tools.js').Tool} Tool */
 /** @typedef {import('./tools.js').Shape} Shape */
@@ -358,6 +359,7 @@ export function editorView() {
       go('collection', { open: added.digest });
       toast(t('import.saved'));
     } catch (e) {
+      caught(e, 'editor');
       toast(`${t('err.generic')}: ${/** @type {any} */ (e)?.message ?? e}`);
     }
   }

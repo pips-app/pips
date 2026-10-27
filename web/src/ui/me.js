@@ -11,6 +11,8 @@ import { isDevHost } from '../core.js';
 import { identicon } from '../kit/identicon.js';
 import { BLANK_CARD } from './card.js';
 import { onboarding } from './onboarding.js';
+import { caught } from '../diagnostics.js';
+import { journalGroup } from './journal-view.js';
 
 const NETWORKS = ['telegram', 'instagram', 'x', 'bluesky', 'mastodon', 'vk', 'tiktok', 'other'];
 
@@ -104,6 +106,7 @@ export function meView() {
       h('div', { class: 'group' }, h('h2', {}, t('me.language')), h('div', { class: 'field' }, lang)),
       h('div', { class: 'group' }, h('h2', {}, t('me.storage')),
         h('p', { class: 'hint' }, t(memoryOnly ? 'me.storage.memory' : persisted ? 'me.storage.persisted' : 'me.storage.not-persisted'))),
+      journalGroup(),
       app.stub || (isDevHost() && new URLSearchParams(location.search).has('dev'))
         ? h('div', { class: 'group' }, h('h2', {}, t('me.dev')), h('button', {
           class: 'btn wide',
@@ -114,6 +117,7 @@ export function meView() {
               toast(t('me.dev.seeded', await seed()));
               go('collection');
             } catch (err) {
+              caught(err, 'profile');
               toast(`${t('err.generic')}: ${/** @type {any} */ (err)?.message ?? err}`);
             } finally {
               b.disabled = false;
@@ -156,6 +160,7 @@ async function backupGroup(switchKey) {
       const r = await restoreBackup(bytes);
       toast(t('backup.restored', r.added, r.known));
     } catch (e) {
+      caught(e, 'backup');
       // Another key's backup opens only with that key: offer to switch to it.
       const other = /** @type {any} */ (e)?.code === 'other_owner';
       toast(backupError(/** @type {any} */ (e)), other ? { label: t('backup.switch'), run: () => switchKey({ bytes, name: f.name }) } : undefined);
@@ -174,6 +179,7 @@ async function backupGroup(switchKey) {
       setTimeout(() => URL.revokeObjectURL(a.href), 10_000);
       toast(t('backup.saved'));
     } catch (e) {
+      caught(e, 'backup');
       toast(backupError(/** @type {any} */ (e)));
     }
     await draw();
