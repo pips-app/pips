@@ -17,6 +17,7 @@ import { frame, FRAME_SHADES, BLANK_CARD } from './card.js';
 import { go, toast } from './shell.js';
 import { iconButton } from '../kit/icon-button.js';
 import { issuable, MAX_EDGE } from '../budget.js';
+import { caught } from '../diagnostics.js';
 
 const ACCEPT = '.png,.aseprite,.ase,image/png';
 
@@ -135,6 +136,7 @@ export function importView() {
         result = app.core.importPicture(bytes, { ...opts });
         error = null;
       } catch (e) {
+        caught(e, 'import');
         result = null;
         error = /** @type {any} */ (e);
         // Too many colours for exact: fit the picture's own palette rather
@@ -261,6 +263,7 @@ export function importView() {
       go('collection', { open: r.digest });
       toast(t('import.saved'));
     } catch (e) {
+      caught(e, 'import');
       toast(explain(/** @type {any} */ (e)));
     }
   }

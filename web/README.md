@@ -15,8 +15,10 @@ scripts/serve.sh            # http://localhost:8000 — opening index.html as a 
 Open http://localhost:8000. Without `web/pkg/`, on localhost only, the app
 falls back to `src/stub-core.js`: same interface, **no real cryptography**, a
 "DEV STUB" banner, and a separate database. Elsewhere it refuses to start
-without the real core. Add `?dev` to the URL (or use the stub) to get the
-"Add sample cards" button on the Me tab — on localhost only.
+without the real core. Sample cards for trying the app out live in
+Profile → «For developers», behind the exact phrase `I am a developer`
+(anywhere, the published site too); they are drawn by `scripts/samples.py`
+into `samples/`, and removable as a set.
 
 The published site is assembled by `scripts/build-site.sh` into `_site/`:
 without `dev/` and the stub, and with the service worker's cache version and
@@ -38,6 +40,9 @@ src/i18n.js                               ru / en strings, core errors in words
 src/words.js                              the recovery words as typed: whole or four letters
 src/budget.js                             what a card may be to be signed, drawn or imported
 src/editions.js                           copy-number logs: joined, and the next number
+src/journal.js, src/diagnostics.js        the error journal: what is kept, and wiring it to the page
+src/links.js                              card links: where they point, the card in an address
+src/version.js                            the version, written by scripts/build-site.sh
 src/dom.js                                DOM without innerHTML, the icon set
 src/kit/                                  the bricks: motion, gestures, buttons, fields, sheets
 src/collection/                           the collection screen, built from the bricks

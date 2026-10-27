@@ -4,32 +4,17 @@
 // as a certificate inside the envelope. Only the author's device counts, so
 // the count lives beside the card and travels in backups.
 
-import { h, icon } from '../dom.js';
+import { h } from '../dom.js';
 import { t, date } from '../i18n.js';
 import { app, editionLog, issueEdition } from '../state.js';
 import { nextNumber } from '../editions.js';
+import { caught } from '../diagnostics.js';
+import { fullSheet as sheet } from '../kit/full-sheet.js';
 import { qrFor, qrText, keepAwake, codeSize } from './qr.js';
 import { scanner } from './scan.js';
 import { ask, toast } from './shell.js';
 
 const DAY = 86_400_000;
-
-/** A full-screen sheet with a title; returns it and a close function.
- * @param {string} title @param {() => void} [onClose] */
-function sheet(title, onClose) {
-  const body = h('div', { class: 'scroll sheet-body' });
-  const close = () => {
-    overlay.remove();
-    onClose?.();
-  };
-  const overlay = h('section', { class: 'overlay', role: 'dialog', 'aria-modal': 'true' },
-    h('div', { class: 'bar' },
-      h('button', { class: 'icon-btn', 'aria-label': t('ask.cancel'), onclick: close }, icon('close')),
-      h('div', { class: 'title' }, h('h1', {}, title))),
-    body);
-  document.body.append(overlay);
-  return { body, close };
-}
 
 /** The recipient's side: their code, to be scanned by the author. */
 export async function showRecipientCode() {
@@ -101,6 +86,7 @@ function scanRecipient(digest, of) {
       showEnvelope(res.envelope, label, r.nick);
     } catch (e) {
       done = false;
+      caught(e, 'edition');
       toast(/** @type {any} */ (e)?.code === 'run_out' ? t('edition.run-out') : `${t('err.generic')}: ${/** @type {any} */ (e)?.message ?? e}`);
     }
   }, t('edition.point'));

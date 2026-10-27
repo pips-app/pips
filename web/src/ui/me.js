@@ -1,16 +1,18 @@
 // @ts-check
 // Me: identity, what goes on the back of your cards, secrets, settings.
 
-import { h, icon, replace, byteLimit } from '../dom.js';
+import { h, replace, byteLimit } from '../dom.js';
 import { t, reason, language, date } from '../i18n.js';
-import { app, setProfile, addOwn, receive, backdate, makeBackup, restoreBackup, lastBackup } from '../state.js';
+import { app, setProfile, makeBackup, restoreBackup, lastBackup } from '../state.js';
 import { isPersisted, setMeta, memoryOnly } from '../store.js';
-import { toast, ask, go } from './shell.js';
+import { toast, ask } from './shell.js';
 import { qrText } from './qr.js';
-import { isDevHost } from '../core.js';
 import { identicon } from '../kit/identicon.js';
 import { BLANK_CARD } from './card.js';
 import { onboarding } from './onboarding.js';
+import { caught } from '../diagnostics.js';
+import { journalGroup } from './journal-view.js';
+import { developerGroup } from './developer.js';
 
 const NETWORKS = ['telegram', 'instagram', 'x', 'bluesky', 'mastodon', 'vk', 'tiktok', 'other'];
 
@@ -64,7 +66,7 @@ export function meView() {
     const wordsBtn = h('button', { class: 'btn', onclick: () => reveal('words') });
     const paperBtn = h('button', { class: 'btn', onclick: () => reveal('paper') });
     const labels = () => {
-      wordsBtn.replaceChildren(icon('key'), t(shown === 'words' ? 'me.words.hide' : 'me.words'));
+      wordsBtn.replaceChildren(t(shown === 'words' ? 'me.words.hide' : 'me.words'));
       paperBtn.replaceChildren(t(shown === 'paper' ? 'me.paper.hide' : 'me.paper'));
     };
     labels();
@@ -104,23 +106,8 @@ export function meView() {
       h('div', { class: 'group' }, h('h2', {}, t('me.language')), h('div', { class: 'field' }, lang)),
       h('div', { class: 'group' }, h('h2', {}, t('me.storage')),
         h('p', { class: 'hint' }, t(memoryOnly ? 'me.storage.memory' : persisted ? 'me.storage.persisted' : 'me.storage.not-persisted'))),
-      app.stub || (isDevHost() && new URLSearchParams(location.search).has('dev'))
-        ? h('div', { class: 'group' }, h('h2', {}, t('me.dev')), h('button', {
-          class: 'btn wide',
-          onclick: async (/** @type {Event} */ e) => {
-            const b = /** @type {HTMLButtonElement} */ (e.currentTarget);
-            b.disabled = true;
-            try {
-              toast(t('me.dev.seeded', await seed()));
-              go('collection');
-            } catch (err) {
-              toast(`${t('err.generic')}: ${/** @type {any} */ (err)?.message ?? err}`);
-            } finally {
-              b.disabled = false;
-            }
-          },
-        }, t('me.dev.seed')))
-        : null);
+      journalGroup(),
+      await developerGroup());
   }
 
   /**
@@ -156,6 +143,7 @@ async function backupGroup(switchKey) {
       const r = await restoreBackup(bytes);
       toast(t('backup.restored', r.added, r.known));
     } catch (e) {
+      caught(e, 'backup');
       // Another key's backup opens only with that key: offer to switch to it.
       const other = /** @type {any} */ (e)?.code === 'other_owner';
       toast(backupError(/** @type {any} */ (e)), other ? { label: t('backup.switch'), run: () => switchKey({ bytes, name: f.name }) } : undefined);
@@ -174,6 +162,7 @@ async function backupGroup(switchKey) {
       setTimeout(() => URL.revokeObjectURL(a.href), 10_000);
       toast(t('backup.saved'));
     } catch (e) {
+      caught(e, 'backup');
       toast(backupError(/** @type {any} */ (e)));
     }
     await draw();
@@ -190,8 +179,8 @@ async function backupGroup(switchKey) {
       ? t('backup.never')
       : `${t('backup.last', date(last.at, { day: 'numeric', month: 'long', year: 'numeric' }), last.count)}${changes ? ` · ${t('backup.since', changes)}` : ''}`;
     box.replaceChildren(h('h2', {}, t('backup.title')),
-      h('p', { class: `hint${stale ? ' warn-text' : ''}`, style: { marginTop: '0' } }, status),
-      last && p.issued ? h('p', { class: 'hint warn-text', style: { marginTop: '0' } }, t('backup.issued', p.issued)) : '',
+      h('p', { class: `hint lead${stale ? ' warn-text' : ''}` }, status),
+      last && p.issued ? h('p', { class: 'hint lead warn-text' }, t('backup.issued', p.issued)) : '',
       h('div', { class: 'row-btns' },
         h('button', { class: `btn${stale ? ' key' : ''}`, onclick: save }, t('backup.save')),
         h('button', { class: 'btn', onclick: () => input.click() }, t('backup.restore'))),
@@ -214,39 +203,3 @@ function normalLink(s) {
   return i < 0 ? v.toLowerCase() : v.slice(0, i).toLowerCase() + v.slice(i);
 }
 
-/** Development: own cards from the sample art, and received ones from
- * made-up artists. No reload afterwards: with storage unavailable the app
- * keeps data in memory, and a reload would throw it all away.
- * @returns {Promise<number>} cards added */
-async function seed() {
-  const { SAMPLES } = await import('../../dev/samples.js');
-  const day = 86_400_000;
-  const artists = ['dapple', 'mossfern', 'kitsu', 'vellum'].map((nick) => ({ nick, id: app.core.Identity.fromSeed(crypto.getRandomValues(new Uint8Array(32))) }));
-  /** @param {any} s @param {{author: string, handle: any, link: string}} back @param {number} shade */
-  const card = (s, back, shade) => ({
-    width: 32, height: 32, opaque: s.opaque, palette: { builtin: 0 }, frame: shade, frames: 1, delay_ms: 0,
-    title: s.title, ...back,
-    pixels: Uint8Array.from(s.pixels, (/** @type {string} */ c) => parseInt(c, 16)),
-  });
-  // Own cards carry the person's real back, exactly as an import would;
-  // made-up artists get made-up (valid) ones.
-  const p = app.profile;
-  const mine = { author: p.nick, handle: p.handle, link: p.link };
-  const theirs = (/** @type {string} */ nick) => ({ author: nick, handle: { network: 'telegram', text: `@${nick}` }, link: `${nick}.art` });
-  let n = 0;
-  for (const s of SAMPLES.slice(0, 5)) {
-    await addOwn(app.identity.signCard(card(s, mine, n % 6)));
-    n++;
-  }
-  for (const [i, s] of SAMPLES.slice(5).entries()) {
-    const a = artists[i % artists.length];
-    const payload = a.id.signCard(card(s, theirs(a.nick), i % 8));
-    const env = i % 4 === 1
-      ? artists[(i + 1) % artists.length].id.sealAsSender(payload, artists[(i + 1) % artists.length].nick)
-      : a.id.sealAsAuthor(payload, undefined);
-    const r = await receive(app.core.openEnvelope(env));
-    await backdate(r.digest, Date.now() - Math.floor(i * 6.3 + (i % 3)) * day);
-    n++;
-  }
-  return n;
-}

@@ -30,5 +30,8 @@ sed -i \
     -e "s|^const FILES = .*|const FILES = ['./', $files];|" \
     _site/sw.js
 grep -q "^const VERSION = '$version';" _site/sw.js || { echo "sw.js template changed: VERSION not set" >&2; exit 1; }
+# The same version, for the app's own reports.
+sed -i -e "s|^export const VERSION = .*|export const VERSION = '$version';|" _site/src/version.js
+grep -q "^export const VERSION = '$version';" _site/src/version.js || { echo "src/version.js template changed: VERSION not set" >&2; exit 1; }
 
 echo "_site: $(printf '%s\n' $list | wc -l) files, $(du -sh _site | cut -f1), cache $version"

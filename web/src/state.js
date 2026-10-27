@@ -6,6 +6,7 @@
 import * as store from './store.js';
 import { fitBytes } from './dom.js';
 import { joinLogs, nextNumber } from './editions.js';
+import { journal } from './diagnostics.js';
 
 /** @typedef {import('./store.js').CardRecord} CardRecord */
 /** @typedef {{nick: string, handle: {network: string, text: string}|null, link: string}} Profile */
@@ -60,7 +61,7 @@ export async function load(core, stub) {
       app.cards.set(rec.digest, { rec, card: i.card, author: i.author ?? null });
     } catch (e) {
       // A stored card that no longer checks out is kept on disk but not shown.
-      console.warn('pips: stored card failed inspection', rec.digest, e);
+      journal.warn(e, 'storage: a stored card failed inspection');
     }
   }
   if (app.identity) await reown();

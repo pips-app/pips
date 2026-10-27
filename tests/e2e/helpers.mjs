@@ -51,7 +51,7 @@ export async function setup() {
     const p = await ctx.newPage();
     p.on('pageerror', (e) => errors.push(`${name}: ${e.message}`));
     p.on('console', (m) => { if (m.type() === 'error') errors.push(`${name}: ${m.text()}`); });
-    await p.goto(`${site.url}?dev`);
+    await p.goto(site.url);
     return p;
   }
   /** A fresh phone with a key; with `words`, restored instead of created. */
@@ -72,7 +72,7 @@ export async function setup() {
     return p;
   }
   return {
-    phone, blank, dir, errors,
+    phone, blank, dir, errors, url: site.url,
     async close() {
       await browser.close();
       site.close();
@@ -157,3 +157,20 @@ export const heart = (dir) => png(dir, 'heart-x6.png', 60, 48, (x, y) => {
 export const gradient = (dir) => png(dir, 'gradient.png', 64, 8, (x, y) => [x * 4, y * 30, 128, 255]);
 /** Wider than the app's largest canvas, and not an upscaled export. */
 export const wide = (dir) => png(dir, 'wide.png', 80, 8, (x, y) => [x * 3, y * 30, 64, 255]);
+
+/**
+ * Adds the sample cards from Profile (already open): developer mode on by
+ * its phrase if it is off, then «Add samples», confirmed.
+ */
+export async function samples(page) {
+  // Profile draws itself when shown: wait for the group, in either state.
+  await page.locator('section.view:visible .group.developer > *').first().waitFor();
+  const gate = page.locator('section.view:visible .dev-gate');
+  if (await gate.count()) {
+    if (!(await gate.evaluate((d) => d.open))) await gate.locator('summary').click();
+    await gate.locator('input').fill('I am a developer');
+  }
+  await page.click('section.view:visible >> text=Добавить образцы');
+  await page.click('.dialog button:text-is("Да")');
+  await page.locator('.toast span:text-matches("Добавлено образцов")').waitFor();
+}

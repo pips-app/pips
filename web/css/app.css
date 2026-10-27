@@ -52,14 +52,17 @@ button { cursor: pointer; }
 [hidden] { display: none !important; }
 svg.i { width: 22px; height: 22px; stroke: currentColor; fill: none; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; flex: 0 0 auto; }
 
-#app { position: fixed; inset: 0; overflow: hidden; }
+#app { position: fixed; inset: 0; overflow: clip; } /* never scrolled, not even to show a focused control */
 .dev { --safe-t: calc(env(safe-area-inset-top, 0px) + 16px); }
 .dev-banner { position: fixed; top: env(safe-area-inset-top, 0px); left: 50%; transform: translateX(-50%); z-index: 2000;
   background: #5a3a12; color: #ffd9a0; font-size: 11px; font-weight: 600; letter-spacing: .06em;
   padding: 2px 10px; border-radius: 0 0 8px 8px; pointer-events: none; }
 
 /* ---------------------------------------------------------------- views -- */
-.view { position: absolute; inset: 0 0 calc(var(--tabs) + var(--safe-b)); display: flex; flex-direction: column; }
+/* A screen's frame never scrolls — its own .scroll does. `clip`, not
+   `hidden`: a hidden box can still be scrolled by the browser, to bring a
+   focused control into view, and the whole screen then shifts. */
+.view { position: absolute; inset: 0 0 calc(var(--tabs) + var(--safe-b)); display: flex; flex-direction: column; overflow: clip; }
 .bar { flex: 0 0 auto; display: flex; align-items: center; gap: 4px; min-height: 60px;
   padding: calc(10px + var(--safe-t)) 10px 8px 20px; }
 .bar .title { flex: 1; min-width: 0; }
@@ -197,6 +200,7 @@ svg.i { width: 22px; height: 22px; stroke: currentColor; fill: none; stroke-widt
 .onb .onb-status { min-height: 1.5em; margin: 10px 2px 14px; font-size: 13.5px; color: var(--text2); }
 .onb .onb-status:has(.idcard) { margin: 12px 0 14px; color: var(--text); }
 .onb .onb-status.wrong { color: var(--warn); }
+.onb .onb-arrival { margin: 4px 0 0; padding: 12px 14px; border-radius: 13px; background: var(--raise); box-shadow: inset 0 0 0 1px var(--line); color: var(--text); font-size: 14px; }
 .onb .logo { width: 72px; height: 72px; image-rendering: pixelated; margin-bottom: 22px; }
 .check { display: flex; gap: 10px; align-items: flex-start; font-size: 14px; color: var(--text2); margin: 16px 0; }
 .check input { width: 20px; height: 20px; accent-color: var(--cobalt); margin: 1px 0 0; }
@@ -241,6 +245,14 @@ a.btn { text-decoration: none; }
 .shade[aria-checked="true"] { box-shadow: 0 0 0 2px var(--void), 0 0 0 4px var(--cobalt); }
 
 .hint.warn-text { color: var(--warn); }
+/* A hint that leads into the controls under it, right below its heading. */
+.hint.lead { margin: 0 2px 10px; }
+/* Folded away at the end of Profile: a quiet line until opened. */
+.dev-gate summary { cursor: pointer; list-style: none; font-size: 12px; font-weight: 500; color: var(--text3); letter-spacing: .02em; padding: 4px 0; }
+.dev-gate summary::-webkit-details-marker { display: none; }
+.dev-gate summary::after { content: ' ›'; }
+.dev-gate[open] summary { margin-bottom: 8px; }
+.dev-gate[open] summary::after { content: ''; }
 .progress-wrap small { display: block; text-align: center; font-size: 12px; color: var(--text3); margin-top: 6px; }
 .edition-panel { margin-top: 16px; display: flex; flex-direction: column; gap: 12px; }
 .edition-panel .hint { margin: 0; }
@@ -250,6 +262,21 @@ a.btn { text-decoration: none; }
 .issued-row span { flex: 1; color: var(--text2); overflow: hidden; text-overflow: ellipsis; }
 .issued-row small { color: var(--text3); }
 .sheet-body { padding: 8px 16px calc(24px + var(--safe-b)); }
+.sheet-foot { display: flex; flex-direction: column; gap: 10px; padding: 10px 16px calc(14px + var(--safe-b)); border-top: 1px solid var(--line); }
+.sheet-foot:empty { display: none; }
+.sheet-body:has(+ .sheet-foot:not(:empty)) { padding-bottom: 16px; }
+
+/* The error journal: one entry a block, newest first. */
+.journal-row { padding: 12px 2px; border-bottom: 1px solid var(--line); }
+.journal-row header { display: flex; gap: 8px; align-items: baseline; font-size: 12.5px; color: var(--text3); }
+.journal-row header b { font-weight: 600; color: var(--text2); }
+.journal-row.is-error header b { color: var(--warn); }
+.journal-row header time { margin-left: auto; white-space: nowrap; }
+.journal-row p { margin: 4px 0 0; font-size: 14px; overflow-wrap: anywhere; }
+.journal-row details, .journal-report { margin-top: 6px; font-size: 12.5px; color: var(--text3); }
+.journal-report { margin: 0 0 6px; }
+:is(.journal-row, .journal-report) summary { cursor: pointer; padding: 4px 0; }
+:is(.journal-row, .journal-report) pre { margin: 4px 0 0; font: 11.5px/1.5 ui-monospace, monospace; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--text2); user-select: text; -webkit-user-select: text; }
 .secret:not(:empty) { margin-top: 12px; }
 .secret .qr-box { margin-top: 4px; }
 .paper-text { margin-top: 12px; text-align: center; font-size: 12.5px; color: var(--text3); }
@@ -260,7 +287,7 @@ a.btn { text-decoration: none; }
 /* ------------------------------------------------------------ wide screens -- */
 /* Forms and lists keep a phone's comfortable width, centred; buttons stay
    the size of what they say instead of crossing the screen. */
-.view:not(.collection-view) > .scroll, .view > .import-body, .overlay > .scroll, .onb {
+.view:not(.collection-view) > .scroll, .view > .import-body, .overlay > .scroll, .overlay > .sheet-foot, .onb {
   padding-left: max(16px, calc((100% - 560px) / 2)); padding-right: max(16px, calc((100% - 560px) / 2)); }
 .view:not(.collection-view, .ed-view) > .bar, .overlay > .bar {
   padding-left: max(20px, calc((100% - 560px) / 2 + 4px)); padding-right: max(10px, calc((100% - 560px) / 2 - 6px)); }

@@ -6,15 +6,14 @@
 import { h, icon } from '../dom.js';
 import { t } from '../i18n.js';
 import { app, receive, receivePayload } from '../state.js';
-import { go, toast } from './shell.js';
+import { toast } from './shell.js';
 import { scanner } from './scan.js';
+import { caught } from '../diagnostics.js';
 import { showRecipientCode } from './edition.js';
+import { FORGED, arrived } from './arrival.js';
 
 const MAGIC = [0x50, 0x50, 0x1a, 0x0a];
 
-
-/** Core error codes meaning "well-formed, but a signature does not check out". */
-const FORGED = new Set(['bad_signature', 'bad_key', 'not_author', 'bad_edition', 'unsigned']);
 export function receiveView() {
   const scan = scanner((text) => handle(text));
   const bar = h('i');
@@ -116,6 +115,7 @@ export function receiveView() {
       toast(t('receive.not-pips'));
     } catch (e) {
       // A damaged or forged code lands here: openEnvelope checks every signature.
+      caught(e, 'receive');
       const code = /** @type {any} */ (e)?.code;
       toast(t(FORGED.has(code) ? 'receive.forged' : looksPips ? 'receive.damaged' : 'receive.not-pips'));
     }
@@ -130,9 +130,7 @@ export function receiveView() {
   /** @param {{status: string, digest: string}} r */
   function done(r) {
     stopCamera();
-    // The card opens large in the collection, where it now is.
-    go('collection', { open: r.digest });
-    toast(t(r.status === 'added' ? 'receive.got' : 'receive.dup'));
+    arrived(r); // it opens large in the collection, where it now is
   }
 
   return { el, hide: stopCamera };

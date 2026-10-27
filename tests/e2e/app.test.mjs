@@ -5,7 +5,7 @@ import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { setup, photo, fromPicture, choose, tab, toast, heart, gradient, wide, textMatching } from './helpers.mjs';
+import { setup, photo, fromPicture, choose, tab, toast, heart, gradient, wide, textMatching, samples } from './helpers.mjs';
 
 /** @type {Awaited<ReturnType<typeof setup>>} */
 let env;
@@ -22,6 +22,9 @@ const cards = (p) => p.evaluate(async () => (await import('/src/state.js')).app.
 async function ownCard(p, title) {
   await tab(p, 'import');
   await choose(p, () => p.click('.import-preview'), await heart(env.dir));
+  // The file is read in the background and puts its name in the title:
+  // type over it only after that, as a person would.
+  await p.waitForFunction(() => document.querySelector('.import-body input:not([type])')?.value === 'heart-x6');
   await p.locator('.import-body input:not([type])').fill(title);
   await p.click('text=Подписать и добавить');
   await p.locator('.turn:not([hidden])').waitFor();
@@ -47,7 +50,7 @@ test('restoring on a new phone: the backup and the key in one step', async () =>
   const short = (p) => p.evaluate(async () => (await import('/src/state.js')).app.identity.publicKey().short);
   const a = await env.phone('pixelfox');
   await tab(a, 'me');
-  await a.click('text=Добавить образцы карточек');
+  await samples(a);
   await a.waitForTimeout(1500);
   await a.evaluate(async () => {
     const s = await import('/src/state.js');
@@ -95,7 +98,7 @@ test('restoring on a new phone: the backup and the key in one step', async () =>
     const s = await import('/src/state.js');
     return { cards: s.app.cards.size, nick: s.app.profile.nick, link: s.app.profile.link };
   });
-  assert.deepEqual(facts, { cards: 22, nick: 'pixelfox', link: 'pixelfox.example' });
+  assert.deepEqual(facts, { cards: 18, nick: 'pixelfox', link: 'pixelfox.example' });
   assert.equal(await short(b), await short(a));
 
   // Another key's words do not open this backup.
@@ -255,11 +258,15 @@ test('numbered copies: issued once each, until the run is complete', async () =>
   await saved.cancel();
   await ownCard(a, 'Сердце');
   await act(a, 'share');
+  // The sheet keeps its place and size from the copy's code to the panel.
+  const sheetBox = async () => { await a.waitForTimeout(700); return a.locator('.top-sheet').boundingBox(); }; // once it has come down
+  const asCopy = await sheetBox();
   await a.click('.top-sheet button:text("Экземпляр №")');
+  assert.deepEqual(await sheetBox(), asCopy, 'nothing jumps between «Копия» and «Экземпляр №»');
   await a.fill('.edition-panel input', '2');
 
   await tab(b, 'receive');
-  await b.click('text=Мой код получателя');
+  await b.click('text=Код получателя');
   const rc = await photo(b, '.overlay .qr-box', env.dir, 'recipient');
   await b.click('.overlay .icon-btn');
 
@@ -291,7 +298,7 @@ test('numbered copies: issued once each, until the run is complete', async () =>
 test('the collection: tags, search, archive and the bin, all without gestures', async () => {
   const p = await env.phone('pixelfox');
   await tab(p, 'me');
-  await p.click('text=Добавить образцы карточек');
+  await samples(p);
   await p.locator('.collection-view:visible').waitFor();
   await p.waitForTimeout(800);
   const sub = async () => (await p.textContent('.collection-bar .level-switch')).split(' · ')[0];
@@ -303,7 +310,7 @@ test('the collection: tags, search, archive and the bin, all without gestures', 
     await p.mouse.click(at.x + at.width / 2, at.y + at.height / 2);
     await p.waitForTimeout(900);
   };
-  assert.equal(await shown(), 22);
+  assert.equal(await shown(), 18);
   assert.equal(await sub(), 'по неделям');
   await p.click('.collection-bar .level-switch');
   await p.waitForTimeout(900);
@@ -348,7 +355,7 @@ test('the collection: tags, search, archive and the bin, all without gestures', 
   assert.equal(await shown(), 1);
   await p.click('.search-field .clear');
   await p.waitForTimeout(900);
-  assert.equal(await shown(), 22);
+  assert.equal(await shown(), 18);
   await p.click('.seg button[data-value="mine"]');
   await p.waitForTimeout(900);
   assert.equal(await shown(), 5, 'the five own sample cards');
@@ -371,10 +378,10 @@ test('the collection: tags, search, archive and the bin, all without gestures', 
   await act(p, 'down');
   await p.waitForTimeout(2200);
   assert.equal(await toast(p), 'Карточка в архиве');
-  assert.equal(await inPlace('collection'), 21);
+  assert.equal(await inPlace('collection'), 17);
   await p.click('.toast button');
   await p.waitForTimeout(900);
-  assert.equal(await inPlace('collection'), 22, 'undone');
+  assert.equal(await inPlace('collection'), 18, 'undone');
   await act(p, 'down');
   await p.waitForTimeout(2200);
   assert.equal(await p.textContent('.collection-bar .ib[aria-label="Архив"] .ib-badge'), '1');
@@ -399,14 +406,14 @@ test('the collection: tags, search, archive and the bin, all without gestures', 
   await p.click('.action-bar.up [data-act="purge"]');
   await p.click('.dialog button:text-is("Удалить")');
   await p.waitForTimeout(900);
-  assert.equal(await cards(p), 21);
+  assert.equal(await cards(p), 17);
   await p.context().close();
 });
 
 test('on a computer, a mouse and the keys reach every level', async () => {
   const p = await env.phone('deskfox', undefined, true);
   await tab(p, 'me');
-  await p.click('text=Добавить образцы карточек');
+  await samples(p);
   await p.locator('.collection-view:visible').waitFor();
   await p.waitForTimeout(800);
   const level = () => p.$eval('.stage-host', (e) => Number(e.dataset.level));
@@ -422,6 +429,9 @@ test('on a computer, a mouse and the keys reach every level', async () => {
   await settle();
   assert.equal(await level(), 2, 'plus, twice: the feed');
   assert.ok(await p.isVisible('.feed-nav'), 'arrows along the feed');
+  await p.keyboard.press('Home'); // from the first card, so there is a next one
+  await settle();
+  assert.ok(await p.$eval('.feed-nav [aria-label="Предыдущая карточка"]', (b) => b.disabled), 'Home: the first card');
   const c0 = await centre();
   await p.click('.feed-nav [aria-label="Следующая карточка"]');
   await p.mouse.move(720, 450);
@@ -679,7 +689,7 @@ test('the precise mode works with every tool', async () => {
 test('a backup restores cards, notes and the copy log, only for its key', async () => {
   const a = await env.phone('pixelfox');
   await tab(a, 'me');
-  await a.click('text=Добавить образцы карточек');
+  await samples(a);
   await a.waitForTimeout(1500);
   await a.evaluate(async () => {
     const s = await import('/src/state.js');
@@ -695,7 +705,7 @@ test('a backup restores cards, notes and the copy log, only for its key', async 
   const [download] = await Promise.all([a.waitForEvent('download'), a.click('text=Сохранить копию')]);
   const file = join(env.dir, download.suggestedFilename());
   await download.saveAs(file);
-  assert.match(await status(), /Последняя: .*, 22 карточки/, 'the status updates at once');
+  assert.match(await status(), /Последняя: .*, 18 карточек/, 'the status updates at once');
 
   const restore = async (p, f) => {
     await choose(p, () => p.click('.group:has(h2:text("Резервная копия")) >> text=Восстановить'), f);
@@ -704,7 +714,7 @@ test('a backup restores cards, notes and the copy log, only for its key', async 
   };
   const b = await env.phone('новый', await words(a));
   await tab(b, 'me');
-  assert.equal(await restore(b, file), 'Восстановлено: 22');
+  assert.equal(await restore(b, file), 'Восстановлено: 18');
   const facts = await b.evaluate(async () => {
     const s = await import('/src/state.js');
     const r = [...s.app.cards.values()].map((e) => e.rec);
@@ -739,11 +749,198 @@ test('a backup restores cards, notes and the copy log, only for its key', async 
       nick: s.app.profile.nick,
     };
   });
-  assert.deepEqual(after, { cards: 23, mineIsMyKey: true, moon: false, nick: 'чужой' });
+  assert.deepEqual(after, { cards: 19, mineIsMyKey: true, moon: false, nick: 'чужой' });
   assert.equal(await c.textContent('.idcard small'), `Ключ ${await c.evaluate(async () => (await import('/src/state.js')).app.identity.publicKey().short)}`);
   const bytes = await readFile(file);
   bytes[bytes.length - 5] ^= 1;
   await writeFile(join(env.dir, 'bad.pipsbak'), bytes);
   assert.match(await restore(b, join(env.dir, 'bad.pipsbak')), /Копия повреждена/);
+  for (const p of [a, b, c]) await p.context().close();
+});
+
+/**
+ * Controls on screen that cover one another, or the tab bar's raised scan
+ * button: [what, what] pairs. Only what is visible and not inside another.
+ */
+const overlaps = (p) => p.evaluate(() => {
+  const sel = 'section.view:not([hidden]) :is(button, input, select, textarea, .hint, .coach, .idcard), .coach:not([hidden])';
+  const els = [...document.querySelectorAll(sel)].filter((e) => {
+    const r = e.getBoundingClientRect(), s = getComputedStyle(e);
+    if (!(r.width > 0 && r.height > 0) || s.visibility === 'hidden' || e.closest('[hidden]')) return false;
+    if (r.bottom <= 0 || r.top >= innerHeight || r.right <= 0 || r.left >= innerWidth) return false; // parked off screen
+    for (let a = e; a; a = a.parentElement) if (getComputedStyle(a).opacity === '0') return false; // faded out
+    return true;
+  });
+  const out = [];
+  const name = (e) => `${e.tagName.toLowerCase()}.${[...e.classList].join('.')} «${(e.textContent ?? '').trim().slice(0, 24)}»`;
+  const hit = (a, b) => a.left < b.right - 0.5 && b.left < a.right - 0.5 && a.top < b.bottom - 0.5 && b.top < a.bottom - 0.5;
+  for (let i = 0; i < els.length; i++) for (let j = i + 1; j < els.length; j++) {
+    const a = els[i], b = els[j];
+    if (a.contains(b) || b.contains(a)) continue;
+    if (hit(a.getBoundingClientRect(), b.getBoundingClientRect())) out.push([name(a), name(b)]);
+  }
+  // The scan button and its ring stand above the bar: nothing floating may touch them.
+  const fab = document.querySelector('.tabs:not(.away) .main i')?.getBoundingClientRect();
+  const coach = document.querySelector('.coach:not([hidden])')?.getBoundingClientRect();
+  if (fab && coach && coach.bottom > fab.top - 5) out.push(['.coach', 'the scan button']);
+  return out;
+});
+
+test('nothing on screen covers anything else, and the hint shows only when it applies', async () => {
+  for (const desk of [false, true]) {
+    const p = await env.phone('pixelfox', undefined, desk);
+    await p.waitForTimeout(600);
+    // An empty collection: nothing to zoom, so no word about zooming.
+    assert.ok(await p.locator('.first-run').isVisible());
+    assert.equal(await p.locator('.coach').isVisible(), false, 'no zoom hint without cards');
+    for (const t of ['me', 'receive', 'import', 'draw']) {
+      await tab(p, t);
+      await p.waitForTimeout(500);
+      assert.deepEqual(await overlaps(p), [], `${t}, ${desk ? 'computer' : 'phone'}`);
+    }
+    // Two-up rows keep their labels on one line.
+    await tab(p, 'me');
+    await p.waitForTimeout(400);
+    for (const b of await p.$$('section.view:not([hidden]) .row-btns .btn')) assert.ok((await b.boundingBox()).height <= 50, await b.textContent());
+    await samples(p);
+    await p.waitForTimeout(1500);
+    await tab(p, 'collection');
+    await p.waitForTimeout(800);
+    // With cards: the hint, clear of the scan button; gone once used.
+    assert.ok(await p.locator('.coach').isVisible(), 'the zoom hint, now that there is somewhere to go');
+    assert.deepEqual(await overlaps(p), []);
+    await p.keyboard.press('-'); // a step out: weeks → months
+    await p.waitForTimeout(600);
+    assert.equal(await p.locator('.coach').isVisible(), false, 'learnt: gone');
+    await p.reload();
+    await p.locator('nav.tabs').waitFor();
+    await p.waitForTimeout(800);
+    assert.equal(await p.locator('.coach').isVisible(), false, 'and stays gone');
+    await p.context().close();
+  }
+});
+
+test('a fault nobody caught is written down, told once, and can be read and sent', async () => {
+  const p = await env.phone('pixelfox');
+  const before = env.errors.length;
+  const words = await p.evaluate(async () => (await import('/src/state.js')).app.identity.words());
+  const boom = () => p.evaluate(() => { setTimeout(() => { throw new Error('boom in a test'); }); });
+  await boom();
+  assert.match(await textMatching(p, '.toast span', /журнал/), /Что-то пошло не так — это записано в журнал/);
+  await boom(); // the same again: one entry, counted
+  await p.waitForTimeout(300);
+  env.errors.splice(before); // thrown on purpose
+
+  // The toast leads to the journal.
+  await p.click('.toast .text-btn');
+  await p.locator('.overlay .journal-row').first().waitFor();
+  assert.equal(await p.locator('.overlay .journal-row').count(), 1);
+  assert.match(await p.textContent('.overlay .journal-row'), /Ошибка×2collection.*boom in a test/s);
+  // The report, as it would go: facts and the entry — and nothing secret.
+  await p.click('.journal-report summary');
+  const text = await textMatching(p, '.journal-report pre', /boom/);
+  assert.match(text, /^Pips — error report\nversion: pips-dev\n/);
+  assert.match(text, /error ×2 \[collection\] boom in a test/);
+  assert.ok(!text.includes(words.split(' ')[0] + ' ' + words.split(' ')[1]), 'no recovery words');
+  assert.ok(!text.includes('pixelfox'), 'no nick');
+  // It survives a restart (written a moment after it happened).
+  await p.keyboard.press('Escape');
+  await p.locator('.overlay').waitFor({ state: 'detached' });
+  await p.waitForTimeout(1200);
+  await p.reload();
+  await p.locator('nav.tabs').waitFor();
+  await tab(p, 'me');
+  assert.match(await textMatching(p, '.journal-group', /1 запись/), /1 запись, последняя —/);
+  // Sent the device's way (here: the clipboard, or a file where there is none).
+  await p.context().grantPermissions(['clipboard-read', 'clipboard-write']).catch(() => {});
+  await p.click('.journal-group >> text=Отправить отчёт');
+  assert.match(await textMatching(p, '.toast span', /Отчёт/), /Отчёт (скопирован|сохранён файлом)/);
+  // Cleared from its page.
+  await p.click('.journal-group >> text=Открыть журнал');
+  await p.click('.overlay >> text=Очистить журнал');
+  assert.equal(await p.textContent('.overlay .sheet-body > p.hint'), 'Записей нет.');
+  await p.click('.overlay .bar .icon-btn');
+  assert.match(await textMatching(p, '.journal-group', /Ошибок не было/), /Ошибок не было/);
+  await p.context().close();
+});
+
+test('developer mode opens only for its phrase, and its samples come and go as a set', async () => {
+  const p = await env.phone('pixelfox');
+  await ownCard(p, 'Моя');
+  await tab(p, 'me');
+  const group = p.locator('section.view:visible .group.developer');
+  await group.locator('> *').first().waitFor();
+  assert.equal(await group.locator('button').count(), 0, 'no tools, only the folded gate');
+  await group.locator('summary').click();
+  for (const wrong of ['i am a developer', 'I am a developer ', 'I am a develope']) {
+    await group.locator('input').fill(wrong);
+    await p.waitForTimeout(150);
+    assert.equal(await group.locator('.dev-gate').count(), 1, `not for «${wrong}»`);
+  }
+  await group.locator('input').fill('I am a developer');
+  await group.locator('text=Добавить образцы').waitFor();
+  // Asked first: «Cancel» adds nothing.
+  await group.locator('text=Добавить образцы').click();
+  await p.click('.dialog button:text-is("Отмена")');
+  assert.equal(await cards(p), 1);
+  await tab(p, 'collection');
+  await tab(p, 'me');
+  await samples(p);
+  await p.waitForTimeout(500);
+  assert.equal(await cards(p), 19);
+  // Taken away as a set: the person's own card stays.
+  await tab(p, 'me');
+  await group.locator('text=Убрать образцы (18)').click();
+  await p.click('.dialog button:text-is("Да")');
+  assert.match(await textMatching(p, '.toast span', /Удалено/), /Удалено образцов: 18/);
+  assert.equal(await cards(p), 1);
+  // Off again: back behind the phrase.
+  await group.locator('text=Выключить режим разработчика').click();
+  await group.locator('.dev-gate').waitFor();
+  await p.context().close();
+});
+
+test('a card sent as a link opens the app and arrives, even before the first run', async () => {
+  const a = await env.phone('pixelfox');
+  await ownCard(a, 'Сердце');
+  // The device's share sheet, stood in for: what it is handed is kept.
+  await a.evaluate(() => { /** @type {any} */ (navigator).share = async (d) => { /** @type {any} */ (window).shared = d; }; });
+  await act(a, 'share');
+  await a.click('.top-sheet .share-link');
+  const sent = await a.evaluate(() => /** @type {any} */ (window).shared);
+  assert.match(sent.url, /^https:\/\/pips-app\.github\.io\/pips\/#[A-Za-z0-9_-]+$/, 'the published app (this one is not on https)');
+  assert.equal(sent.title, 'Сердце');
+  const fragment = sent.url.slice(sent.url.indexOf('#'));
+
+  // Someone with the app: it opens on the card, and the address forgets it.
+  const b = await env.phone('mossfern');
+  await b.goto('about:blank');
+  await b.goto(env.url + fragment);
+  await b.locator('.turn:not([hidden])').waitFor();
+  assert.equal(await toast(b), 'Карточка в коллекции');
+  assert.equal(await b.evaluate(() => location.hash), '', 'a reload will not bring it in again');
+  assert.match(await backText(b), /@pixelfox → вам/);
+
+  // Someone new: the first screen says a card waits, and after the key it is there.
+  const c = await env.blank('lumen');
+  await c.goto('about:blank');
+  await c.goto(env.url + fragment);
+  assert.match(await c.textContent('.onb-arrival'), /Вам прислали карточку «Сердце» от @pixelfox/);
+  await c.click('text=Создать ключ');
+  await c.check('.check input');
+  await c.click('text=Дальше');
+  await c.fill('.field input', 'lumen');
+  await c.click('text=Готово');
+  await c.locator('.turn:not([hidden])').waitFor();
+  assert.equal(await cards(c), 1);
+
+  // A link cut short says so, and adds nothing.
+  await b.goto('about:blank');
+  for (const cut of [fragment.slice(0, 40), fragment.slice(0, 41)]) { // whole base64 or not
+    await b.goto('about:blank');
+    await b.goto(env.url + cut);
+    assert.match(await textMatching(b, '.toast span', /Ссылка/), /Ссылка на карточку неполная/, cut.length);
+  }
+  assert.equal(await cards(b), 1);
   for (const p of [a, b, c]) await p.context().close();
 });
