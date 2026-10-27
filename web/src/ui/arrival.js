@@ -8,6 +8,7 @@ import { t } from '../i18n.js';
 import { app, receive } from '../state.js';
 import { go, toast } from './shell.js';
 import { caught } from '../diagnostics.js';
+import { cardTitle } from './card.js';
 
 /** Core error codes meaning "well-formed, but a signature does not check out". */
 export const FORGED = new Set(['bad_signature', 'bad_key', 'not_author', 'bad_edition', 'unsigned']);
@@ -45,7 +46,7 @@ export function peek(envelope) {
   try {
     const o = app.core.openEnvelope(envelope);
     const card = app.core.inspectCard(o.payload).card;
-    return { title: card.title || '—', author: card.author || '' };
+    return { title: cardTitle(card), author: card.author || '' };
   } catch {
     return null;
   }

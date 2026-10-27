@@ -116,6 +116,14 @@ svg.i { width: 22px; height: 22px; stroke: currentColor; fill: none; stroke-widt
 .field:focus-within { box-shadow: inset 0 0 0 2px var(--cobalt-hi); }
 .field .prefix { font-size: 15px; color: var(--text3); margin-right: -10px; user-select: none; }
 .field select option { background: var(--raise); }
+/* A select that is the prefix of the field's input (a network before a name). */
+.field select.net { flex: none; color: var(--text2); padding-right: 10px; border-right: 1px solid var(--line); }
+/* «Saved», beside a group's heading, for a moment after each save. */
+.saved-mark { margin-left: 8px; color: var(--cobalt-hi); opacity: 0; }
+.saved-mark.on { animation: saved-mark 1.8s ease-out; }
+@keyframes saved-mark { 0%, 70% { opacity: 1; } 100% { opacity: 0; } }
+/* Without motion the mark simply stays, until the group is drawn again. */
+@media (prefers-reduced-motion: reduce) { .saved-mark.on { opacity: 1; } }
 .group { margin-top: 24px; }
 .group h2 { margin: 0 0 8px; font-size: 12px; font-weight: 500; color: var(--text3); letter-spacing: .02em; }
 .error { color: var(--warn); font-size: 13px; margin: 8px 2px 0; min-height: 1em; }
@@ -135,6 +143,13 @@ svg.i { width: 22px; height: 22px; stroke: currentColor; fill: none; stroke-widt
 .front { padding: 3.6cqw 3.6cqw 0; }
 .art { aspect-ratio: 1; background: color-mix(in srgb, var(--shade) 88%, #000); overflow: hidden; }
 .art canvas { display: block; width: 100%; height: 100%; object-fit: contain; image-rendering: pixelated; }
+/* An animated card, held still: a small "play" in its corner. */
+.art { position: relative; }
+.anim-mark { position: absolute; right: 5%; bottom: 5%; width: 9%; aspect-ratio: 1; min-width: 7px; border-radius: 50%;
+  background: color-mix(in srgb, var(--shade) 85%, transparent); box-shadow: 0 0 0 1px color-mix(in srgb, var(--shade-ink) 25%, transparent); }
+.art.playing .anim-mark { opacity: 0; }
+.anim-mark::after { content: ''; position: absolute; inset: 28% 24% 28% 36%; background: var(--shade-ink); opacity: .75;
+  clip-path: polygon(0 0, 100% 50%, 0 100%); }
 .cap { height: calc(19cqw + 10px); min-height: 34px; display: flex; flex-direction: column; justify-content: center; overflow: hidden; }
 .cap b { font: 600 max(11px, 6.2cqw)/1.3 var(--serif); color: var(--shade-ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .cap i { font-style: normal; font-size: max(10px, 4.6cqw); line-height: 1.35; color: var(--shade-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -159,8 +174,15 @@ svg.i { width: 22px; height: 22px; stroke: currentColor; fill: none; stroke-widt
   background: #121318; box-shadow: inset 0 0 0 1px var(--line); }
 .scanner video { width: 100%; height: 100%; object-fit: cover; display: block; }
 .scanner .corners { position: absolute; inset: 18%; border-radius: 14px; box-shadow: 0 0 0 2px rgba(109, 143, 214, .9); }
-.scanner p { position: absolute; inset: 0; margin: 0; display: flex; align-items: center; justify-content: center; text-align: center;
-  padding: 40px; color: var(--text3); font-size: 13px; }
+/* Off, the frame is the button that turns the camera on; on, the words stay
+   under the picture, out of the way of the code. */
+.scanner-start { position: absolute; inset: 0; border: 0; background: none; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 10px; color: var(--cobalt-hi); font-size: 15px; }
+.scanner-start svg { width: 36px; height: 36px; }
+.scanner-start:active { background: #ffffff08; }
+.scanner-start:focus-visible { outline: 2px solid var(--cobalt-hi); outline-offset: -4px; border-radius: 22px; }
+.scanner p { position: absolute; left: 0; right: 0; bottom: 0; margin: 0; text-align: center; pointer-events: none;
+  padding: 0 24px 4.5%; color: var(--text2); font-size: 13px; text-shadow: 0 1px 3px #000; }
 .progress { height: 4px; border-radius: 4px; background: var(--raise2); overflow: hidden; margin: 12px auto 0; width: min(100%, 360px); }
 .progress i { display: block; height: 100%; background: var(--cobalt-hi); width: 0; transition: width .2s; }
 
@@ -223,6 +245,8 @@ a.btn { text-decoration: none; }
 /* An empty frame waiting for a picture: soft fill, like a passe-partout. */
 .frame.blank .art { background: color-mix(in srgb, var(--shade) 72%, #9a8f7c); }
 .frame.blank .cap b { color: var(--shade-dim); font-weight: 500; }
+/* A card that came without a name (another app, an old card). */
+.cap b.untitled, h3.untitled { font-style: italic; font-weight: 500; opacity: .7; }
 .import-empty { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
   color: color-mix(in srgb, var(--shade-ink) 70%, transparent); text-align: center; padding: 8%; }
 .import-empty .i { width: 30%; height: auto; stroke-width: 1.2; opacity: .7; }
@@ -247,6 +271,9 @@ a.btn { text-decoration: none; }
 .hint.warn-text { color: var(--warn); }
 /* A hint that leads into the controls under it, right below its heading. */
 .hint.lead { margin: 0 2px 10px; }
+/* dom.js shake(): "not like that". */
+.shake { animation: shake .32s; }
+@keyframes shake { 20%, 60% { transform: translateX(-4px); } 40%, 80% { transform: translateX(4px); } }
 /* Folded away at the end of Profile: a quiet line until opened. */
 .dev-gate summary { cursor: pointer; list-style: none; font-size: 12px; font-weight: 500; color: var(--text3); letter-spacing: .02em; padding: 4px 0; }
 .dev-gate summary::-webkit-details-marker { display: none; }

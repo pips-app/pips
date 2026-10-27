@@ -10,7 +10,7 @@
 // and passes the options back. Each change re-runs the import from the
 // original bytes, so options never compound.
 
-import { h, icon, byteLimit, fitBytes } from '../dom.js';
+import { h, icon, byteLimit, fitBytes, shake } from '../dom.js';
 import { t, reason } from '../i18n.js';
 import { app, addOwn } from '../state.js';
 import { frame, FRAME_SHADES, BLANK_CARD } from './card.js';
@@ -203,7 +203,7 @@ export function importView() {
 
   /** Plays an animated card inside its frame. @param {HTMLElement} el @param {any} card */
   function animate(el, card) {
-    if (card.frames < 2) return;
+    if (card.frames < 2 || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
     const cv = /** @type {HTMLCanvasElement|null} */ (el.querySelector('.art canvas'));
     if (!cv) return;
     const g = /** @type {CanvasRenderingContext2D} */ (cv.getContext('2d'));
@@ -211,6 +211,7 @@ export function importView() {
       const r = app.core.render(card, i);
       return new ImageData(new Uint8ClampedArray(r.rgba), r.width, r.height);
     });
+    el.querySelector('.art')?.classList.add('playing'); // it plays here: no mark
     let i = 0;
     timer = window.setInterval(() => g.putImageData(images[(i = (i + 1) % images.length)], 0, 0), Math.max(card.delay_ms, 20));
   }
@@ -255,6 +256,11 @@ export function importView() {
 
   async function sign() {
     if (!result || save.disabled) return;
+    if (!title.value.trim()) {
+      title.focus();
+      shake(title.closest('.field') ?? title);
+      return toast(t('card.need-title'));
+    }
     const p = app.profile;
     const card = { ...result.card, title: title.value.trim(), frame: shade, author: p.nick, handle: p.handle, link: p.link };
     try {

@@ -4,7 +4,7 @@
 .view.collection-view { inset: 0; touch-action: none; -webkit-user-select: none; user-select: none; }
 .bar.collection-bar { position: absolute; z-index: 50; left: 0; right: 0; top: 0; gap: 8px;
   padding-left: max(20px, calc((100% - 1100px) / 2 + 16px)); padding-right: max(16px, calc((100% - 1100px) / 2 + 16px));
-  background: linear-gradient(var(--void) 72%, #1a1b2100); pointer-events: none; }
+  background: linear-gradient(var(--void) calc(100% - 8px), #1a1b2100); pointer-events: none; } /* solid under the line below the title too */
 .collection-bar > * { pointer-events: auto; }
 .collection-bar .sub { display: flex; gap: 8px; align-items: center; min-height: 18px; white-space: nowrap; overflow: hidden; }
 .level-switch { border: 0; background: none; padding: 0; font: inherit; color: inherit; text-align: left;
@@ -47,7 +47,7 @@
 /* Group labels: a cell of the grid, type sized to the cell. */
 .stage-label { position: absolute; left: 0; top: 0; display: flex; flex-direction: column; justify-content: flex-end;
   padding: 0 4px 8px; pointer-events: none; }
-.stage-label b { font: 600 1em/1.1 var(--serif); color: var(--text); }
+.stage-label b { font: 600 1em/1.1 var(--serif); color: var(--text); text-wrap: balance; }
 .stage-label span { font-size: .68em; color: var(--text3); margin-top: 3px; }
 .stage-label.by-author b { font-family: var(--sans); overflow-wrap: anywhere; line-height: 1.15; }
 
@@ -119,8 +119,6 @@ input.tag.add::placeholder { color: var(--shade-dim); }
 .back-in textarea[readonly] { pointer-events: none; }
 .back-in textarea:focus-visible { outline: 2px solid color-mix(in srgb, var(--shade-ink) 30%, transparent); outline-offset: 0; }
 .back-in .tech { font-size: .78em; color: var(--shade-dim); }
-.shake { animation: shake .32s; }
-@keyframes shake { 20%, 60% { transform: translateX(-4px); } 40%, 80% { transform: translateX(4px); } }
 
 /* ----------------------------------------------------- search panel -- */
 .search-panel { position: absolute; z-index: 30; left: 0; right: 0; top: 0; padding: 0 max(16px, calc((100% - 1100px) / 2 + 16px)); will-change: transform; }

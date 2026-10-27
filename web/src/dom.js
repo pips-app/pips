@@ -57,6 +57,7 @@ const ICONS = {
   image: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 16l5-5 4 4 3-3 6 6"/>',
   link: '<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/>',
   key: '<circle cx="8" cy="15" r="4"/><path d="M11 12l9-9M17 6l3 3M15 8l2 2"/>',
+  camera: '<path d="M4 8.5a2 2 0 0 1 2-2h2l1.5-2h5L16 6.5h2a2 2 0 0 1 2 2V17a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><circle cx="12" cy="12.5" r="3.5"/>',
   scan: '<path d="M4 9V6a2 2 0 0 1 2-2h3M15 4h3a2 2 0 0 1 2 2v3M20 15v3a2 2 0 0 1-2 2h-3M9 20H6a2 2 0 0 1-2-2v-3M7 12h10"/>',
   brush: '<path d="M4 20h4L18.5 9.5a2.1 2.1 0 0 0-3-3L5 17v3zM13.5 8.5l3 3"/>',
   search: '<circle cx="11" cy="11" r="6.5"/><path d="M16 16l4 4"/>',
@@ -87,6 +88,7 @@ const ICONS = {
   history: '<path d="M4 12a8 8 0 1 0 2.3-5.7M4 4v4h4"/><path d="M12 8v4l3 2"/>',
   select: '<path d="M4 4h3M10 4h4M17 4h3v3M20 10v4M20 17v3h-3M14 20h-4M7 20H4v-3M4 14v-4M4 7V4"/>',
   'select-all': '<path d="M4 4h3M10 4h4M17 4h3v3M20 10v4M20 17v3h-3M14 20h-4M7 20H4v-3M4 14v-4M4 7V4"/><rect x="8" y="8" width="8" height="8" fill="currentColor" stroke="none"/>',
+  'pen-square': '<path d="M4 20h4L18.5 9.5a2.1 2.1 0 0 0-3-3L5 17v3z"/><path d="M14 20h6v-6"/>',
   dither: '<path d="M5 5h4v4H5zM13 5h4v4h-4zM9 9h4v4H9zM17 9h2v4h-2zM5 13h4v4H5zM13 13h4v4h-4zM9 17h4v2H9z" fill="currentColor" stroke="none"/>',
   'flip-x': '<path d="M12 3v18M9 7L4 12l5 5zM15 7l5 5-5 5z"/>',
   'flip-y': '<path d="M3 12h18M7 9l5-5 5 5zM7 15l5 5 5-5z"/>',
@@ -142,4 +144,12 @@ export function reveal(box, child) {
   else if (c.bottom > b.bottom) box.scrollTop += c.bottom - b.bottom;
   if (c.left < b.left) box.scrollLeft -= b.left - c.left;
   else if (c.right > b.right) box.scrollLeft += c.right - b.right;
+}
+
+/** A short shake (and a tick of vibration): "not like that". @param {Element} el */
+export function shake(el) {
+  el.classList.remove('shake');
+  void (/** @type {HTMLElement} */ (el)).offsetWidth; // restart the animation
+  el.classList.add('shake');
+  navigator.vibrate?.(8);
 }

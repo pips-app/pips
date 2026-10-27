@@ -21,6 +21,7 @@ import { app, subscribe } from '../state.js';
 import { getMeta, setMeta } from '../store.js';
 import { frame, FRAME_SHADES } from '../ui/card.js';
 import { go, hideTabs } from '../ui/shell.js';
+import { playOnly } from '../ui/player.js';
 import { loop, clamp } from '../kit/motion.js';
 import { iconButton } from '../kit/icon-button.js';
 import { segmented } from '../kit/segmented.js';
@@ -146,6 +147,7 @@ export function collectionView(o) {
     place: () => filter.place, sync,
     beforeFlight: () => { sheet.follow(0, true); sheet.drop(); },
     pulling: () => pulling,
+    stripMoved: (up) => { stripUp = up; paintTabs(); },
   });
 
   // ------------------------------------------------------------- the cards --
@@ -285,7 +287,17 @@ export function collectionView(o) {
   }
 
   // ----------------------------------------------------------------- chrome --
-  let tabsAway = false, drawnLevel = -1;
+  let tabsAway = false, drawnLevel = -1, stripUp = false;
+  /**
+   * The tab bar steps aside for whatever needs the bottom: a card close up,
+   * a selection, another place — and the strip, while cards fly to it and
+   * a moment after they land, so a card is never seen landing under the
+   * tabs. They come back once it has gone down. @param {number} [z]
+   */
+  function paintTabs(z = stage.Z.v) {
+    const away = z > 1.4 || selection.active || filter.place !== 'collection' || stripUp;
+    if (away !== tabsAway) { tabsAway = away; if (!el.hidden) hideTabs(away); }
+  }
   /** Things that follow the zoom every frame: cheap writes only. @param {number} z */
   function drawn(z) {
     const c = stage.current();
@@ -299,14 +311,15 @@ export function collectionView(o) {
     searchPanel.style.transform = `translate3d(0,${stage.frame.top - stage.scroll[0].v}px,0)`;
     const inFeed = z > 1.6 && !busy.n && !stage.dragY.v && !!c;
     feedBar.show(inFeed);
+    // The card looked at plays, if it moves; in the grid, none does.
+    playOnly(z > 1.6 && !busy.n && c ? c.id : null);
     if (MOUSE) {
       const i = Math.round(stage.feed.to), n = stage.list.length;
       if (feedNav.hidden === inFeed) feedNav.hidden = !inFeed;
       if (prevBtn.el.disabled !== i <= 0) prevBtn.el.disabled = i <= 0;
       if (nextBtn.el.disabled !== i >= n - 1) nextBtn.el.disabled = i >= n - 1;
     }
-    const away = z > 1.4 || selection.active || filter.place !== 'collection';
-    if (away !== tabsAway) { tabsAway = away; if (!el.hidden) hideTabs(away); }
+    paintTabs(z);
     const lv = Math.round(z);
     if (lv !== drawnLevel) { drawnLevel = lv; paintChrome(); }
   }
@@ -335,7 +348,9 @@ export function collectionView(o) {
     sub.hidden = showChip;
     chip.textContent = `${[filter.owner === 'all' ? '' : t(`owner.chip.${filter.owner}`), filter.query].filter(Boolean).join(' · ')}  ×`;
     backBtn.el.hidden = (lv < 2 && filter.place === 'collection') || selecting;
-    archBtn.el.hidden = binBtn.el.hidden = selecting || filter.place !== 'collection';
+    // The places belong to the grids: beside one card a bin reads as «delete
+    // this», and the archive is already the card's own action below.
+    archBtn.el.hidden = binBtn.el.hidden = selecting || filter.place !== 'collection' || lv >= 2;
     archBtn.count(inPlace('archive').length);
     binBtn.count(inPlace('trash').length);
     selBtn.hidden = (lv >= 2 && !selecting) || !stage.list.length;
@@ -485,6 +500,6 @@ export function collectionView(o) {
         stage.kick();
       }
     },
-    hide() { hideTabs(false); sheet.close(); },
+    hide() { hideTabs(false); sheet.close(); playOnly(null); },
   };
 }

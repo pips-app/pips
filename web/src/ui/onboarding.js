@@ -10,7 +10,7 @@
 
 import { h, replace, byteLimit } from '../dom.js';
 import { t, reason } from '../i18n.js';
-import { app, setIdentity, setProfile, applyBackup } from '../state.js';
+import { app, setIdentity, setProfile, applyBackup, backupBytes } from '../state.js';
 import { segmented } from '../kit/segmented.js';
 import { identicon } from '../kit/identicon.js';
 import { iconButton } from '../kit/icon-button.js';
@@ -99,7 +99,15 @@ export function onboarding(root, done, opts = {}) {
     async function pick() {
       const f = fileInput.files?.[0];
       fileInput.value = '';
-      if (f) take(new Uint8Array(await f.arrayBuffer()), f.name);
+      if (!f) return;
+      try {
+        take(await backupBytes(f), f.name);
+      } catch (e) {
+        file = null;
+        fileError = reason('backup.err', e, /** @type {any} */ (e)?.message);
+        paintFile();
+        paint();
+      }
     }
     /** @param {Uint8Array} bytes @param {string} name */
     function take(bytes, name) {

@@ -85,7 +85,20 @@ test('restoring on a new phone: the backup and the key in one step', async () =>
   await b.fill('.words-entry input >> nth=5', 'qqq');
   assert.match(await status(b), /Слова № 6 нет в списке/);
   assert.equal(await b.getAttribute('.words-entry input >> nth=5', 'aria-invalid'), 'true');
-  await b.fill('.words-entry input >> nth=5', `${list[6]} ${list[5]}`); // two words, swapped, from cell 6 on
+  // Two words swapped. The checksum is 8 bits: one swap in 256 still adds
+  // up, so the pair is one the core itself rejects.
+  const k = await b.evaluate(async (w) => {
+    const { app } = await import('/src/state.js');
+    for (let i = 5; i < 23; i++) {
+      if (w[i] === w[i + 1]) continue;
+      const s = [...w];
+      [s[i], s[i + 1]] = [s[i + 1], s[i]];
+      try { app.core.Identity.fromWords(s.join(' ')); } catch { return i; }
+    }
+    return -1;
+  }, list);
+  assert.ok(k >= 5);
+  await b.fill('.words-entry input >> nth=5', list.slice(5, k).concat([list[k + 1], list[k]]).join(' ')); // from cell 6 on
   assert.match(await status(b), /не сходятся/);
   assert.equal(await go(b), false);
   // Four letters of each word are enough; they are written out in full.
@@ -166,6 +179,7 @@ test('an import under way survives a look at another tab', async () => {
   const p = await env.phone('pixelfox');
   await tab(p, 'import');
   await choose(p, () => p.click('.import-preview'), await heart(env.dir));
+  await p.waitForFunction(() => document.querySelector('.import-body input:not([type])')?.value === 'heart-x6'); // read, and named after the file
   await p.locator('.import-body input:not([type])').fill('Сердце');
   await tab(p, 'receive');
   await tab(p, 'collection');
@@ -384,6 +398,10 @@ test('the collection: tags, search, archive and the bin, all without gestures', 
   assert.equal(await inPlace('collection'), 18, 'undone');
   await act(p, 'down');
   await p.waitForTimeout(2200);
+  // Beside one card, the places stay out of the bar: a bin there would read as «delete this».
+  assert.ok(!(await p.isVisible('.collection-bar .ib[aria-label="Архив"]')), 'no places in the feed');
+  await p.keyboard.press('Escape');
+  await p.waitForTimeout(900);
   assert.equal(await p.textContent('.collection-bar .ib[aria-label="Архив"] .ib-badge'), '1');
 
   // The archive is a place like the collection: the card opens there too.
@@ -943,4 +961,206 @@ test('a card sent as a link opens the app and arrives, even before the first run
   }
   assert.equal(await cards(b), 1);
   for (const p of [a, b, c]) await p.context().close();
+});
+
+test('a card is signed with a name; one that came without shows «Без названия»', async () => {
+  const p = await env.phone('pixelfox');
+  // The import: the title emptied, signing asks for one instead.
+  await tab(p, 'import');
+  await choose(p, () => p.click('.import-preview'), await heart(env.dir));
+  await p.waitForFunction(() => document.querySelector('.import-body input:not([type])')?.value === 'heart-x6');
+  await p.fill('.import-body input:not([type])', '   ');
+  await p.click('text=Подписать и добавить');
+  assert.match(await toast(p), /Сначала назовите карточку/);
+  assert.equal(await p.evaluate(() => document.activeElement?.matches('.import-body input:not([type])')), true, 'the title field, ready to type');
+  assert.equal(await cards(p), 0);
+  // The editor: the same.
+  await tab(p, 'draw');
+  await p.locator('.ed-art').waitFor();
+  await p.click('.ed-sign');
+  assert.match(await textMatching(p, '.toast span', /назовите/), /Сначала назовите карточку/);
+  assert.equal(await p.evaluate(() => document.activeElement?.classList.contains('ed-title')), true);
+  assert.equal(await cards(p), 0);
+
+  // A card without a name from elsewhere (the format allows it): named for the eye.
+  await p.click('[aria-label="Закрыть редактор"]');
+  await p.evaluate(async () => {
+    const s = await import('/src/state.js');
+    const other = s.app.core.Identity.fromSeed(crypto.getRandomValues(new Uint8Array(32)));
+    const card = { width: 8, height: 8, opaque: true, palette: { builtin: 0 }, frame: 0, frames: 1, delay_ms: 0, title: '', author: 'kitsu', handle: null, link: '', pixels: new Uint8Array(64).fill(3) };
+    await s.receive(s.app.core.openEnvelope(other.sealAsAuthor(other.signCard(card), undefined)));
+  });
+  await tab(p, 'collection');
+  await p.waitForTimeout(600);
+  assert.equal(await p.textContent('.on-stage .cap b'), 'Без названия');
+  assert.ok(await p.$eval('.on-stage .cap b', (b) => b.classList.contains('untitled')));
+  await p.context().close();
+});
+
+test('the tab bar waits for the card to land in the archive and the strip to go', async () => {
+  const p = await env.phone('pixelfox');
+  await ownCard(p, 'Последняя');
+  // Watch the page itself, not a stopwatch: when the strip goes down, and
+  // when the tabs come back. Timings differ from machine to machine; the
+  // order must not.
+  await p.evaluate(() => {
+    const w = /** @type {any} */ (window), tabs = document.querySelector('nav.tabs'), strip = document.querySelector('.strip');
+    w.seen = { stripDown: 0, tabsBack: 0, flying: false };
+    new MutationObserver(() => { if (!tabs?.classList.contains('away') && !w.seen.tabsBack && w.seen.flying) w.seen.tabsBack = performance.now(); })
+      .observe(/** @type {Element} */ (tabs), { attributes: true });
+    new MutationObserver(() => {
+      const up = !/101%/.test(/** @type {HTMLElement} */ (strip).style.transform);
+      if (up) w.seen.flying = true;
+      else if (w.seen.flying && !w.seen.stripDown) w.seen.stripDown = performance.now();
+    }).observe(/** @type {Element} */ (strip), { attributes: true, attributeFilter: ['style'] });
+  });
+  await act(p, 'down'); // the only card: to the archive, from the feed
+  await p.waitForFunction(() => /** @type {any} */ (window).seen.tabsBack > 0, null, { timeout: 6000 });
+  const seen = await p.evaluate(() => /** @type {any} */ (window).seen);
+  assert.ok(seen.stripDown > 0, 'the strip showed, then went down');
+  // (In the same moment counts: both change in one step.)
+  assert.ok(seen.tabsBack >= seen.stripDown - 5, `the tabs came back only as the strip went (${JSON.stringify(seen)})`);
+  assert.equal(await p.evaluate(async () => [...(await import('/src/state.js')).app.cards.values()][0].rec.state), 'archive');
+  await p.context().close();
+});
+
+test('the editor grid lies exactly on the cells, from edge to edge', async () => {
+  for (const desk of [false, true]) {
+    const p = await env.phone('pixelfox', undefined, desk);
+    await tab(p, 'draw');
+    await p.locator('.ed-art').waitFor();
+    await p.waitForTimeout(400);
+    const m = await p.evaluate(() => {
+      const art = document.querySelector('.ed-art').getBoundingClientRect();
+      const lines = /** @type {HTMLCanvasElement} */ (document.querySelector('.ed-lines'));
+      const v = lines.getBoundingClientRect(), d = lines.getContext('2d').getImageData(0, 0, lines.width, lines.height).data;
+      let x0 = Infinity, y0 = Infinity, x1 = -1, y1 = -1;
+      for (let y = 0; y < lines.height; y++) for (let x = 0; x < lines.width; x++) {
+        if (!d[(y * lines.width + x) * 4 + 3]) continue;
+        x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y);
+      }
+      const k = devicePixelRatio;
+      return { art: [art.left - v.left, art.top - v.top, art.right - v.left, art.bottom - v.top], grid: [x0 / k, y0 / k, (x1 + 1) / k, (y1 + 1) / k] };
+    });
+    // The grid's lines start and end on the art's edges (within a pixel).
+    m.art.forEach((a, i) => assert.ok(Math.abs(a - m.grid[i]) <= 1.5, `${desk ? 'computer' : 'phone'}: ${JSON.stringify(m)}`));
+    await p.context().close();
+  }
+});
+
+test('an animated card holds still in the grid, with a mark, and plays when looked at', async () => {
+  const p = await env.phone('pixelfox');
+  await tab(p, 'me');
+  await samples(p);
+  await p.waitForTimeout(1200);
+  await tab(p, 'collection');
+  await p.waitForTimeout(800);
+  const id = await p.evaluate(async () => [...(await import('/src/state.js')).app.cards.values()].find((e) => e.card.title === 'Кораблик')?.rec.digest);
+  const art = `.on-stage .art canvas[data-art="${id}"]`;
+  const pixels = () => p.$eval(art, (cv) => /** @type {HTMLCanvasElement} */ (cv).toDataURL());
+  // The grid: the first frame, still, and the mark in the corner.
+  assert.ok(await p.isVisible(`.on-stage .art:has(${art.split(' ').pop()}) .anim-mark`), 'marked as animated');
+  const still = await pixels();
+  await p.waitForTimeout(800);
+  assert.equal(await pixels(), still, 'still in the grid');
+  // Looked at: it plays (the boat rocks, the waves move).
+  await p.locator(art).scrollIntoViewIfNeeded();
+  const box = await p.locator(art).boundingBox();
+  await p.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+  await p.waitForTimeout(1000);
+  const seen = new Set();
+  for (let k = 0; k < 6; k++) { seen.add(await pixels()); await p.waitForTimeout(170); }
+  assert.ok(seen.size > 1, 'it plays in the feed');
+  // Back to the grid: still again, on its first frame.
+  await p.keyboard.press('Escape');
+  await p.waitForTimeout(900);
+  assert.equal(await pixels(), still, 'the first frame again');
+  await p.context().close();
+});
+
+test('the profile keeps itself as it is typed, and the scanner frame turns the camera on', async () => {
+  const p = await env.phone('quill');
+  await tab(p, 'me');
+  const field = (label) => p.locator(`section.view:visible .field:has(label:text-is("${label}")) input`);
+  await field('Ник').fill('quill2');
+  await p.locator('.saved-mark.on').waitFor();
+  assert.equal(await p.textContent('.idcard b'), 'quill2', 'the card at the top follows');
+  await p.selectOption('section.view:visible select.net', 'bluesky');
+  await field('Соцсеть').fill('quill.bsky');
+  await field('Ссылка').fill('Quill.ART/Shop');
+  await field('Ссылка').blur(); // leaving a field keeps it at once
+  await p.waitForTimeout(300);
+  const profile = () => p.evaluate(async () => (await import('/src/state.js')).app.profile);
+  assert.deepEqual(await profile(), { nick: 'quill2', handle: { network: 'bluesky', text: 'quill.bsky' }, link: 'quill.art/Shop' });
+  // An empty name: no network is kept, whatever the list shows.
+  await field('Соцсеть').fill('');
+  await p.waitForTimeout(1000);
+  assert.equal((await profile()).handle, null);
+  assert.equal(await p.locator('section.view:visible button:text-is("Сохранить")').count(), 0, 'nothing to press');
+  assert.equal(await p.locator('section.view:visible button:text-is("Сменить ключ")').count(), 1);
+
+  // The scanner: no separate button; the frame is the way to the camera.
+  await tab(p, 'receive');
+  assert.equal(await p.locator('section.view:visible .btn:text-is("Включить камеру")').count(), 0);
+  await p.click('section.view:visible .scanner-start');
+  assert.match(await textMatching(p, 'section.view:visible .scanner p', /Камера недоступна/), /Камера недоступна/, 'no camera here: said in the frame');
+  assert.ok(await p.isVisible('section.view:visible .scanner-start'), 'and the frame still offers to try again');
+  await p.context().close();
+});
+
+test('the feed under a finger: held still before lifting it stays, a flick carries on', async () => {
+  const p = await env.phone('flickfox');
+  await tab(p, 'me');
+  await samples(p);
+  await tab(p, 'collection');
+  await p.waitForTimeout(800);
+  await p.keyboard.press('+');
+  await p.waitForTimeout(900);
+  const centre = () => p.$eval('.stage-host .on-stage.centre', (e) => [...e.parentElement.children].indexOf(e));
+  /** A touch across the feed: `dx` in `ms`, then `still` ms without moving before the lift. */
+  const swipe = (dx, ms, still = 0) => p.evaluate(async ([dx, ms, still]) => {
+    const host = document.querySelector('.stage-host'), x0 = 195 - dx / 2, y = 400;
+    const fire = (type, x) => host.dispatchEvent(new PointerEvent(type, { bubbles: true, pointerId: 9, pointerType: 'touch', isPrimary: true, clientX: x, clientY: y }));
+    fire('pointerdown', x0);
+    for (let i = 1; i <= 10; i++) { await new Promise((r) => setTimeout(r, ms / 10)); fire('pointermove', x0 + (dx * i) / 10); }
+    await new Promise((r) => setTimeout(r, still));
+    fire('pointerup', x0 + dx);
+  }, [dx, ms, still]);
+  const settle = () => p.waitForTimeout(1500);
+
+  const c0 = await centre();
+  // Fast across a third of a card, then held: no throw, back where it was.
+  await swipe(-60, 60, 250);
+  await settle();
+  assert.equal(await centre(), c0, 'a finger that stopped throws nothing');
+  // A short quick swipe: one card on.
+  await swipe(-60, 80);
+  await settle();
+  assert.equal(await centre(), c0 + 1, 'a swipe: the next card');
+  // A hard flick: several cards.
+  await swipe(-260, 70);
+  await settle();
+  assert.ok((await centre()) >= c0 + 4, `a flick carries on (now ${await centre()})`);
+  await p.context().close();
+});
+
+test('a row of kinds in the editor is a small menu: Esc or a tap elsewhere puts only it away', async () => {
+  const p = await env.phone('kindfox');
+  await tab(p, 'draw');
+  await p.locator('.ed-art').waitFor();
+  const row = 'section.view:visible .ed-shapes:not([hidden])';
+  await p.click('.ed-tool-pen'); // the pen is already chosen: a second tap opens its kinds
+  await p.locator(row).waitFor();
+  await p.keyboard.press('Escape');
+  assert.equal(await p.locator(row).count(), 0, 'the menu went');
+  assert.ok(await p.isVisible('.ed-tools'), 'the editor stayed');
+  // A tap on a colour under the menu only closes the menu.
+  await p.click('.ed-tool-pen');
+  const chosen = () => p.$eval('.ed-swatch[aria-pressed="true"]', (b) => b.getAttribute('aria-label')).catch(() => null);
+  const before = await chosen();
+  const sw = await p.locator('.ed-swatch').nth(10).boundingBox();
+  await p.mouse.click(sw.x + sw.width / 2, sw.y + sw.height / 2);
+  assert.equal(await p.locator(row).count(), 0, 'the menu went');
+  assert.equal(await chosen(), before, 'and nothing under it was pressed');
+  await p.context().close();
 });

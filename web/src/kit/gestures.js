@@ -16,6 +16,10 @@
 
 const SLOP = 8;
 const HOLD_MS = 420;
+/** A lift's speed is read from this last stretch of the move… */
+const RECENT_MS = 100;
+/** …and is none if the finger has been still this long. */
+const STILL_MS = 60;
 
 /** @typedef {{x: number, y: number, x0: number, y0: number, dx: number, dy: number, id: number, target: Element|null}} Point */
 /** @typedef {{move: (p: Point) => void, end: (p: Point, v: {x: number, y: number}) => void}} DragHandler */
@@ -45,9 +49,16 @@ export function gestures(el, o) {
     const [a, b] = [...pts.values()];
     return { d0: /** @type {number} */ (g?.d0), d: Math.hypot(a.x - b.x, a.y - b.y), mid: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 } };
   };
+  /**
+   * The finger's speed as it lifts: from its last tenth of a second only.
+   * A finger that stopped before lifting has no speed, however fast it
+   * moved before — otherwise a careful drag, held still and let go, would
+   * still be thrown.
+   */
   const velocity = () => {
-    const h = g?.hist ?? [];
-    if (h.length < 2) return { x: 0, y: 0 };
+    const now = performance.now();
+    const h = (g?.hist ?? []).filter((s) => now - s.t <= RECENT_MS);
+    if (h.length < 2 || now - h[h.length - 1].t > STILL_MS) return { x: 0, y: 0 };
     const a = h[0], b = h[h.length - 1], dt = Math.max(1, b.t - a.t) / 1000;
     return { x: (b.x - a.x) / dt, y: (b.y - a.y) / dt };
   };
@@ -99,7 +110,7 @@ export function gestures(el, o) {
     }
     if (e.pointerId !== g.id) return; // only the finger that owns the touch counts
     g.hist.push({ x: p.x, y: p.y, t: performance.now() });
-    if (g.hist.length > 6) g.hist.shift();
+    if (g.hist.length > 12) g.hist.shift();
     const pt = point(g.id);
     if (g.kind === 'pending') {
       if (Math.hypot(pt.dx, pt.dy) <= SLOP) return;

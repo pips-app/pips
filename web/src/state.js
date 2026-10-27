@@ -283,6 +283,20 @@ export const lastBackup = async () => (await store.getMeta('lastBackup')) ?? nul
  */
 export const restoreBackup = (bytes) => applyBackup(app.identity.openBackup(bytes)); // throws unless every card and certificate checks out
 
+/** The largest backup the core opens (pips-store's MAX_FILE). */
+export const BACKUP_MAX = 64 * 1024 * 1024;
+
+/**
+ * A chosen backup file's bytes. Anything larger than any backup can be is
+ * refused before it is read: reading a stray video whole would take the
+ * page down before the core could say no.
+ * @param {Blob} f @returns {Promise<Uint8Array>}
+ */
+export async function backupBytes(f) {
+  if (f.size > BACKUP_MAX) throw Object.assign(new Error('file too large for a backup'), { code: 'too_large' });
+  return new Uint8Array(await f.arrayBuffer());
+}
+
 /**
  * Adds an opened backup's cards to this device. Nothing here is
  * overwritten: a card already on the device keeps its place, its note and

@@ -11,7 +11,7 @@ import { t } from '../i18n.js';
 import { app, move, purge } from '../state.js';
 import { artCanvas, FRAME_SHADES } from '../ui/card.js';
 import { toast, ask } from '../ui/shell.js';
-import { clamp, flight } from '../kit/motion.js';
+import { clamp, flight, REDUCED } from '../kit/motion.js';
 
 /** @typedef {import('./query.js').Place} Place */
 /** @typedef {import('./stage.js').Item} Item */
@@ -30,8 +30,8 @@ const SERIES_MS = 5000;
  *   host: HTMLElement, fly: HTMLElement, busy: {n: number},
  *   place: () => Place, sync: () => void,
  *   selection: ReturnType<typeof import('./selection.js').createSelection>,
- *   beforeFlight: () => void, pulling: () => boolean,
- * }} o
+ *   beforeFlight: () => void, pulling: () => boolean, stripMoved: (up: boolean) => void,
+ * }} o stripMoved: the strip went up or down (the tab bar keeps out of its way)
  */
 export function createMoves(o) {
   const { stage, strip } = o;
@@ -42,11 +42,13 @@ export function createMoves(o) {
   // The strip is up while a card is pulled down, while cards fly to it and
   // a moment after they landed — unless another pull or flight took it on.
   let stripTimer = 0;
+  let stripUp = false;
 
   /** @param {number} f @param {boolean} [anim] */
   function showStrip(f, anim = false) {
     clearTimeout(stripTimer);
     strip.reveal(f, anim);
+    if (stripUp !== f > 0) { stripUp = f > 0; o.stripMoved(stripUp); }
   }
 
   /** @param {number} [room] @param {string} [landed] @param {Place} [target] */
@@ -80,8 +82,9 @@ export function createMoves(o) {
     o.beforeFlight();
     drawStrip();
     showStrip(1, true);
-    const now = performance.now(), start = now + (pulled ? 0 : 160);
-    const dur = 620, gap = list.length <= 6 ? 190 : Math.max(60, 1100 / list.length);
+    // With less motion asked for, the cards are simply there: no lift, no arc, no queue.
+    const now = performance.now(), start = now + (pulled || REDUCED ? 0 : 160);
+    const dur = REDUCED ? 1 : 620, gap = REDUCED ? 0 : list.length <= 6 ? 190 : Math.max(60, 1100 / list.length);
     list.forEach((c, k) => {
       const r0 = c.el.getBoundingClientRect(), t0 = start + k * gap;
       const path = flight({ x: r0.left, y: r0.top, w: r0.width }, () => strip.slot(0), { start: t0, dur });
@@ -124,7 +127,7 @@ export function createMoves(o) {
       o.selection.stop();
       o.sync();
       moved(list.map((c) => c.id), from, to);
-      stripTimer = window.setTimeout(() => { if (!o.pulling() && !o.busy.n) strip.reveal(0, true); }, 1300);
+      stripTimer = window.setTimeout(() => { if (!o.pulling() && !o.busy.n) showStrip(0, true); }, 1300);
     }, start - now + (list.length - 1) * gap + dur + 40);
   }
 
@@ -148,9 +151,13 @@ export function createMoves(o) {
   /** Moves cards without a flight: they fade out here, or in. @param {string[]} ids @param {Place} to */
   async function relocate(ids, to) {
     o.busy.n++;
-    for (const id of ids) await move(id, to);
-    o.busy.n--;
-    o.sync();
+    // A failed write must not leave the screen waiting for a move that ended.
+    try {
+      for (const id of ids) await move(id, to);
+    } finally {
+      o.busy.n--;
+      o.sync();
+    }
   }
 
   return {
@@ -172,8 +179,11 @@ export function createMoves(o) {
     async purgeAll(ids) {
       if (!(await ask(t('confirm.purge-n', ids.length), { yes: t('ask.delete'), danger: true }))) return;
       o.busy.n++;
-      for (const id of ids) await purge(id);
-      o.busy.n--;
+      try {
+        for (const id of ids) await purge(id);
+      } finally {
+        o.busy.n--;
+      }
       o.selection.stop();
       o.sync();
       toast(t('moved.purged', ids.length));

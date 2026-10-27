@@ -3,8 +3,8 @@
 
 import { h, replace, byteLimit } from '../dom.js';
 import { t, reason, language, date } from '../i18n.js';
-import { app, setProfile, makeBackup, restoreBackup, lastBackup } from '../state.js';
-import { isPersisted, setMeta, memoryOnly } from '../store.js';
+import { app, setProfile, makeBackup, restoreBackup, lastBackup, backupBytes } from '../state.js';
+import { isPersisted, persist, setMeta, memoryOnly } from '../store.js';
 import { toast, ask } from './shell.js';
 import { qrText } from './qr.js';
 import { identicon } from '../kit/identicon.js';
@@ -26,10 +26,13 @@ export function meView() {
     const key = app.identity.publicKey();
     const p = app.profile;
     const nick = byteLimit(/** @type {HTMLInputElement} */ (h('input', { value: p.nick, autocomplete: 'nickname' })), 24);
-    const network = /** @type {HTMLSelectElement} */ (h('select', {}, NETWORKS.map((n) => h('option', { value: n, selected: p.handle?.network === n }, n))));
-    const handle = byteLimit(/** @type {HTMLInputElement} */ (h('input', { value: p.handle?.text ?? '', autocomplete: 'off' })), 48);
+    // The network is the handle's prefix, in the same field: with no name
+    // after it, it reads as an empty field, not as a choice already made.
+    const network = /** @type {HTMLSelectElement} */ (h('select', { class: 'net', 'aria-label': t('me.network') }, NETWORKS.map((n) => h('option', { value: n, selected: p.handle?.network === n }, n))));
+    const handle = byteLimit(/** @type {HTMLInputElement} */ (h('input', { value: p.handle?.text ?? '', placeholder: t('me.handle.ph'), autocomplete: 'off', 'aria-label': t('me.handle.ph') })), 48);
     const link = byteLimit(/** @type {HTMLInputElement} */ (h('input', { value: p.link, placeholder: 'kitsu.art', autocomplete: 'off', inputMode: 'url' })), 64);
     const error = h('div', { class: 'error' });
+    const saved = h('span', { class: 'saved-mark', 'aria-live': 'polite' });
     const secret = h('div', { class: 'secret' });
     const lang = /** @type {HTMLSelectElement} */ (h('select', {
       onchange: async () => {
@@ -41,12 +44,18 @@ export function meView() {
     }, h('option', { value: 'ru', selected: language() === 'ru' }, 'Русский'), h('option', { value: 'en', selected: language() === 'en' }, 'English')));
     const persisted = await isPersisted();
 
+    // The fields keep themselves, as the language does: a pause in typing or
+    // leaving a field is enough. Something the card cannot carry stays in the
+    // field with the reason under it, and nothing is kept until it can.
+    let timer = 0;
     const save = async () => {
+      clearTimeout(timer);
       const next = {
         nick: nick.value.trim(),
         handle: handle.value.trim() ? { network: network.value, text: handle.value.trim() } : null,
         link: normalLink(link.value),
       };
+      if (JSON.stringify(next) === JSON.stringify({ nick: app.profile.nick, handle: app.profile.handle ?? null, link: app.profile.link })) return;
       // The core is the judge of what a card may carry.
       try {
         app.core.shareSize({ ...BLANK_CARD, author: next.nick, handle: next.handle, link: next.link });
@@ -55,9 +64,19 @@ export function meView() {
         return;
       }
       error.textContent = '';
-      await setProfile(next);
-      toast(t('me.saved'));
+      await setProfile({ ...app.profile, ...next });
+      idNick.textContent = next.nick || '—';
+      saved.textContent = t('me.saved');
+      saved.classList.remove('on');
+      void saved.offsetWidth; // the mark shows afresh for each save
+      saved.classList.add('on');
     };
+    for (const f of [nick, handle, link]) {
+      f.addEventListener('input', () => { clearTimeout(timer); timer = window.setTimeout(save, 700); });
+      f.addEventListener('change', save);
+    }
+    network.addEventListener('change', save);
+    const idNick = h('b', {}, p.nick || '—');
 
     // Each button shows its secret and, pressed again, hides it; only one
     // is open at a time, and leaving the tab hides both.
@@ -90,22 +109,19 @@ export function meView() {
     };
 
     replace(body,
-      h('div', { class: 'idcard' }, identicon(key.hex), h('div', {}, h('b', {}, p.nick || '—'), h('small', {}, `${t('me.key')} ${key.short}`))),
-      h('div', { class: 'group' }, h('h2', {}, t('me.card-back')),
+      h('div', { class: 'idcard' }, identicon(key.hex), h('div', {}, idNick, h('small', {}, `${t('me.key')} ${key.short}`))),
+      h('div', { class: 'group' }, h('h2', {}, t('me.card-back'), saved),
         h('div', { class: 'field' }, h('label', {}, t('me.nick')), nick),
-        h('div', { class: 'field' }, h('label', {}, t('me.network')), network),
-        h('div', { class: 'field' }, h('label', {}, t('me.handle')), handle),
+        h('div', { class: 'field' }, h('label', {}, t('me.handle')), network, handle),
         h('div', { class: 'field' }, h('label', {}, t('me.link')), h('span', { class: 'prefix', 'aria-hidden': 'true' }, 'https://'), link),
-        h('p', { class: 'hint' }, t('me.link.hint')), error,
-        h('button', { class: 'btn key wide', onclick: save }, t('me.save'))),
+        h('p', { class: 'hint' }, t('me.link.hint')), error),
       h('div', { class: 'group' }, h('h2', {}, t('me.key')),
         h('div', { class: 'row-btns' }, wordsBtn, paperBtn),
         secret,
         h('button', { class: 'btn wide', style: { marginTop: '8px' }, onclick: () => switchKey(null) }, t('me.switch'))),
       await backupGroup(switchKey),
       h('div', { class: 'group' }, h('h2', {}, t('me.language')), h('div', { class: 'field' }, lang)),
-      h('div', { class: 'group' }, h('h2', {}, t('me.storage')),
-        h('p', { class: 'hint' }, t(memoryOnly ? 'me.storage.memory' : persisted ? 'me.storage.persisted' : 'me.storage.not-persisted'))),
+      storageGroup(persisted),
       journalGroup(),
       await developerGroup());
   }
@@ -128,6 +144,27 @@ export function meView() {
   return { el, show: render };
 }
 
+/**
+ * Storage: whether the browser may clear it, and — while it may — the way
+ * to ask it not to. Some browsers ask the person, some decide by themselves.
+ * @param {boolean} persisted
+ */
+function storageGroup(persisted) {
+  const box = h('div', { class: 'group' });
+  const draw = (/** @type {boolean} */ kept) => replace(box, h('h2', {}, t('me.storage')),
+    h('p', { class: 'hint lead' }, t(memoryOnly ? 'me.storage.memory' : kept ? 'me.storage.persisted' : 'me.storage.not-persisted')),
+    memoryOnly || kept ? '' : h('button', {
+      class: 'btn wide',
+      onclick: async () => {
+        const ok = await persist().catch(() => false);
+        if (ok) draw(true);
+        toast(t(ok ? 'me.storage.granted' : 'me.storage.refused'));
+      },
+    }, t('me.storage.ask')));
+  draw(persisted);
+  return box;
+}
+
 /** Backup: save, restore, and how stale the last copy is. The group redraws
  * itself after each action, so its status is never out of date. */
 /** @param {(file: {bytes: Uint8Array, name: string}) => void} switchKey for another key's backup */
@@ -138,8 +175,10 @@ async function backupGroup(switchKey) {
     const f = input.files?.[0];
     input.value = '';
     if (!f) return;
-    const bytes = new Uint8Array(await f.arrayBuffer());
+    /** @type {Uint8Array} */
+    let bytes = new Uint8Array();
     try {
+      bytes = await backupBytes(f);
       const r = await restoreBackup(bytes);
       toast(t('backup.restored', r.added, r.known));
     } catch (e) {

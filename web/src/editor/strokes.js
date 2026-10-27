@@ -62,15 +62,31 @@ export function createStrokes(o) {
     const dither = tool === 'pen' && s.pen === 'dither';
     /** @type {Cell[]} */
     const path = [];
+    // How many places of the path (and their mirror images) cover each
+    // cell. A corner taken out is undone only where nothing else of the
+    // stroke covers it — not where the line crossed or doubled back over
+    // itself, which would cut a hole in what was just drawn.
+    /** @type {Map<number, number>} */
+    const cover = new Map();
     const put = (/** @type {Cell} */ p) => {
       const last = path[path.length - 1];
       if (last && last.x === p.x && last.y === p.y) return;
       path.push(p);
-      for (const q of spots(p, s)) if (!dither || dithered(q)) st.set(index(q), v);
-      // Pixel-perfect: the cell that only turns a corner goes.
-      if (tool === 'pen' && !dither && path.length >= 3 && corner(path[path.length - 3], path[path.length - 2], p)) {
+      for (const q of spots(p, s)) {
+        if (dither && !dithered(q)) continue;
+        const i = index(q);
+        cover.set(i, (cover.get(i) ?? 0) + 1);
+        st.set(i, v);
+      }
+      // Pixel-perfect: the cell that only turns a corner goes (the smoothing
+      // pen; the square one keeps every cell, for corners drawn on purpose).
+      if (tool === 'pen' && s.pen === 'solid' && path.length >= 3 && corner(path[path.length - 3], path[path.length - 2], p)) {
         const mid = /** @type {Cell} */ (path.splice(path.length - 2, 1)[0]);
-        for (const q of spots(mid, s)) st.restore(index(q));
+        for (const q of spots(mid, s)) {
+          const i = index(q), n = (cover.get(i) ?? 1) - 1;
+          cover.set(i, n);
+          if (n <= 0) st.restore(i);
+        }
       }
     };
     put(c);

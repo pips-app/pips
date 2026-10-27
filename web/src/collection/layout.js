@@ -85,6 +85,25 @@ export function grid(level, groups, f) {
 
 /** The feed card's width. @param {Frame} f */
 export const feedWidth = (f) => Math.min(f.W * 0.68, (f.H - f.top - f.bottom) * 0.6, 520);
+/**
+ * Where the feed comes to rest after the finger lifts, from where it is
+ * (in cards) and the finger's speed (cards a second, forward positive).
+ * A slow hand is in control: the nearest card, nothing more. A swipe goes
+ * on to the next card its way: past the one it started from, however
+ * short, but not past one it has nearly reached. A flick carries on, the
+ * faster the further, like a thrown card.
+ * @param {number} at @param {number} speed @param {number} from the card the touch began on
+ */
+export function feedTarget(at, speed, from) {
+  const a = Math.abs(speed), dir = Math.sign(speed);
+  if (a < FEED_SLOW) return Math.round(at);
+  const next = dir > 0 ? Math.max(Math.ceil(at - 0.15), Math.round(from) + 1) : Math.min(Math.floor(at + 0.15), Math.round(from) - 1);
+  if (a < FEED_FLICK) return next;
+  return next + dir * Math.round(Math.min(FEED_MAX - 1, (a - FEED_FLICK) * 0.3));
+}
+/** Cards a second: below, the nearest card; to FEED_FLICK, one card; past it, a throw. */
+const FEED_SLOW = 1, FEED_FLICK = 5, FEED_MAX = 10;
+
 /** The single card's width. @param {Frame} f */
 export const cardWidth = (f) => Math.min(f.W * 0.84, (f.H - f.top - f.bottom - 24) / 1.29, 560);
 

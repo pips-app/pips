@@ -160,6 +160,12 @@ export function createCanvas() {
       viewport = v;
       target = t;
       v.append(lines);
+      // The lines are drawn from the card's place in the layout, so they
+      // follow any change of it — not only the window's: the title's font
+      // arriving, the palette or the frames below growing, the editor
+      // opening into its final size. Otherwise the grid sits off the cells.
+      const follow = new ResizeObserver(() => place());
+      for (const e of [v, t, el]) follow.observe(e);
     },
     /**
      * Draws a frame. @param {import('./model.js').Doc} doc @param {number} f

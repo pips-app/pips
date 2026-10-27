@@ -42,6 +42,7 @@ src/budget.js                             what a card may be to be signed, drawn
 src/editions.js                           copy-number logs: joined, and the next number
 src/journal.js, src/diagnostics.js        the error journal: what is kept, and wiring it to the page
 src/links.js                              card links: where they point, the card in an address
+src/ui/player.js                          the one animated card that plays: the one looked at
 src/version.js                            the version, written by scripts/build-site.sh
 src/dom.js                                DOM without innerHTML, the icon set
 src/kit/                                  the bricks: motion, gestures, buttons, fields, sheets

@@ -1,5 +1,7 @@
 // @ts-check
 // A QR scanner: the camera, plus "from a picture" for when there is none.
+// While the camera is off, the frame itself is the button that turns it on:
+// the place where the picture will be is where one reaches for it.
 // Hands every text it reads to `onText`; deciding what it means is the
 // caller's job. Repeats of the same text are left for the caller too.
 
@@ -11,11 +13,11 @@ import { qrReader } from '../qrscan.js';
 export function scanner(onText, hint = t('receive.point')) {
   const video = /** @type {HTMLVideoElement} */ (h('video', { playsInline: true, muted: true, hidden: true }));
   const message = h('p', {}, hint);
-  const startBtn = h('button', { class: 'btn key', onclick: () => start() }, t('receive.start'));
+  const startBtn = h('button', { type: 'button', class: 'scanner-start', onclick: () => start() }, icon('camera'), h('b', {}, t('receive.start')));
   const imageInput = /** @type {HTMLInputElement} */ (h('input', { type: 'file', accept: 'image/*', hidden: true, onchange: () => fromImage() }));
   const el = h('div', {},
-    h('div', { class: 'scanner' }, video, h('div', { class: 'corners' }), message),
-    h('div', { class: 'group row-btns' }, startBtn,
+    h('div', { class: 'scanner' }, video, h('div', { class: 'corners' }), startBtn, message),
+    h('div', { class: 'group row-btns' },
       h('button', { class: 'btn', onclick: () => imageInput.click() }, icon('image'), t('receive.image'))),
     imageInput);
 
@@ -35,6 +37,7 @@ export function scanner(onText, hint = t('receive.point')) {
   }
 
   async function start() {
+    if (stream) return;
     message.textContent = t('scan.loading');
     const r = await reader();
     if (!r) return;
@@ -46,7 +49,7 @@ export function scanner(onText, hint = t('receive.point')) {
     }
     video.srcObject = stream;
     video.hidden = false;
-    message.textContent = '';
+    message.textContent = hint;
     startBtn.hidden = true;
     await video.play();
     // The browser's detector is fast; ours is given more time per frame.
@@ -75,7 +78,8 @@ export function scanner(onText, hint = t('receive.point')) {
     if (!f) return;
     const r = await reader();
     if (!r) return;
-    const texts = await r.read(await createImageBitmap(f)).catch(() => /** @type {string[]} */ ([]));
+    // A file that is not a picture, or one too big to decode, simply holds no code.
+    const texts = await createImageBitmap(f).then((b) => r.read(b)).catch(() => /** @type {string[]} */ ([]));
     if (!texts.length) return say(t('scan.none'));
     for (const text of texts) onText(text);
   }
