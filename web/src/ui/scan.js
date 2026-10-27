@@ -12,14 +12,29 @@ import { qrReader } from '../qrscan.js';
 /** @param {(text: string) => void} onText @param {string} [hint] */
 export function scanner(onText, hint = t('receive.point')) {
   const video = /** @type {HTMLVideoElement} */ (h('video', { playsInline: true, muted: true, hidden: true }));
-  const message = h('p', {}, hint);
-  const startBtn = h('button', { type: 'button', class: 'scanner-start', onclick: () => start() }, icon('camera'), h('b', {}, t('receive.start')));
+  // Words have two places: inside the frame, under the button, while the
+  // camera is off; along the bottom, over the picture, while it is on.
+  const label = h('b', {}, t('receive.start'));
+  const note = h('small', {}, hint);
+  const message = h('p', { hidden: true }, hint);
+  const frame = h('div', { class: 'scanner' }, video, h('div', { class: 'corners' }),
+    h('button', { type: 'button', class: 'scanner-start', onclick: () => start() }, icon('camera'), label, note), message);
   const imageInput = /** @type {HTMLInputElement} */ (h('input', { type: 'file', accept: 'image/*', hidden: true, onchange: () => fromImage() }));
   const el = h('div', {},
-    h('div', { class: 'scanner' }, video, h('div', { class: 'corners' }), startBtn, message),
+    frame,
     h('div', { class: 'group row-btns' },
       h('button', { class: 'btn', onclick: () => imageInput.click() }, icon('image'), t('receive.image'))),
     imageInput);
+
+  /** Tells the person something where the frame has room for it now. @param {string} text */
+  const say = (text) => { (stream ? message : note).textContent = text; };
+  /** @param {boolean} on */
+  const live = (on) => {
+    frame.classList.toggle('live', on);
+    video.hidden = !on;
+    message.hidden = !on;
+    message.textContent = note.textContent = hint;
+  };
 
   /** @type {MediaStream|null} */
   let stream = null;
@@ -31,26 +46,28 @@ export function scanner(onText, hint = t('receive.point')) {
     try {
       return await qrReader();
     } catch {
-      message.textContent = t('scan.failed');
+      say(t('scan.failed'));
       return null;
     }
   }
 
   async function start() {
     if (stream) return;
-    message.textContent = t('scan.loading');
+    say(t('scan.loading'));
     const r = await reader();
     if (!r) return;
     try {
       stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false });
     } catch {
-      message.textContent = t('receive.no-camera');
+      // Refused, or none: the frame says so, and a tap asks again (the
+      // permission may have been given in the browser's settings meanwhile).
+      label.textContent = t('scan.no-camera');
+      say(t('scan.no-camera.how'));
       return;
     }
+    label.textContent = t('receive.start');
     video.srcObject = stream;
-    video.hidden = false;
-    message.textContent = hint;
-    startBtn.hidden = true;
+    live(true);
     await video.play();
     // The browser's detector is fast; ours is given more time per frame.
     timer = window.setInterval(async () => {
@@ -67,9 +84,7 @@ export function scanner(onText, hint = t('receive.point')) {
     clearInterval(timer);
     stream?.getTracks().forEach((tr) => tr.stop());
     stream = null;
-    video.hidden = true;
-    startBtn.hidden = false;
-    message.textContent = hint;
+    live(false);
   }
 
   async function fromImage() {
@@ -83,9 +98,6 @@ export function scanner(onText, hint = t('receive.point')) {
     if (!texts.length) return say(t('scan.none'));
     for (const text of texts) onText(text);
   }
-
-  /** Tells the person something, in the scanner's own place (it may be shown before the app's toasts exist). @param {string} text */
-  function say(text) { message.textContent = text; }
 
   return { el, stop, say };
 }

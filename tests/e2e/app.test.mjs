@@ -977,6 +977,7 @@ test('a card is signed with a name; one that came without shows «Без наз�
   // The editor: the same.
   await tab(p, 'draw');
   await p.locator('.ed-art').waitFor();
+  await p.click('.ed-art'); // one cell: something to sign
   await p.click('.ed-sign');
   assert.match(await textMatching(p, '.toast span', /назовите/), /Сначала назовите карточку/);
   assert.equal(await p.evaluate(() => document.activeElement?.classList.contains('ed-title')), true);
@@ -1103,8 +1104,15 @@ test('the profile keeps itself as it is typed, and the scanner frame turns the c
   await tab(p, 'receive');
   assert.equal(await p.locator('section.view:visible .btn:text-is("Включить камеру")').count(), 0);
   await p.click('section.view:visible .scanner-start');
-  assert.match(await textMatching(p, 'section.view:visible .scanner p', /Камера недоступна/), /Камера недоступна/, 'no camera here: said in the frame');
+  assert.match(await textMatching(p, 'section.view:visible .scanner-start', /Нет доступа к камере/), /Нет доступа к камере.*настройках браузера/, 'no camera here: said in the frame');
   assert.ok(await p.isVisible('section.view:visible .scanner-start'), 'and the frame still offers to try again');
+  // The words stay inside the corners, however many lines they take.
+  const inside = await p.evaluate(() => {
+    const c = document.querySelector('section.view:not([hidden]) .scanner .corners').getBoundingClientRect();
+    const s = document.querySelector('section.view:not([hidden]) .scanner-start small').getBoundingClientRect();
+    return s.left >= c.left && s.right <= c.right && s.top >= c.top && s.bottom <= c.bottom;
+  });
+  assert.ok(inside, 'the note inside the corners');
   await p.context().close();
 });
 
@@ -1162,5 +1170,82 @@ test('a row of kinds in the editor is a small menu: Esc or a tap elsewhere puts 
   await p.mouse.click(sw.x + sw.width / 2, sw.y + sw.height / 2);
   assert.equal(await p.locator(row).count(), 0, 'the menu went');
   assert.equal(await chosen(), before, 'and nothing under it was pressed');
+  await p.context().close();
+});
+
+test('stored data: an older layout is upgraded in place, a newer one is never hidden behind an empty app', async () => {
+  // A collection as the last version left it: layout 1, records without tags.
+  const a = await env.phone('oldfox');
+  await tab(a, 'me');
+  await samples(a);
+  const dump = await a.evaluate(async () => {
+    const s = await import('/src/state.js');
+    const st = await import('/src/store.js');
+    return { name: s.app.stub ? 'pips-dev-stub' : 'pips', seed: [...(await st.getMeta('seed'))], profile: await st.getMeta('profile'), cards: (await st.allCards()).map((r) => ({ ...r, payload: [...r.payload], cert: r.cert && [...r.cert] })) };
+  });
+  const ctx = a.context();
+  const b = await ctx.browser().newContext({ viewport: { width: 390, height: 844 }, locale: 'ru-RU' });
+  const p = await b.newPage();
+  await p.goto(`${env.url}no-app-here`); // the same site, without the app (a 404 page)
+  await p.evaluate((d) => new Promise((ok, fail) => {
+    const req = indexedDB.open(d.name, 1);
+    req.onupgradeneeded = () => { req.result.createObjectStore('meta'); req.result.createObjectStore('cards', { keyPath: 'digest' }); };
+    req.onsuccess = () => {
+      const t = req.result.transaction(['meta', 'cards'], 'readwrite');
+      t.objectStore('meta').put(new Uint8Array(d.seed), 'seed');
+      t.objectStore('meta').put(d.profile, 'profile');
+      for (const r of d.cards) {
+        const { tags, ...old } = r; // what layout 1 could hold: no tags
+        t.objectStore('cards').put({ ...old, payload: new Uint8Array(r.payload), cert: r.cert && new Uint8Array(r.cert) });
+      }
+      t.oncomplete = () => { req.result.close(); ok(); };
+      t.onerror = () => fail(t.error);
+    };
+  }), dump);
+  await p.goto(env.url);
+  await p.locator('nav.tabs').waitFor();
+  const after = await p.evaluate(async (name) => {
+    const s = await import('/src/state.js');
+    const st = await import('/src/store.js');
+    const db = await new Promise((ok) => { const r = indexedDB.open(name); r.onsuccess = () => ok(r.result); });
+    const v = db.version;
+    db.close();
+    return { version: v, cards: s.app.cards.size, tagged: (await st.allCards()).every((r) => Array.isArray(r.tags)), nick: s.app.profile.nick };
+  }, dump.name);
+  assert.deepEqual(after, { version: 2, cards: 18, tagged: true, nick: 'oldfox' });
+
+  // Another tab with a newer app takes the data: this one steps aside, and says so.
+  const q = await b.newPage();
+  await q.goto(`${env.url}no-app-here`);
+  await q.evaluate((name) => new Promise((ok) => { const r = indexedDB.open(name, 3); r.onsuccess = () => { r.result.close(); ok(); }; }), dump.name);
+  assert.match(await p.textContent('.halt'), /В другой вкладке открыта новая версия/);
+  // And now this app finds data newer than it knows: it says so instead of starting empty.
+  await p.goto(env.url);
+  assert.match(await p.locator('.halt').textContent(), /уже записаны более новой версией/);
+  assert.equal(await p.locator('nav.tabs').count(), 0, 'no empty app over the data');
+  await b.close();
+  await ctx.close();
+});
+
+test('the editor: a still picture shows no frames to mistake for colours, and an empty canvas is not signed', async () => {
+  const p = await env.phone('stillfox');
+  await tab(p, 'draw');
+  await p.locator('.ed-art').waitFor();
+  // One frame: no play tile, no thumbnail — one button that says what it does.
+  assert.ok(!(await p.isVisible('.ed-play')), 'nothing to play');
+  assert.equal(await p.locator('.ed-frame-list .ed-frame:visible').count(), 0, 'no lone thumbnail');
+  assert.match(await p.textContent('.ed-frame.add'), /Кадр анимации/);
+  const height = () => p.$eval('.ed-frames', (e) => e.getBoundingClientRect().height);
+  const h1 = await height();
+  // Signing nothing: said, and nothing is made.
+  await p.fill('.ed-title', 'Пусто');
+  await p.click('.ed-sign');
+  assert.equal(await toast(p), 'Холст пуст — сначала нарисуйте что-нибудь');
+  assert.equal(await p.evaluate(async () => (await import('/src/state.js')).app.cards.size), 0);
+  // Two frames: the strip of numbered frames, at the same height.
+  await p.click('.ed-frame.add');
+  assert.ok(await p.isVisible('.ed-play'));
+  assert.deepEqual(await p.$$eval('.ed-frame-list .ed-frame-n', (e) => e.map((x) => x.textContent)), ['1', '2']);
+  assert.equal(await height(), h1, 'the strip does not jump');
   await p.context().close();
 });

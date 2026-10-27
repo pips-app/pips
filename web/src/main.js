@@ -2,14 +2,14 @@
 // Start-up: load the core, open storage, then either the first-run flow or
 // the app itself.
 
-import { install, attach, locate, onUncaught } from './diagnostics.js';
+import { install, attach, locate, onUncaught, journal } from './diagnostics.js';
 import { h } from './dom.js';
 import { loadCore, isDevHost } from './core.js';
 import { t, setLanguage, defaultLanguage } from './i18n.js';
 import { app, load, hasIdentity } from './state.js';
 import { cardInAddress } from './links.js';
 import { arrive, peek } from './ui/arrival.js';
-import { getMeta } from './store.js';
+import { getMeta, onReplaced, onBlocked } from './store.js';
 import { mountShell, go, toast, currentView } from './ui/shell.js';
 import { openJournal } from './ui/journal-view.js';
 import { collectionView } from './collection/view.js';
@@ -33,7 +33,19 @@ async function main() {
     root.append(h('div', { class: 'empty' }, h('b', {}, t('core.failed')), String(/** @type {any} */ (e)?.message ?? e)));
     return;
   }
-  await load(loaded.core, loaded.stub);
+  // Another tab with a newer Pips takes the data over: this one steps aside.
+  onReplaced(() => halt('store.replaced'));
+  onBlocked(() => halt('store.blocked', false));
+  try {
+    await load(loaded.core, loaded.stub);
+    document.querySelector('.halt')?.remove(); // the other tabs let go
+  } catch (e) {
+    const code = /** @type {any} */ (e)?.code;
+    if (code !== 'newer_data' && code !== 'upgrade_failed') throw e;
+    journal.error(e, 'storage');
+    halt(code === 'newer_data' ? 'store.newer' : 'store.upgrade-failed');
+    return;
+  }
   await attach();
   const lang = await getMeta('language');
   if (lang) setLanguage(lang);
@@ -72,6 +84,42 @@ async function main() {
   else onboarding(root, start, { arrival: incoming && incoming !== 'bad' ? peek(incoming) : null });
 
   if ('serviceWorker' in navigator && !isDevHost()) offerUpdates().catch(() => {});
+}
+
+/**
+ * The app cannot go on with the data as it is: says why, over everything,
+ * with the one thing to do. Nothing is written meanwhile.
+ * @param {string} key @param {boolean} [reload] whether reloading is the way on
+ */
+function halt(key, reload = true) {
+  document.querySelectorAll('.halt').forEach((e) => e.remove());
+  document.body.append(h('div', { class: 'halt', role: 'alertdialog', 'aria-modal': 'true' },
+    h('div', {}, h('h1', {}, t(`${key}.title`)), h('p', {}, t(key)),
+      reload ? h('button', { class: 'btn key wide', onclick: () => freshReload() }, t('store.reload')) : '',
+      // What went wrong can still be read and sent: the journal lives in memory until storage opens.
+      key === 'store.upgrade-failed' ? h('button', { class: 'btn wide', style: { marginTop: '8px' }, onclick: () => openJournal() }, t('journal.open')) : '')));
+}
+
+/**
+ * A reload that brings the newest app: an update already fetched in the
+ * background takes over first. Without it, this very page would come back
+ * from the cache — the old version that cannot open the data.
+ */
+async function freshReload() {
+  try {
+    const reg = await navigator.serviceWorker?.getRegistration();
+    await reg?.update();
+    const next = reg?.waiting ?? reg?.installing;
+    if (next) {
+      navigator.serviceWorker.addEventListener('controllerchange', () => location.reload(), { once: true });
+      const go = () => { if (next.state === 'installed') next.postMessage('take-over'); };
+      next.addEventListener('statechange', go);
+      go();
+      setTimeout(() => location.reload(), 8000); // whatever happens, not stuck here
+      return;
+    }
+  } catch { /* no service worker here: a plain reload */ }
+  location.reload();
 }
 
 /**

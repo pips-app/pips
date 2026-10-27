@@ -350,6 +350,11 @@ export function editorView() {
 
   async function signCard() {
     stop();
+    // Nothing drawn, in any frame: nothing to sign — said, not done.
+    if (model.doc.frames.every((f) => f.every((v) => v === T))) {
+      shake(canvas.el);
+      return toast(t('ed.empty'));
+    }
     const r = toCard(model.doc, by());
     if (!('card' in r)) return toast(t('ed.budget.colors.why'));
     // A card keeps its name for good, with everyone it reaches: ask for one

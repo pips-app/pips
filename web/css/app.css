@@ -177,7 +177,10 @@ svg.i { width: 22px; height: 22px; stroke: currentColor; fill: none; stroke-widt
 /* Off, the frame is the button that turns the camera on; on, the words stay
    under the picture, out of the way of the code. */
 .scanner-start { position: absolute; inset: 0; border: 0; background: none; display: flex; flex-direction: column;
-  align-items: center; justify-content: center; gap: 10px; color: var(--cobalt-hi); font-size: 15px; }
+  align-items: center; justify-content: center; gap: 10px; color: var(--cobalt-hi); font-size: 15px;
+  padding: 0 calc(18% + 14px); } /* the words stay inside the corners */
+.scanner-start small { color: var(--text3); font-size: 12.5px; line-height: 1.4; text-align: center; }
+.scanner.live .scanner-start { display: none; }
 .scanner-start svg { width: 36px; height: 36px; }
 .scanner-start:active { background: #ffffff08; }
 .scanner-start:focus-visible { outline: 2px solid var(--cobalt-hi); outline-offset: -4px; border-radius: 22px; }
@@ -318,3 +321,9 @@ a.btn { text-decoration: none; }
   padding-left: max(16px, calc((100% - 560px) / 2)); padding-right: max(16px, calc((100% - 560px) / 2)); }
 .view:not(.collection-view, .ed-view) > .bar, .overlay > .bar {
   padding-left: max(20px, calc((100% - 560px) / 2 + 4px)); padding-right: max(10px, calc((100% - 560px) / 2 - 6px)); }
+
+/* The app cannot go on with the data as it is (store.js): over everything. */
+.halt { position: fixed; inset: 0; z-index: 450; /* under the journal, if opened from here */ background: var(--void); display: flex; align-items: center; justify-content: center; padding: 24px; }
+.halt > div { max-width: 360px; }
+.halt h1 { margin: 0 0 10px; font: 600 24px/1.2 var(--serif); }
+.halt p { color: var(--text2); line-height: 1.5; margin: 0 0 20px; }
