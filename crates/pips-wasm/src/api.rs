@@ -281,6 +281,13 @@ fn from_store(b: &pips_store::Backup) -> BackupData {
     }
 }
 
+/// The words a recovery phrase is made of (English BIP39), for checking
+/// each word as it is typed.
+#[must_use]
+pub fn recovery_words() -> &'static [&'static str] {
+    recovery::word_list()
+}
+
 /// Whose backup a file is, `{ hex, short }`, without the key.
 ///
 /// # Errors

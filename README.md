@@ -14,7 +14,8 @@ only way a card moves is a QR code (or a link carrying one).
 ## What works
 
 - Identity: an Ed25519 key, restored from 24 words or a paper QR code.
-- Cards up to 128×128 px, 32 colours, animation; 33 built-in palettes.
+- Cards up to 64×64 px in the app (the format holds 128), 32 colours,
+  animation; 33 built-in palettes; a pixel editor with an undo tree.
 - New cards from PNG and Aseprite files (layers, frames, upscaled exports).
 - Giving and receiving by QR — one code, or a fountain-coded carousel for
   large cards; every card and envelope signature is checked. QR codes are
@@ -22,7 +23,8 @@ only way a card moves is a QR code (or a link carrying one).
 - Numbered copies: the artist scans the recipient's code and issues
   "№3 of 50", signed and bound to that person.
 - Collection by weeks and months, archive, bin, personal notes.
-- Encrypted backups that open only with the same 24 words.
+- Encrypted backups that open only with the same key (its words or paper QR);
+  restoring brings back the key and the collection in one step.
 - Russian and English; installable, works offline.
 
 ## Layout
@@ -59,8 +61,9 @@ scripts/build-wasm.sh       # the core for the browser, into web/pkg/
 scripts/serve.sh            # http://localhost:8000
 ```
 
-Browser tests drive the app in Chromium through its real journeys —
-import, exchange by QR, refusals, numbered copies, backups:
+Browser tests drive the app in Chromium (and, in CI, Firefox) through its
+real journeys — import, exchange by QR, refusals, numbered copies, backups,
+restoring, the editor:
 
 ```sh
 cd tests/e2e && npm ci && npx playwright install chromium && npm test

@@ -5,7 +5,7 @@ import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { setup, photo, fromPicture, choose, tab, toast, heart, gradient, textMatching } from './helpers.mjs';
+import { setup, photo, fromPicture, choose, tab, toast, heart, gradient, wide, textMatching } from './helpers.mjs';
 
 /** @type {Awaited<ReturnType<typeof setup>>} */
 let env;
@@ -43,6 +43,87 @@ test('a key restored from the words is the same key', async () => {
   await b.context().close();
 });
 
+test('restoring on a new phone: the backup and the key in one step', async () => {
+  const short = (p) => p.evaluate(async () => (await import('/src/state.js')).app.identity.publicKey().short);
+  const a = await env.phone('pixelfox');
+  await tab(a, 'me');
+  await a.click('text=Добавить образцы карточек');
+  await a.waitForTimeout(1500);
+  await a.evaluate(async () => {
+    const s = await import('/src/state.js');
+    await s.setProfile({ ...s.app.profile, link: 'pixelfox.example' });
+  });
+  await tab(a, 'collection');
+  await tab(a, 'me');
+  const [download] = await Promise.all([a.waitForEvent('download'), a.click('text=Сохранить копию')]);
+  const file = join(env.dir, 'restore.pipsbak');
+  await download.saveAs(file);
+  const list = (await words(a)).split(' ');
+  // The paper key, as printed.
+  await a.click('text=Бумажный ключ');
+  await a.getByRole('button', { name: 'Показать', exact: true }).click();
+  const paper = await photo(a, '.secret .qr-box canvas', env.dir, 'paper-key');
+
+  const fresh = async () => {
+    const p = await env.blank('новый телефон');
+    await p.click('text=У меня уже есть ключ');
+    return p;
+  };
+  const status = (p) => p.textContent('.onb-status[role="status"]');
+  const go = (p) => p.isEnabled('.onb-go');
+
+  // The backup first: whose it is shows before any key.
+  const b = await fresh();
+  await choose(b, () => b.click('text=Выбрать файл копии'), file);
+  await b.locator('.onb-file .idcard').waitFor(); // the file is read in the background
+  assert.equal(await b.textContent('.onb-file .idcard small'), `Ключ ${await short(a)}`);
+  // A typo shows in its cell at once; a swap, once all 24 are in.
+  await b.fill('.words-entry input >> nth=0', list.join(' '));
+  await b.fill('.words-entry input >> nth=5', 'qqq');
+  assert.match(await status(b), /Слова № 6 нет в списке/);
+  assert.equal(await b.getAttribute('.words-entry input >> nth=5', 'aria-invalid'), 'true');
+  await b.fill('.words-entry input >> nth=5', `${list[6]} ${list[5]}`); // two words, swapped, from cell 6 on
+  assert.match(await status(b), /не сходятся/);
+  assert.equal(await go(b), false);
+  // Four letters of each word are enough; they are written out in full.
+  await b.fill('.words-entry input >> nth=0', list.map((w) => w.slice(0, 4)).join(' '));
+  assert.equal(await b.inputValue('.words-entry input >> nth=23'), list[23]);
+  assert.equal(await b.textContent('.onb-status .idcard small'), `Ключ ${await short(a)} · подходит к копии`);
+  await b.click('.onb-go');
+  await b.locator('nav.tabs').waitFor(); // no nick asked: it came with the backup
+  const facts = await b.evaluate(async () => {
+    const s = await import('/src/state.js');
+    return { cards: s.app.cards.size, nick: s.app.profile.nick, link: s.app.profile.link };
+  });
+  assert.deepEqual(facts, { cards: 22, nick: 'pixelfox', link: 'pixelfox.example' });
+  assert.equal(await short(b), await short(a));
+
+  // Another key's words do not open this backup.
+  const c = await env.phone('чужой');
+  const other = await words(c);
+  const d = await fresh();
+  await choose(d, () => d.click('text=Выбрать файл копии'), file);
+  await d.locator('.onb-file .idcard').waitFor(); // the file is read in the background
+  await d.fill('.words-entry input >> nth=0', other);
+  assert.match(await status(d), /а копия — от другого/);
+  assert.equal(await go(d), false);
+  await d.click('[aria-label="Убрать"]'); // without the file, the key alone will do
+  assert.equal(await go(d), true);
+
+  // The paper key, from a photo of it.
+  const e = await fresh();
+  await e.click('.onb .seg >> text=Бумажный ключ');
+  await fromPicture(e, '.onb', paper);
+  await e.locator('.onb-status .idcard').waitFor();
+  assert.equal(await e.textContent('.onb-status .idcard small'), `Ключ ${await short(a)}`);
+  await e.click('.onb-go');
+  await e.fill('.field input', 'pixelfox'); // no backup: the nick is asked
+  await e.click('text=Готово');
+  await e.locator('nav.tabs').waitFor();
+  assert.equal(await short(e), await short(a));
+  for (const p of [a, b, c, d, e]) await p.context().close();
+});
+
 test('import keeps its layout and reports what it did', async () => {
   const p = await env.phone('pixelfox');
   await tab(p, 'import');
@@ -61,6 +142,12 @@ test('import keeps its layout and reports what it did', async () => {
 
   await p.selectOption('.import-body select', { label: 'PICO-8 · 16' });
   assert.match(await textMatching(p, '.import-status', /палитра PICO-8 · 512 пикселей сменили цвет/), /палитра PICO-8 · 512 пикселей сменили цвет/);
+  assert.equal(await buttonsAt(), empty);
+
+  // Wider than any canvas of the app: the editor's rule, said here too.
+  await choose(p, () => p.click('text=Другой файл'), await wide(env.dir));
+  assert.match(await textMatching(p, '.import-status', /до 64×64/), /^80×8: в приложении карточка до 64×64/);
+  assert.ok(await p.locator('.import-actions .btn.key').isDisabled(), 'not signed');
   assert.equal(await buttonsAt(), empty);
 
   await choose(p, () => p.click('text=Другой файл'), await heart(env.dir));
@@ -111,8 +198,26 @@ test('a card goes from one phone to another and is checked on arrival', async ()
   await fromPicture(b, 'section.view:visible', code);
   await b.waitForTimeout(500);
   assert.equal(await cards(b), 1);
-  await a.context().close();
-  await b.context().close();
+
+  // Passed on once more: the code names its last sender, not the hands
+  // before, so the path leaves a gap rather than claim a direct one.
+  const c = await env.phone('lumen');
+  const relay = await b.evaluate(async () => {
+    const s = await import('/src/state.js');
+    const [e] = [...s.app.cards.values()];
+    return s.app.core.qrPlan(s.app.identity.sealAsSender(e.rec.payload, s.app.profile.nick)).text;
+  });
+  await c.evaluate(async (text) => {
+    const s = await import('/src/state.js');
+    await s.receive(s.app.core.openEnvelope(s.app.core.classify(text).bytes));
+  }, relay);
+  await tab(c, 'collection');
+  assert.match(await c.evaluate(async () => {
+    const { cardBack } = await import('/src/collection/back.js');
+    const [e] = [...(await import('/src/state.js')).app.cards.values()];
+    return cardBack(e, { editing: false, onEdit() {}, onTag() {}, onAuthor() {} }).el.textContent;
+  }), /@pixelfox → … → @mossfern → вам/);
+  for (const p of [a, b, c]) await p.context().close();
 });
 
 test('damaged and forged codes are refused with their reason', async () => {
@@ -144,6 +249,10 @@ test('damaged and forged codes are refused with their reason', async () => {
 test('numbered copies: issued once each, until the run is complete', async () => {
   const a = await env.phone('pixelfox');
   const b = await env.phone('mossfern');
+  // A backup before the copies: they make it stale at once.
+  await tab(a, 'me');
+  const [saved] = await Promise.all([a.waitForEvent('download'), a.click('text=Сохранить копию')]);
+  await saved.cancel();
   await ownCard(a, 'Сердце');
   await act(a, 'share');
   await a.click('.top-sheet button:text("Экземпляр №")');
@@ -170,6 +279,11 @@ test('numbered copies: issued once each, until the run is complete', async () =>
   }
   assert.equal(await a.textContent('.edition-panel .hint'), 'Выдано 2 из 2');
   assert.ok(await a.locator('.edition-panel .btn').isDisabled());
+  await a.keyboard.press('Escape');
+  await tab(a, 'me');
+  // (Profile draws itself anew when shown: wait for it.)
+  assert.match(await textMatching(a, '.group:has(h2:text("Резервная копия"))', /После копии/), /изменений после неё: 1.*После копии выданы 2 номерных экземпляра/s);
+  assert.ok(await a.locator('.group:has(h2:text("Резервная копия")) .btn.key').isVisible(), 'saving is the main action now');
   await a.context().close();
   await b.context().close();
 });
@@ -391,6 +505,8 @@ test('the editor: drawing, undo that loses nothing, palettes, frames, a draft, s
   await stroke([2, 6], [9, 6]);
   assert.equal(await cell(5, 6), '#c4392f');
   await p.click('.ed-bar .ib >> nth=1', { button: 'right' }); // the whole history
+  await p.locator('.ed-history').waitFor();
+  assert.equal(await p.evaluate(() => document.getElementById('app').scrollTop), 0, 'the history list scrolls itself, never the screen');
   await p.locator('.ed-history .ed-branch').first().click();
   assert.equal(await cell(5, 2), '#17151f', 'the abandoned line is back');
   assert.equal(await cell(5, 6), null);
@@ -405,6 +521,36 @@ test('the editor: drawing, undo that loses nothing, palettes, frames, a draft, s
   await p.mouse.up();
   assert.equal(await cell(13, 12), null, 'the corner cell is taken out');
   assert.equal(await cell(13, 13), '#17151f');
+
+  // A selection: a box around the stair, moved four cells right, mirrored —
+  // two steps, both undone.
+  await p.keyboard.press('s');
+  await stroke([11, 11], [15, 15]);
+  assert.equal(await p.isVisible('.ed-sel-bar'), true);
+  await stroke([13, 13], [17, 13]);
+  assert.equal(await cell(17, 13), '#17151f', 'moved');
+  assert.equal(await cell(13, 13), null, 'and gone from where it was');
+  await p.click('.ed-sel-btn[aria-label="Отразить слева направо"]');
+  assert.equal(await undoLabel(), 'Отменить: отражение');
+  await p.keyboard.press('Control+z');
+  await p.keyboard.press('Control+z');
+  assert.equal(await cell(13, 13), '#17151f', 'back in place');
+  assert.equal(await cell(17, 13), null);
+
+  // The dithering pen fills every other cell.
+  await p.keyboard.press('d');
+  await stroke([2, 20], [9, 20]);
+  assert.deepEqual([await cell(2, 20), await cell(3, 20), await cell(4, 20)], ['#17151f', null, '#17151f']);
+  assert.equal(await undoLabel(), 'Отменить: шахматка');
+  await p.keyboard.press('d');
+
+  // Zooming brings the whole card closer; 0 puts it back.
+  const mid = at(16, 16);
+  await p.mouse.move(mid.x, mid.y);
+  await p.mouse.wheel(0, -100);
+  assert.match(await p.$eval('.ed-card', (e) => e.style.transform), /scale\(1\.25\)/);
+  await p.keyboard.press('0');
+  assert.equal(await p.$eval('.ed-card', (e) => e.style.transform), '');
 
   // A ready palette, tried and applied: the picture takes its colours, one step.
   await p.click('.ed-pal-name');
@@ -443,6 +589,93 @@ test('the editor: drawing, undo that loses nothing, palettes, frames, a draft, s
   await p.context().close();
 });
 
+test('the precise mode works with every tool', async () => {
+  const p = await env.phone('aimfox');
+  await tab(p, 'draw');
+  await p.locator('.ed-art').waitFor();
+  await p.click('.ed-tool-precise');
+  const cell = (x, y) => p.evaluate(([x, y]) => {
+    const d = document.querySelectorAll('.ed-layer')[2].getContext('2d').getImageData(x, y, 1, 1).data;
+    return d[3] ? `#${[d[0], d[1], d[2]].map((v) => v.toString(16).padStart(2, '0')).join('')}` : null;
+  }, [x, y]);
+  // Fingers as pointer events: one moves on the pad, another holds a button.
+  const finger = (sel, type, id, dx = 0, dy = 0) => p.evaluate(([sel, type, id, dx, dy]) => {
+    const el = document.querySelector(sel), r = el.getBoundingClientRect();
+    const x = sel === '.ed-pad' ? r.left + 20 : r.left + r.width / 2, y = sel === '.ed-pad' ? r.top + 50 : r.top + r.height / 2;
+    el.dispatchEvent(new PointerEvent(type, { bubbles: true, pointerId: id, pointerType: 'touch', clientX: x + dx, clientY: y + dy }));
+  }, [sel, type, id, dx, dy]);
+  /** Moves the cursor by whole cells (22 px of finger a cell). */
+  const aim = async (cx, cy) => {
+    await finger('.ed-pad', 'pointerdown', 2);
+    await finger('.ed-pad', 'pointermove', 2, cx * 22, cy * 22);
+    await finger('.ed-pad', 'pointerup', 2, cx * 22, cy * 22);
+  };
+  /** Holds a button while the cursor moves (or not). */
+  const hold = async (sel, cx = 0, cy = 0) => {
+    await finger(sel, 'pointerdown', 1);
+    if (cx || cy) {
+      await finger('.ed-pad', 'pointerdown', 2);
+      await finger('.ed-pad', 'pointermove', 2, cx * 22, cy * 22);
+      await finger('.ed-pad', 'pointerup', 2, cx * 22, cy * 22);
+    }
+    await finger(sel, 'pointerup', 1);
+  };
+  const put = '.ed-put', erase = '.ed-pad .ed-round:nth-child(2)';
+  assert.equal(await p.textContent(put), 'Ставить');
+
+  // The pen: a dot, then a line while held. The cursor starts in the middle (16, 16).
+  await hold(put);
+  assert.equal(await cell(16, 16), '#17151f');
+  await hold(put, 4, 0);
+  assert.deepEqual([await cell(18, 16), await cell(20, 16)], ['#17151f', '#17151f']);
+  // The eraser button, under the cursor (now at 20, 16).
+  await hold(erase);
+  assert.equal(await cell(20, 16), null);
+
+  // Fill, in red, from an empty cell: everything empty takes it.
+  await p.click('.ed-tool-fill');
+  await p.click('.ed-swatch >> nth=8');
+  assert.equal(await p.textContent(put), 'Залить');
+  await aim(-18, -14); // to (2, 2)
+  await hold(put);
+  assert.equal(await cell(30, 30), '#c4392f');
+  assert.equal(await cell(18, 16), '#17151f', 'the line stays');
+  await p.click('.ed-bar .ib >> nth=1'); // undo the fill
+  assert.equal(await cell(30, 30), null);
+
+  // A rectangle, dragged from press to release.
+  await p.click('.ed-tool-shapes');
+  await p.click('.ed-tool-shapes');
+  await p.click('.ed-shape[data-kind="rect"]');
+  await hold(put, 4, 4); // (2, 2) to (6, 6)
+  assert.deepEqual([await cell(6, 2), await cell(2, 6), await cell(4, 4)], ['#c4392f', '#c4392f', null]);
+
+  // A selection around it, then moved eight cells right.
+  await p.click('.ed-tool-select');
+  assert.equal(await p.textContent(put), 'Выделить');
+  await aim(-5, -5); // (1, 1)
+  await hold(put, 6, 6); // the box (1, 1)–(7, 7)
+  assert.equal(await p.isVisible('.ed-sel-bar'), true);
+  await aim(-3, -3); // (4, 4), inside
+  await hold(put, 8, 0);
+  assert.deepEqual([await cell(14, 2), await cell(6, 2)], ['#c4392f', null]);
+  assert.equal(await p.getAttribute('.ed-bar .ib >> nth=1', 'aria-label'), 'Отменить: перенос');
+
+  // The pipette button takes the colour under the cursor.
+  await p.click('.ed-tool-pen');
+  await p.click('.ed-swatch >> nth=4'); // ink
+  await aim(-2, -2); // (10, 2): the moved rectangle's corner, red
+  await p.click('.ed-pad .ed-round:nth-child(1)');
+  assert.match(await p.getAttribute('.ed-swatch[aria-pressed="true"]', 'aria-label'), /#c4392f/);
+
+  // The mirror works here too.
+  await p.click('.ed-tool-mirror');
+  await aim(0, 20); // (10, 22)
+  await hold(put);
+  assert.deepEqual([await cell(10, 22), await cell(21, 22)], ['#c4392f', '#c4392f']);
+  await p.context().close();
+});
+
 test('a backup restores cards, notes and the copy log, only for its key', async () => {
   const a = await env.phone('pixelfox');
   await tab(a, 'me');
@@ -469,7 +702,7 @@ test('a backup restores cards, notes and the copy log, only for its key', async 
     await p.waitForTimeout(800);
     return toast(p);
   };
-  const b = await env.phone('новый телефон', await words(a));
+  const b = await env.phone('новый', await words(a));
   await tab(b, 'me');
   assert.equal(await restore(b, file), 'Восстановлено: 22');
   const facts = await b.evaluate(async () => {
@@ -477,12 +710,37 @@ test('a backup restores cards, notes and the copy log, only for its key', async 
     const r = [...s.app.cards.values()].map((e) => e.rec);
     return { notes: r.filter((x) => x.note).length, tags: r.flatMap((x) => x.tags ?? []).join(' '), archived: r.filter((x) => x.state === 'archive').length, nick: s.app.profile.nick };
   });
-  assert.deepEqual(facts, { notes: 1, tags: 'фестиваль совы', archived: 1, nick: 'pixelfox' });
+  // The profile fills only what is empty: this phone's own nick stays.
+  assert.deepEqual(facts, { notes: 1, tags: 'фестиваль совы', archived: 1, nick: 'новый' });
   assert.match(await b.locator('.group:has(h2:text("Резервная копия")) .hint').first().textContent(), /Последняя/);
 
+  // Another key's backup: the way to it is to switch to that key, from here.
   const c = await env.phone('чужой');
+  await ownCard(c, 'Луна');
   await tab(c, 'me');
   assert.match(await restore(c, file), /Это копия другого ключа/);
+  await c.click('.toast .text-btn'); // «Сменить ключ»
+  assert.match(await c.locator('.dialog').textContent(), /1 ваша карточка подписана нынешним ключом/);
+  await c.click('.dialog button:text-is("Сменить ключ")');
+  assert.equal(await c.textContent('.onb h1'), 'Другой ключ');
+  assert.match(await c.textContent('.onb-file .idcard small'), /Ключ /, 'the backup comes along');
+  await c.fill('.words-entry input >> nth=0', await words(a));
+  await c.click('.onb-go');
+  await c.locator('.onb').waitFor({ state: 'detached' });
+  assert.equal(await toast(c), 'Ключ сменён');
+  const after = await c.evaluate(async () => {
+    const s = await import('/src/state.js');
+    const all = [...s.app.cards.values()];
+    const me = s.app.identity.publicKey().hex;
+    return {
+      cards: all.length,
+      mineIsMyKey: all.every((e) => e.rec.mine === (e.author?.hex === me)),
+      moon: all.find((e) => e.card.title === 'Луна')?.rec.mine,
+      nick: s.app.profile.nick,
+    };
+  });
+  assert.deepEqual(after, { cards: 23, mineIsMyKey: true, moon: false, nick: 'чужой' });
+  assert.equal(await c.textContent('.idcard small'), `Ключ ${await c.evaluate(async () => (await import('/src/state.js')).app.identity.publicKey().short)}`);
   const bytes = await readFile(file);
   bytes[bytes.length - 5] ^= 1;
   await writeFile(join(env.dir, 'bad.pipsbak'), bytes);

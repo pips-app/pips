@@ -35,6 +35,7 @@ export function settingsPanel(o) {
     onChange: (v) => o.axes({ x: v.includes('x'), y: v.includes('y') }),
   });
   const grid = /** @type {HTMLInputElement} */ (h('input', { type: 'checkbox', checked: true, onchange: () => o.grid(grid.checked) }));
+  let shade = -1;
   const el = h('div', { class: 'ed-settings' },
     h('div', { class: 'ed-set-row' }, h('h3', {}, t('ed.set.size')), size.el),
     h('div', { class: 'ed-set-row' }, h('h3', {}, t('ed.set.shade')), shades),
@@ -51,6 +52,8 @@ export function settingsPanel(o) {
       // A delay set elsewhere (an imported card) may be none of the presets.
       delay.set(String(DELAYS.includes(doc.delay) ? doc.delay : ''));
       delayRow.hidden = doc.frames.length < 2;
+      if (doc.shade === shade) return;
+      shade = doc.shade;
       shades.replaceChildren(...FRAME_SHADES.map((s, i) => h('button', {
         type: 'button', class: 'shade', role: 'radio', 'aria-checked': String(i === doc.shade), 'aria-label': t('ed.set.shade.n', i + 1),
         style: { background: s.paper }, onclick: () => o.shade(i),

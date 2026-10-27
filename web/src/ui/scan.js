@@ -6,7 +6,6 @@
 import { h, icon } from '../dom.js';
 import { t } from '../i18n.js';
 import { qrReader } from '../qrscan.js';
-import { toast } from './shell.js';
 
 /** @param {(text: string) => void} onText @param {string} [hint] */
 export function scanner(onText, hint = t('receive.point')) {
@@ -75,11 +74,14 @@ export function scanner(onText, hint = t('receive.point')) {
     imageInput.value = '';
     if (!f) return;
     const r = await reader();
-    if (!r) return toast(t('scan.failed'));
+    if (!r) return;
     const texts = await r.read(await createImageBitmap(f)).catch(() => /** @type {string[]} */ ([]));
-    if (!texts.length) return toast(t('scan.none'));
+    if (!texts.length) return say(t('scan.none'));
     for (const text of texts) onText(text);
   }
 
-  return { el, stop };
+  /** Tells the person something, in the scanner's own place (it may be shown before the app's toasts exist). @param {string} text */
+  function say(text) { message.textContent = text; }
+
+  return { el, stop, say };
 }

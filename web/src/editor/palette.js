@@ -20,7 +20,7 @@ const HOLD_MS = 450;
  * }} o
  */
 export function paletteGrid(o) {
-  let page = 0, chosen = 0;
+  let page = 0, chosen = 0, shown = '';
   /** @type {import('./model.js').Doc|null} */
   let doc = null;
   const nameBtn = h('button', { type: 'button', class: 'ed-pal-name', onclick: o.open });
@@ -70,6 +70,9 @@ export function paletteGrid(o) {
     el,
     /** @param {import('./model.js').Doc} d @param {number} i the chosen colour */
     set(d, i) {
+      const sig = `${d.colors.join()}|${d.builtin}|${i}`;
+      if (doc === d && sig === shown) return; // unchanged: no new buttons under a finger
+      shown = sig;
       doc = d;
       if (i !== chosen) page = Math.floor(i / PAGE); // the chosen colour is always in sight
       chosen = i;

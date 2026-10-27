@@ -1,9 +1,10 @@
 // @ts-check
 // The precise mode: for a pixel smaller than a fingertip. A finger moving
 // anywhere on the pad moves a cursor over the canvas — slower than the
-// finger, so it lands exactly — and the big button puts the colour where
-// the cursor is. Held while the finger moves, it draws a line. Beside it,
-// the same for empty cells, and the pipette.
+// finger, so it lands exactly — and the big button does what the chosen
+// tool does where the cursor is: a pixel (held while the finger moves, a
+// line), a fill, a shape or a selection dragged from press to release, a
+// colour picked. Beside it, the same for empty cells, and the pipette.
 
 import { h, icon } from '../dom.js';
 import { t } from '../i18n.js';
@@ -21,7 +22,11 @@ export function precisePad(o) {
   /** A button that acts while held. @param {string} cls @param {any} ic @param {string} label @param {boolean} erase */
   const hold = (cls, ic, label, erase) => {
     const b = h('button', { type: 'button', class: cls, 'aria-label': label, title: label }, ic ? icon(ic) : label);
-    b.addEventListener('pointerdown', (e) => { e.stopPropagation(); b.setPointerCapture(e.pointerId); o.press(erase); });
+    b.addEventListener('pointerdown', (e) => {
+      e.stopPropagation();
+      try { b.setPointerCapture(e.pointerId); } catch { /* synthetic pointers */ }
+      o.press(erase);
+    });
     for (const ev of ['pointerup', 'pointercancel']) b.addEventListener(ev, () => o.release());
     // From a keyboard: a press is a dot.
     b.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); o.press(erase); o.release(); } });
@@ -37,7 +42,7 @@ export function precisePad(o) {
   const fingers = new Map();
   el.addEventListener('pointerdown', (e) => {
     if (/** @type {Element} */ (e.target).closest('button')) return;
-    el.setPointerCapture(e.pointerId);
+    try { el.setPointerCapture(e.pointerId); } catch { /* synthetic pointers */ }
     fingers.set(e.pointerId, { x: e.clientX, y: e.clientY });
   });
   el.addEventListener('pointermove', (e) => {
@@ -51,7 +56,16 @@ export function precisePad(o) {
 
   return {
     el,
-    /** The colour the big button puts. @param {string} css */
-    color(css) { put.style.setProperty('--put', css); },
+    /**
+     * What the big button will do, in a word, and the colour it puts (none
+     * for a tool that puts no colour). @param {string} label @param {string|null} css
+     */
+    mode(label, css) {
+      if (put.textContent !== label) put.textContent = label;
+      put.setAttribute('aria-label', label);
+      if (css) put.style.setProperty('--put', css);
+      else put.style.removeProperty('--put');
+      put.classList.toggle('plain', !css);
+    },
   };
 }

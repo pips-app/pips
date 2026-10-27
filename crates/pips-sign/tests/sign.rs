@@ -2,7 +2,7 @@
 #![allow(clippy::cast_possible_truncation, clippy::type_complexity)]
 
 use pips_format::{Card, Handle, Network};
-use pips_sign::recovery::{from_paper, from_words, to_paper, to_words, RecoveryError, PAPER_PREFIX};
+use pips_sign::recovery::{from_paper, from_words, to_paper, to_words, word_list, RecoveryError, PAPER_PREFIX};
 use pips_sign::{
     open, seal, sign_card, verify_card, Certificate, Error, PublicKey, RecipientCode, SecretKey, CERTIFICATE_LEN,
 };
@@ -280,4 +280,15 @@ fn envelope_tampering_is_caught() {
     other.title = "Другая".into();
     sign_card(&mut other, &author).unwrap();
     assert_eq!(seal(&other, Some(&cert), None), Err(Error::BadSignature));
+}
+
+/// What the app's word entry relies on: the list is sorted, and a word's
+/// first four letters (all of it, if shorter) tell it from every other.
+#[test]
+fn four_letters_name_a_word() {
+    let list = word_list();
+    assert!(list.windows(2).all(|w| w[0] < w[1]));
+    let mut prefixes: Vec<&str> = list.iter().map(|w| &w[..w.len().min(4)]).collect();
+    prefixes.dedup();
+    assert_eq!(prefixes.len(), 2048);
 }

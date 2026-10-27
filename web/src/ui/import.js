@@ -11,11 +11,12 @@
 // original bytes, so options never compound.
 
 import { h, icon, byteLimit, fitBytes } from '../dom.js';
-import { t } from '../i18n.js';
+import { t, reason } from '../i18n.js';
 import { app, addOwn } from '../state.js';
 import { frame, FRAME_SHADES, BLANK_CARD } from './card.js';
 import { go, toast } from './shell.js';
 import { iconButton } from '../kit/icon-button.js';
+import { issuable, MAX_EDGE } from '../budget.js';
 
 const ACCEPT = '.png,.aseprite,.ase,image/png';
 
@@ -178,8 +179,12 @@ export function importView() {
     preview.replaceChildren(f, chip ?? '');
     preview.setAttribute('aria-label', !bytes ? t('import.pick') : t('import.toggle'));
 
-    status.classList.toggle('bad', !!error);
-    status.textContent = error ? explain(error) : result ? report(result) : t('import.pick.hint');
+    // The same rule as the editor's: what cannot be signed says why, here.
+    const check = result ? issuable(result.card, app.core.shareSize(result.card)) : null;
+    const refusal = check?.refused === 'too_big' ? t('import.over-app', result.card.width, result.card.height, MAX_EDGE)
+      : check?.refused === 'too_slow' ? t('ed.budget.over.why', check.cost.bytes) : '';
+    status.classList.toggle('bad', !!error || !!refusal);
+    status.textContent = error ? explain(error) : result ? (refusal || report(result)) : t('import.pick.hint');
     paletteField.classList.toggle('attention', error?.code === 'too_many_colors' || autoFit);
 
     shades.replaceChildren(...FRAME_SHADES.map((s, i) => h('button', {
@@ -189,7 +194,7 @@ export function importView() {
         paint();
       },
     })));
-    save.disabled = !result;
+    save.disabled = !result || !!refusal;
     pickBtn.textContent = t(bytes ? 'import.other' : 'import.pick');
     extras.replaceChildren(...options());
   }
@@ -220,8 +225,8 @@ export function importView() {
     else if (opts.fit != null && r.changedPixels) bits.push(t('import.palette.fitted', r.colors, c.palette.inline.length - (c.opaque ? 0 : 1)));
     else bits.push(t('import.palette.own', r.colors));
     if (r.changedPixels && opts.fit == null) bits.push(t('import.changed', r.changedPixels));
-    const size = app.core.shareSize(c);
-    bits.push(size <= 600 ? t('import.code.single', size) : t('import.code.carousel', size));
+    const { cost } = issuable(c, app.core.shareSize(c));
+    bits.push(cost.level === 'one' ? t('import.code.single', cost.bytes) : t('import.code.carousel', cost.bytes, cost.codes, cost.seconds));
     return (autoFit ? `${t('import.fitted-auto')} ` : '') + bits.join(' · ');
   }
 
@@ -247,7 +252,7 @@ export function importView() {
   }
 
   async function sign() {
-    if (!result) return;
+    if (!result || save.disabled) return;
     const p = app.profile;
     const card = { ...result.card, title: title.value.trim(), frame: shade, author: p.nick, handle: p.handle, link: p.link };
     try {
@@ -288,7 +293,5 @@ function paletteName(id) {
 /** A translated reason, with the numbers the core attached.
  * @param {{code: string, args?: number[], message?: string}} e */
 function explain(e) {
-  const key = `import.err.${e?.code}`;
-  const text = t(key, ...(e?.args ?? []));
-  return text === key ? `${t('err.generic')}: ${e?.message ?? e}` : text;
+  return reason('import.err', e, ...(e?.args ?? []));
 }

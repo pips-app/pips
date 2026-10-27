@@ -71,6 +71,13 @@ pub fn to_words(key: &SecretKey) -> Zeroizing<String> {
     out
 }
 
+/// The English BIP39 list, in order. The first four letters of a word are
+/// enough to tell it from every other, so a person may type only those.
+#[must_use]
+pub fn word_list() -> &'static [&'static str; 2048] {
+    bip39::Language::English.word_list()
+}
+
 /// The key for 24 words. Case and extra whitespace are forgiven, since
 /// people type these by hand; nothing else is.
 ///

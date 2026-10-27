@@ -34,13 +34,16 @@ src/core.js                               loads the WASM core (or the dev stub)
 src/qrscan.js                             QR reading: BarcodeDetector or pkg/pips_scan, on demand
 src/store.js                              IndexedDB: meta + cards
 src/state.js                              the one place that changes data
-src/i18n.js                               ru / en strings
+src/i18n.js                               ru / en strings, core errors in words
+src/words.js                              the recovery words as typed: whole or four letters
+src/budget.js                             what a card may be to be signed, drawn or imported
+src/editions.js                           copy-number logs: joined, and the next number
 src/dom.js                                DOM without innerHTML, the icon set
 src/kit/                                  the bricks: motion, gestures, buttons, fields, sheets
 src/collection/                           the collection screen, built from the bricks
 src/editor/                               the pixel editor: model, undo tree, tools, its parts
 src/ui/                                   shell, card frame, qr, scan, the other tabs,
-                                          import, edition, onboarding
+                                          import, edition, onboarding (with the words entry)
 fonts/                                    Literata, IBM Plex Sans (OFL), self-hosted
 ```
 
@@ -71,15 +74,16 @@ thing, with one way of fitting together:
      `collection/query.js` (cards in, rectangles or lists out); in the editor
      `color.js`, `raster.js` (where tools put pixels), `history.js` (the undo
      tree), `model.js` (the picture and its changes), `to-card.js`,
-     `budget.js` (how long a card takes to pass on), and the input
-     arbiters.
+     and the input arbiters; for both ways of making a card, `budget.js`
+     (what a card may be to be signed, how long it takes to pass on).
   4. `kit/*` controls — icon button, segmented switch, chips, search field,
      top and bottom sheets, strip, action bar, identicon.
   5. Screen parts — `collection/stage.js` (the zoom axis), `turn.js` (the card
      that turns over), `back.js`, `share.js` (the share sheet), `moves.js`
      (sending cards between places, the strip, undo), `selection.js`,
      `first-run.js`; `editor/canvas.js`, `input.js` (a finger draws at once,
-     so the editor has its own arbiter), `tools.js`, `palette.js`,
+     so the editor has its own arbiter), `strokes.js` (what each tool does
+     with a finger), `selection.js`, `tools.js`, `palette.js`,
      `frames.js`, `precise.js`, `settings.js` and the editor's sheets.
   6. Screens — `collection/view.js`, `editor/view.js` only put parts together
      and decide what gestures mean.

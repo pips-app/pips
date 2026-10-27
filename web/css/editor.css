@@ -2,7 +2,7 @@
    phone a column (card, frames, palette, tools); on a wide screen the tools
    in a rail on the left and the palette and settings on the right. */
 
-.view.ed-view { inset: 0; background: var(--void); }
+.view.ed-view { inset: 0; background: var(--void); overflow: clip; } /* closed sheets wait below, out of sight */
 .ed-bar { gap: 6px; padding-left: 8px; }
 .ed-bar .ib { width: 44px; height: 44px; background: var(--raise2); color: var(--text); }
 .ed-bar .ib.plain { background: none; margin-left: 0; }
@@ -38,11 +38,14 @@
 
 /* The canvas: a stage that zooms and moves, and a layer of thin lines over it. */
 .ed-art { position: relative; aspect-ratio: 1; overflow: hidden; touch-action: none; cursor: crosshair; -webkit-user-select: none; user-select: none; }
-.ed-stage { position: absolute; inset: 0; transform-origin: 0 0; }
 .ed-layer { position: absolute; inset: 0; width: 100%; height: 100%; image-rendering: pixelated; }
 .ed-onion { opacity: .45; }
 .ed-art.playing .ed-onion { display: none; }
-.ed-lines { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.ed-lines { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 2; }
+/* Zoomed in, the card is brought closer: scaled from its corner, clipped by its place. */
+.ed-card-wrap { overflow: hidden; touch-action: none; }
+.ed-card { transform-origin: 0 0; }
+.ed-card.lifted .face { box-shadow: none; }
 
 /* Frames: the playing preview, then the frames, scrolling, fading out at the edge. */
 .ed-frames { display: flex; align-items: center; gap: 8px; padding: 10px 12px 4px; }
@@ -90,6 +93,13 @@
 .ed-shape { flex: 1; height: 44px; border: 0; border-radius: 10px; background: none; color: var(--text2); display: grid; place-items: center; }
 .ed-shape[aria-pressed="true"] { background: var(--raise); color: var(--text); }
 
+/* The selection's actions take the place of the frames while there is a box. */
+.ed-sel-bar { display: flex; gap: 4px; justify-content: center; padding: 10px 12px 4px; }
+.ed-sel-bar[hidden] { display: none; }
+.ed-sel-btn { width: 44px; height: 44px; border: 0; border-radius: 12px; background: var(--raise2); color: var(--text); display: grid; place-items: center; }
+.ed-sel-btn[aria-pressed="true"] { background: var(--cobalt); color: #fff; }
+.ed-view.selecting .ed-frames { display: none; }
+
 /* The precise mode: the pad takes the place of the frames. */
 .ed-pad { display: none; flex: 1; min-height: 180px; margin: 4px 12px 8px; border-radius: 22px; background: var(--raise); border: 1px solid var(--line);
   position: relative; touch-action: none; padding: 14px; flex-direction: column; justify-content: space-between; }
@@ -98,6 +108,7 @@
 .ed-round { width: 60px; height: 60px; border-radius: 50%; border: 0; background: var(--raise2); color: var(--text); display: grid; place-items: center; }
 .ed-put { width: 96px; height: 96px; border-radius: 50%; border: 0; background: var(--put, var(--cobalt)); color: #fff; font-weight: 600;
   text-shadow: 0 1px 2px #0008; box-shadow: 0 0 0 4px var(--raise), 0 0 0 6px var(--text); margin-left: auto; }
+.ed-put.plain { background: var(--raise2); text-shadow: none; }
 .ed-view.precise .ed-pad { display: flex; }
 .ed-view.precise .ed-frames { display: none; }
 .ed-view.precise .ed-lower { min-height: 0; }
