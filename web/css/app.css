@@ -116,6 +116,13 @@ svg.i { width: 22px; height: 22px; stroke: currentColor; fill: none; stroke-widt
 .field:focus-within { box-shadow: inset 0 0 0 2px var(--cobalt-hi); }
 .field .prefix { font-size: 15px; color: var(--text3); margin-right: -10px; user-select: none; }
 .field select option { background: var(--raise); }
+/* A select that is the prefix of the field's input (a network before a name). */
+.field select.net { flex: none; color: var(--text2); padding-right: 10px; border-right: 1px solid var(--line); }
+/* «Saved», beside a group's heading, for a moment after each save. */
+.saved-mark { margin-left: 8px; color: var(--cobalt-hi); opacity: 0; }
+.saved-mark.on { animation: saved-mark 1.8s ease-out; }
+@keyframes saved-mark { 0%, 70% { opacity: 1; } 100% { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .saved-mark.on { animation-duration: .01s; animation-delay: 1.2s; } }
 .group { margin-top: 24px; }
 .group h2 { margin: 0 0 8px; font-size: 12px; font-weight: 500; color: var(--text3); letter-spacing: .02em; }
 .error { color: var(--warn); font-size: 13px; margin: 8px 2px 0; min-height: 1em; }
@@ -166,8 +173,15 @@ svg.i { width: 22px; height: 22px; stroke: currentColor; fill: none; stroke-widt
   background: #121318; box-shadow: inset 0 0 0 1px var(--line); }
 .scanner video { width: 100%; height: 100%; object-fit: cover; display: block; }
 .scanner .corners { position: absolute; inset: 18%; border-radius: 14px; box-shadow: 0 0 0 2px rgba(109, 143, 214, .9); }
-.scanner p { position: absolute; inset: 0; margin: 0; display: flex; align-items: center; justify-content: center; text-align: center;
-  padding: 40px; color: var(--text3); font-size: 13px; }
+/* Off, the frame is the button that turns the camera on; on, the words stay
+   under the picture, out of the way of the code. */
+.scanner-start { position: absolute; inset: 0; border: 0; background: none; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 10px; color: var(--cobalt-hi); font-size: 15px; }
+.scanner-start svg { width: 36px; height: 36px; }
+.scanner-start:active { background: #ffffff08; }
+.scanner-start:focus-visible { outline: 2px solid var(--cobalt-hi); outline-offset: -4px; border-radius: 22px; }
+.scanner p { position: absolute; left: 0; right: 0; bottom: 0; margin: 0; text-align: center; pointer-events: none;
+  padding: 0 24px 4.5%; color: var(--text2); font-size: 13px; text-shadow: 0 1px 3px #000; }
 .progress { height: 4px; border-radius: 4px; background: var(--raise2); overflow: hidden; margin: 12px auto 0; width: min(100%, 360px); }
 .progress i { display: block; height: 100%; background: var(--cobalt-hi); width: 0; transition: width .2s; }
 

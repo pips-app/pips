@@ -188,7 +188,7 @@ export function createStage(o) {
           l.classList.toggle('by-author', o.by() === 'author');
         }
         // Type follows the cell: the label is part of the grid, not above it.
-        const fs = lab.w * (o.by() === 'author' ? (level === 0 ? 0.15 : 0.13) : level === 0 ? 0.19 : 0.15);
+        const fs = lab.w * (o.by() === 'author' ? (level === 0 ? 0.15 : 0.13) : level === 0 ? 0.19 : 0.13);
         Object.assign(l.style, {
           width: `${lab.w}px`, height: `${lab.w}px`, fontSize: `${fs}px`, opacity: String(vis),
           transform: `translate3d(${lab.x}px,${lab.y - scroll[level].v}px,0)`,

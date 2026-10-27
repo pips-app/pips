@@ -348,7 +348,9 @@ export function collectionView(o) {
     sub.hidden = showChip;
     chip.textContent = `${[filter.owner === 'all' ? '' : t(`owner.chip.${filter.owner}`), filter.query].filter(Boolean).join(' · ')}  ×`;
     backBtn.el.hidden = (lv < 2 && filter.place === 'collection') || selecting;
-    archBtn.el.hidden = binBtn.el.hidden = selecting || filter.place !== 'collection';
+    // The places belong to the grids: beside one card a bin reads as «delete
+    // this», and the archive is already the card's own action below.
+    archBtn.el.hidden = binBtn.el.hidden = selecting || filter.place !== 'collection' || lv >= 2;
     archBtn.count(inPlace('archive').length);
     binBtn.count(inPlace('trash').length);
     selBtn.hidden = (lv >= 2 && !selecting) || !stage.list.length;

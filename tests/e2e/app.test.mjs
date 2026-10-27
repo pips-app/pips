@@ -398,6 +398,10 @@ test('the collection: tags, search, archive and the bin, all without gestures', 
   assert.equal(await inPlace('collection'), 18, 'undone');
   await act(p, 'down');
   await p.waitForTimeout(2200);
+  // Beside one card, the places stay out of the bar: a bin there would read as «delete this».
+  assert.ok(!(await p.isVisible('.collection-bar .ib[aria-label="Архив"]')), 'no places in the feed');
+  await p.keyboard.press('Escape');
+  await p.waitForTimeout(900);
   assert.equal(await p.textContent('.collection-bar .ib[aria-label="Архив"] .ib-badge'), '1');
 
   // The archive is a place like the collection: the card opens there too.
@@ -1071,5 +1075,35 @@ test('an animated card holds still in the grid, with a mark, and plays when look
   await p.keyboard.press('Escape');
   await p.waitForTimeout(900);
   assert.equal(await pixels(), still, 'the first frame again');
+  await p.context().close();
+});
+
+test('the profile keeps itself as it is typed, and the scanner frame turns the camera on', async () => {
+  const p = await env.phone('quill');
+  await tab(p, 'me');
+  const field = (label) => p.locator(`section.view:visible .field:has(label:text-is("${label}")) input`);
+  await field('Ник').fill('quill2');
+  await p.locator('.saved-mark.on').waitFor();
+  assert.equal(await p.textContent('.idcard b'), 'quill2', 'the card at the top follows');
+  await p.selectOption('section.view:visible select.net', 'bluesky');
+  await field('Соцсеть').fill('quill.bsky');
+  await field('Ссылка').fill('Quill.ART/Shop');
+  await field('Ссылка').blur(); // leaving a field keeps it at once
+  await p.waitForTimeout(300);
+  const profile = () => p.evaluate(async () => (await import('/src/state.js')).app.profile);
+  assert.deepEqual(await profile(), { nick: 'quill2', handle: { network: 'bluesky', text: 'quill.bsky' }, link: 'quill.art/Shop' });
+  // An empty name: no network is kept, whatever the list shows.
+  await field('Соцсеть').fill('');
+  await p.waitForTimeout(1000);
+  assert.equal((await profile()).handle, null);
+  assert.equal(await p.locator('section.view:visible button:text-is("Сохранить")').count(), 0, 'nothing to press');
+  assert.equal(await p.locator('section.view:visible button:text-is("Сменить ключ")').count(), 1);
+
+  // The scanner: no separate button; the frame is the way to the camera.
+  await tab(p, 'receive');
+  assert.equal(await p.locator('section.view:visible .btn:text-is("Включить камеру")').count(), 0);
+  await p.click('section.view:visible .scanner-start');
+  assert.match(await textMatching(p, 'section.view:visible .scanner p', /Камера недоступна/), /Камера недоступна/, 'no camera here: said in the frame');
+  assert.ok(await p.isVisible('section.view:visible .scanner-start'), 'and the frame still offers to try again');
   await p.context().close();
 });
