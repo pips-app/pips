@@ -153,3 +153,13 @@ export function shake(el) {
   el.classList.add('shake');
   navigator.vibrate?.(8);
 }
+
+/**
+ * A length or a number the CSS keeps in a custom property, for code that
+ * must lay things out the same way: one value, in the stylesheet, instead
+ * of a copy here that drifts. 0 when it is not set.
+ * @param {string} name e.g. '--slot' @param {Element} [el] where it is read (inherited)
+ */
+export function cssNumber(name, el = document.documentElement) {
+  return parseFloat(getComputedStyle(el).getPropertyValue(name)) || 0;
+}

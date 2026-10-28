@@ -104,6 +104,15 @@ thing, with one way of fitting together:
   screen until another screen needs it.
 - **Every number has a reason** written next to it: a constant is named, and
   says where it comes from (the format, a measurement, DECISIONS.md).
+- **A size the CSS sets is read, not copied.** When code must lay out
+  something the same way the stylesheet does, the value lives in a CSS
+  custom property (`cssNumber()` in `dom.js`) or is measured.
+- **A class has one owner**: the module that makes it. CSS is global, so a
+  second module picking the same name styles the first. The shared
+  vocabulary (buttons, fields, sheets, the card's parts) is listed in
+  `tests/unit/css-classes.test.mjs`, which also refuses rules for classes
+  nothing makes. `tests/unit/i18n.test.mjs` keeps both languages and the
+  code in step.
 - **Fix causes, not symptoms.** A bug is understood before it is fixed, and
   the fix comes with a test that fails without it.
 

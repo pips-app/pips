@@ -32,17 +32,22 @@ export function fillShare(body, entry, o = {}) {
   let stop = () => {};
   let release = () => {};
   keepAwake().then((r) => (release = r));
-  // The code area keeps one height whether it shows a code or the
-  // numbered-copy panel, so switching between them does not jump.
-  const code = h('div', { class: 'share-code' });
-  code.style.height = `${size + 28 + 72 + 52}px`; // + the row of ways
+  // The code area is as tall as the code with its notes and ways: the
+  // numbered-copy panel lies over it, in the same place, so switching
+  // between them does not jump (and the code stays laid out under it).
+  const face = h('div', { class: 'share-face' });
+  const over = h('div', { class: 'share-over', hidden: true });
+  const code = h('div', { class: 'share-code' }, face, over);
 
   /** @param {Uint8Array} env @param {string} note */
   const showCode = (env, note) => {
     stop();
     const q = qrFor(env, size);
     stop = q.stop;
-    code.replaceChildren(q.el,
+    over.hidden = true;
+    over.replaceChildren();
+    face.classList.remove('under');
+    face.replaceChildren(q.el,
       h('p', {}, note),
       h('p', { class: 'small' }, q.plan.kind === 'single' ? t('give.single', env.length) : t('give.carousel', q.plan.fragments)),
       ways(env));
@@ -73,8 +78,10 @@ export function fillShare(body, entry, o = {}) {
         if (v === 'copy') return copy();
         stop();
         // The panel shows the issue log: drawn again whenever a copy is issued.
-        const draw = () => code.replaceChildren(editionPanel(entry.rec.digest));
+        const draw = () => over.replaceChildren(editionPanel(entry.rec.digest));
         draw();
+        over.hidden = false;
+        face.classList.add('under');
         const unsub = subscribe(draw);
         stop = () => { unsub(); };
       },

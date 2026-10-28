@@ -3,9 +3,7 @@
 // some place, newest first. A newcomer takes the first slot and the others
 // move one along; `room` makes space before it lands.
 
-import { h } from '../dom.js';
-
-const SLOT = 64;
+import { h, cssNumber } from '../dom.js';
 
 /** @typedef {{id: string, make: () => HTMLElement}} StripItem */
 
@@ -36,7 +34,8 @@ export function strip() {
     const room = o.room ?? 0;
     empty.textContent = o.empty;
     empty.hidden = !!(items.length || room);
-    const fit = Math.max(1, Math.floor((row.clientWidth + 8) / SLOT));
+    const step = cssNumber('--slot', el), gap = step - cssNumber('--mini', el);
+    const fit = Math.max(1, Math.floor((row.clientWidth + gap) / step));
     for (const [id, m] of minis) if (!items.some((i) => i.id === id)) { m.remove(); minis.delete(id); }
     items.forEach((it, k) => {
       let m = minis.get(it.id);
@@ -46,17 +45,17 @@ export function strip() {
         minis.set(it.id, m);
         if (it.id === o.landed) {
           m.style.transition = 'none';
-          m.style.transform = `translateX(${(k + room) * SLOT}px)`;
+          m.style.transform = `translateX(${(k + room) * step}px)`;
           void m.offsetWidth;
           m.style.transition = '';
         } else {
-          m.style.transform = `translateX(${-SLOT}px)`;
+          m.style.transform = `translateX(${-step}px)`;
           m.style.opacity = '0';
           void m.offsetWidth;
         }
       }
       const slot = k + room;
-      m.style.transform = `translateX(${slot * SLOT}px)`;
+      m.style.transform = `translateX(${slot * step}px)`;
       m.style.opacity = slot < fit ? '1' : '0';
     });
   }
@@ -68,7 +67,7 @@ export function strip() {
     const r = row.getBoundingClientRect();
     const bottom = /** @type {HTMLElement|null} */ (el.offsetParent)?.getBoundingClientRect().bottom ?? innerHeight;
     const shift = el.getBoundingClientRect().top - (bottom - el.offsetHeight);
-    return { x: r.left + k * SLOT, y: r.top - shift, w: 56 };
+    return { x: r.left + k * cssNumber('--slot', el), y: r.top - shift, w: cssNumber('--mini', el) };
   }
 
   reveal(0);

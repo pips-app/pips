@@ -43,8 +43,6 @@ import { weekLabel, monthLabel } from './dates.js';
 /** @typedef {import('./query.js').Place} Place */
 /** @typedef {import('./stage.js').Item} Item */
 
-/** The room the bar takes above the cards, and the tabs or the card's actions below. */
-const TOP = 76, BOTTOM = 84;
 /** Not a finger here (a mouse, or nothing known): the buttons for what a
  * pinch or a swipe does show. Headless browsers report no pointer at all. */
 const MOUSE = !(typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches);
@@ -113,17 +111,18 @@ export function collectionView(o) {
   const el = h('section', { class: 'view collection-view' },
     host, placeEmpty, first.el, searchPanel, bar, fly, strip.el, feedNav, feedBar.el, selectBar.el, coach, ...sheet.els);
 
-  // The safe-area insets in pixels, measured once per size.
+  // The room above and below the cards, safe-area insets included, in
+  // pixels: the CSS keeps it (.safe-probe), measured once per size.
   const probe = h('div', { class: 'safe-probe', 'aria-hidden': 'true' });
-  let safe = { t: 0, b: 0 };
+  let room = { t: 0, b: 0 };
   const measure = () => {
     const cs = getComputedStyle(probe);
-    safe = { t: parseFloat(cs.paddingTop) || 0, b: parseFloat(cs.paddingBottom) || 0 };
+    room = { t: parseFloat(cs.paddingTop) || 0, b: parseFloat(cs.paddingBottom) || 0 };
   };
   /** Read by the stage when it lays the cards out, never while drawing. @returns {import('./layout.js').Frame} */
   const frameOf = () => ({
     W: el.clientWidth || innerWidth, H: el.clientHeight || innerHeight,
-    top: TOP + safe.t, bottom: BOTTOM + safe.b, lead: searchPanel.offsetHeight + 8,
+    top: room.t, bottom: room.b, lead: searchPanel.offsetHeight + 8,
   });
   el.append(probe);
 
