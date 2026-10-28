@@ -10,9 +10,11 @@ import { toast } from './shell.js';
 import { scanner } from './scan.js';
 import { caught } from '../diagnostics.js';
 import { showRecipientCode } from './edition.js';
-import { FORGED, arrived } from './arrival.js';
+import { FORGED, arrived, arrive } from './arrival.js';
+import { MAGIC } from '../links.js';
 
-const MAGIC = [0x50, 0x50, 0x1a, 0x0a];
+/** The first byte of an envelope (pips-wasm). */
+const ENVELOPE = 0x45; // 'E'
 
 export function receiveView() {
   const scan = scanner((text) => handle(text));
@@ -70,8 +72,16 @@ export function receiveView() {
     if (!f || f.size > 70 * 1024) { toast(t('receive.not-pips')); return; }
     const bytes = new Uint8Array(await f.arrayBuffer());
     if (!MAGIC.every((b, i) => bytes[i] === b)) { toast(t('receive.not-pips')); return; }
+    const body = bytes.subarray(MAGIC.length);
+    // A file holds what a code holds — an envelope, every signature in it
+    // checked — or, from before envelopes, a bare signed card.
+    if (body[0] === ENVELOPE) {
+      stopCamera();
+      await arrive(body);
+      return;
+    }
     try {
-      done(await receivePayload(bytes.subarray(MAGIC.length)));
+      done(await receivePayload(body));
     } catch {
       toast(t('receive.not-pips'));
     }

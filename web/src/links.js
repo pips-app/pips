@@ -3,6 +3,9 @@
 // which the browser never sends to the server. A link opens the app and
 // the card arrives as if scanned. No DOM; the address is passed in.
 
+/** A .pips file: these four bytes, then what a code carries (an envelope). */
+export const MAGIC = [0x50, 0x50, 0x1a, 0x0a];
+
 /** Where links point when the app runs somewhere a link cannot (plain http, a file). */
 export const PUBLISHED = 'https://pips-app.github.io/pips/';
 

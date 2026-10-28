@@ -18,7 +18,7 @@ const TABS = /** @type {const} */ ([
   { name: 'collection', icon: 'collection', label: 'tab.collection' },
   { name: 'draw', icon: 'brush', label: 'tab.draw' },
   { name: 'receive', icon: 'scan', label: 'tab.scan', main: true },
-  { name: 'import', icon: 'receive', label: 'tab.import' },
+  { name: 'give', icon: 'give', label: 'tab.give' },
   { name: 'me', icon: 'me', label: 'tab.profile' },
 ]);
 

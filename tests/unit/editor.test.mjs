@@ -242,3 +242,42 @@ test('the pen: corners come out of a curve, never out of what was already drawn'
   draw(strokes, [[0, 0], [1, 0], [1, 1], [2, 1], [2, 2]]);
   assert.deepEqual([at(0, 0), at(1, 0), at(1, 1), at(2, 1), at(2, 2)], [1, 1, 1, 1, 1]);
 });
+
+test('a card back into a picture: the same card again, smaller ones centred, others refused', async () => {
+  const { fromCard } = await import('../../web/src/editor/from-card.js');
+  const rgbOf = (c) => [c >> 16, (c >> 8) & 255, c & 255];
+  const builtin = (id) => (id === 7 ? PAL.colors.map(rgbOf) : undefined);
+  const by = { nick: 'a', handle: null, link: '' };
+  const m = createModel(blank(16, PAL));
+  const s = m.stroke(0);
+  s.set(0, 2);
+  s.set(17, 3);
+  s.commit('pen');
+  m.setTitle?.('Гриб');
+  for (const draw of [() => {}, () => { const t = m.stroke(0); t.set(5, 0); t.commit('pen'); }]) {
+    draw(); // the second time the first colour is drawn too: the card's colours go inline
+    const card = /** @type {any} */ (toCard(m.doc, by)).card;
+    const doc = fromCard(card, builtin);
+    assert.ok(doc);
+    assert.equal(doc.size, 16);
+    const again = /** @type {any} */ (toCard(doc, by)).card;
+    assert.deepEqual([...again.pixels], [...card.pixels], 'the same cells');
+    assert.deepEqual(again.palette, card.palette, 'the same palette');
+    assert.equal(again.opaque, card.opaque);
+  }
+  // A 40-cell card: in the middle of the 48 canvas.
+  const small = { width: 40, height: 40, opaque: true, palette: { inline: [[0, 0, 0], [255, 255, 255]] }, frames: 1, delay_ms: 0, pixels: new Uint8Array(1600).fill(1), title: 'x', frame: 2 };
+  const d = fromCard(small, builtin);
+  assert.equal(d.size, 48);
+  assert.equal(d.frames[0][0], T, 'the border is empty');
+  assert.equal(d.frames[0][4 * 48 + 4], 1, 'the picture starts 4 cells in');
+  assert.equal(d.shade, 2);
+  // Not square: the whole of it, in the middle of the canvas that holds it.
+  const wide = fromCard({ ...small, width: 10, height: 8, pixels: new Uint8Array(80).fill(1) }, builtin);
+  assert.equal(wide.size, 16);
+  assert.deepEqual([wide.frames[0][3 * 16 + 2], wide.frames[0][4 * 16 + 3], wide.frames[0][11 * 16 + 12]], [T, 1, 1], 'from (3, 4) to (12, 11)');
+  assert.equal(wide.frames[0].filter((v) => v === 1).length, 80, 'every cell of it');
+  // Larger than the largest canvas: crop first.
+  assert.equal(fromCard({ ...small, width: 128, height: 128 }, builtin), null);
+  assert.equal(fromCard({ ...small, width: 80, height: 8 }, builtin), null);
+});

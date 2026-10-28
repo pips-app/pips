@@ -5,7 +5,7 @@ import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { setup, photo, fromPicture, choose, tab, toast, heart, gradient, wide, textMatching, samples } from './helpers.mjs';
+import { setup, photo, fromPicture, choose, tab, toast, heart, gradient, wide, png, textMatching, samples } from './helpers.mjs';
 
 /** @type {Awaited<ReturnType<typeof setup>>} */
 let env;
@@ -18,15 +18,21 @@ after(async () => {
 const words = (p) => p.evaluate(async () => (await import('/src/state.js')).app.identity.words());
 const cards = (p) => p.evaluate(async () => (await import('/src/state.js')).app.cards.size);
 
+/** Opens a picture from a file in the editor: Draw → More → From a picture. */
+async function picture(p, file) {
+  await tab(p, 'draw');
+  await p.locator('.ed-art').waitFor();
+  await p.click('[aria-label="Ещё"]');
+  await choose(p, () => p.click('.ed-new-tile >> nth=1'), file);
+  await p.locator('.overlay .pic-body').waitFor();
+}
 /** Makes an own card from the heart picture; it opens large in the collection. */
 async function ownCard(p, title) {
-  await tab(p, 'import');
-  await choose(p, () => p.click('.import-preview'), await heart(env.dir));
-  // The file is read in the background and puts its name in the title:
-  // type over it only after that, as a person would.
-  await p.waitForFunction(() => document.querySelector('.import-body input:not([type])')?.value === 'heart-x6');
-  await p.locator('.import-body input:not([type])').fill(title);
-  await p.click('text=Подписать и добавить');
+  await picture(p, await heart(env.dir));
+  await p.click('.overlay .btn.key'); // «На холст»
+  await p.locator('.overlay').waitFor({ state: 'detached' });
+  await p.fill('.ed-title', title);
+  await p.click('.ed-sign');
   await p.locator('.turn:not([hidden])').waitFor();
 }
 /** The card in front: its share sheet, its back. */
@@ -140,55 +146,54 @@ test('restoring on a new phone: the backup and the key in one step', async () =>
   for (const p of [a, b, c, d, e]) await p.context().close();
 });
 
-test('import keeps its layout and reports what it did', async () => {
+test('a picture comes onto the canvas: pixel art as it is, the rest through a square', async () => {
   const p = await env.phone('pixelfox');
-  await tab(p, 'import');
-  // Measured with the fonts in place and the sheet's entry animation over.
-  await p.evaluate(() => Promise.all([document.fonts.ready, ...document.getAnimations().map((a) => a.finished)]));
-  const buttonsAt = async () => (await p.locator('.import-actions').boundingBox())?.y;
-  const empty = await buttonsAt();
-  assert.ok(await p.locator('.import-actions .btn.key').isDisabled(), 'nothing to sign yet');
-
   // 512 colours: an own palette is fitted by itself, and said so.
-  await choose(p, () => p.click('.import-preview'), await gradient(env.dir));
-  assert.match(await textMatching(p, '.import-status', /подобрана своя палитра/), /больше 256 цветов файла → свои 32/);
-  assert.equal(await p.inputValue('.import-body select'), 'fit:32');
-  assert.ok(await p.locator('.import-actions .btn.key').isEnabled());
-  assert.equal(await buttonsAt(), empty, 'the status does not move the buttons');
+  await picture(p, await gradient(env.dir));
+  assert.match(await textMatching(p, '.overlay .import-status', /подобрана своя палитра/), /больше 256 цветов файла → свои 32/);
+  assert.equal(await p.inputValue('.overlay select'), 'fit:32');
+  await p.selectOption('.overlay select', { label: 'PICO-8 · 16' });
+  assert.match(await textMatching(p, '.overlay .import-status', /палитра PICO-8 · 512 пикселей сменили цвет/), /палитра PICO-8 · 512 пикселей сменили цвет/);
+  assert.equal(await p.locator('.overlay .pic-stage').count(), 0, 'no crop: 64×8 fits the canvas as it is');
+  await p.click('.overlay .btn.key');
+  assert.equal(await toast(p), 'Картинка на холсте');
+  const size = () => p.$eval('.ed-layer', (c) => String(c.width));
+  assert.equal(await size(), '64', 'the canvas that holds it');
 
-  await p.selectOption('.import-body select', { label: 'PICO-8 · 16' });
-  assert.match(await textMatching(p, '.import-status', /палитра PICO-8 · 512 пикселей сменили цвет/), /палитра PICO-8 · 512 пикселей сменили цвет/);
-  assert.equal(await buttonsAt(), empty);
+  // Wider than any canvas: a square of its own pixels, never more than fits.
+  await picture(p, await wide(env.dir));
+  assert.ok(await p.isVisible('.overlay .pic-stage'));
+  assert.match(await textMatching(p, '.overlay .import-status', /^8×8/), /^8×8/);
+  await p.click('.overlay .btn.key');
+  assert.equal(await size(), '16');
 
-  // Wider than any canvas of the app: the editor's rule, said here too.
-  await choose(p, () => p.click('text=Другой файл'), await wide(env.dir));
-  assert.match(await textMatching(p, '.import-status', /до 64×64/), /^80×8: в приложении карточка до 64×64/);
-  assert.ok(await p.locator('.import-actions .btn.key').isDisabled(), 'not signed');
-  assert.equal(await buttonsAt(), empty);
+  // A large picture with soft colours: cropped and scaled to the size chosen.
+  const big = await png(env.dir, 'dusk.png', 300, 200, (x, y) => [(x * 0.8) | 0, (y * 1.2) | 0, (x + y) % 256, 255]); // no pixel grid in it: a photo
+  await picture(p, big);
+  assert.match(await textMatching(p, '.overlay .import-status', /^32×32/), /^32×32/, 'a square at 32 to begin with');
+  await p.click('.overlay .seg button:text-is("16")');
+  assert.match(await textMatching(p, '.overlay .import-status', /^16×16/), /^16×16/);
+  // The square follows a finger on its corner, and the result with it.
+  const box = await p.locator('.pic-crop').boundingBox();
+  await p.evaluate(async ([x0, y0]) => {
+    const st = document.querySelector('.pic-stage');
+    const fire = (t, x, y) => st.dispatchEvent(new PointerEvent(t, { bubbles: true, pointerId: 3, pointerType: 'touch', clientX: x, clientY: y }));
+    fire('pointerdown', x0, y0);
+    for (let i = 1; i <= 6; i++) { await new Promise((r) => setTimeout(r, 16)); fire('pointermove', x0 - i * 15, y0 - i * 15); }
+    fire('pointerup', x0 - 90, y0 - 90);
+  }, [box.x + box.width - 3, box.y + box.height - 3]);
+  await p.waitForTimeout(300);
+  const after = await p.locator('.pic-crop').boundingBox();
+  assert.ok(Math.abs(after.width - (box.width - 90)) < 3 && Math.abs(after.x - box.x) < 1, 'smaller, from the corner held still');
+  await p.click('.overlay .btn.key');
+  assert.equal(await size(), '16');
 
-  await choose(p, () => p.click('text=Другой файл'), await heart(env.dir));
-  assert.match(await textMatching(p, '.import-status', /60×48 → 10×8 \(снято увеличение ×6\)/), /60×48 → 10×8 \(снято увеличение ×6\)/);
-  assert.equal(await buttonsAt(), empty);
-  await p.click('text=Подписать и добавить');
-  await p.locator('.turn:not([hidden])').waitFor();
-  assert.equal(await cards(p), 1);
-  await p.context().close();
-});
-
-test('an import under way survives a look at another tab', async () => {
-  const p = await env.phone('pixelfox');
-  await tab(p, 'import');
-  await choose(p, () => p.click('.import-preview'), await heart(env.dir));
-  await p.waitForFunction(() => document.querySelector('.import-body input:not([type])')?.value === 'heart-x6'); // read, and named after the file
-  await p.locator('.import-body input:not([type])').fill('Сердце');
-  await tab(p, 'receive');
-  await tab(p, 'collection');
-  await tab(p, 'import');
-  assert.equal(await p.inputValue('.import-body input:not([type])'), 'Сердце', 'the title is kept');
-  assert.ok(await p.locator('.import-actions .btn.key').isEnabled(), 'the picture is kept');
-  await p.click('.import-view .bar .ib');
-  assert.equal(await p.inputValue('.import-body input:not([type])'), '', 'start over clears it');
-  assert.ok(await p.locator('.import-actions .btn.key').isDisabled());
+  // The heart: unscaled, and one tap brings the previous picture back.
+  await picture(p, await heart(env.dir));
+  assert.match(await textMatching(p, '.overlay .import-status', /60×48 → 10×8 \(снято увеличение ×6\)/), /60×48 → 10×8 \(снято увеличение ×6\)/);
+  await p.click('.overlay .btn.key');
+  await p.click('.toast button'); // «Вернуть»
+  assert.equal(await size(), '16', 'the cropped picture is back');
   assert.equal(await cards(p), 0, 'nothing was signed on the way');
   await p.context().close();
 });
@@ -811,7 +816,7 @@ test('nothing on screen covers anything else, and the hint shows only when it ap
     // An empty collection: nothing to zoom, so no word about zooming.
     assert.ok(await p.locator('.first-run').isVisible());
     assert.equal(await p.locator('.coach').isVisible(), false, 'no zoom hint without cards');
-    for (const t of ['me', 'receive', 'import', 'draw']) {
+    for (const t of ['me', 'receive', 'give', 'draw']) {
       await tab(p, t);
       await p.waitForTimeout(500);
       assert.deepEqual(await overlaps(p), [], `${t}, ${desk ? 'computer' : 'phone'}`);
@@ -924,7 +929,7 @@ test('a card sent as a link opens the app and arrives, even before the first run
   // The device's share sheet, stood in for: what it is handed is kept.
   await a.evaluate(() => { /** @type {any} */ (navigator).share = async (d) => { /** @type {any} */ (window).shared = d; }; });
   await act(a, 'share');
-  await a.click('.top-sheet .share-link');
+  await a.click('.top-sheet .share-link >> nth=0'); // «Ссылкой»
   const sent = await a.evaluate(() => /** @type {any} */ (window).shared);
   assert.match(sent.url, /^https:\/\/pips-app\.github\.io\/pips\/#[A-Za-z0-9_-]+$/, 'the published app (this one is not on https)');
   assert.equal(sent.title, 'Сердце');
@@ -965,19 +970,10 @@ test('a card sent as a link opens the app and arrives, even before the first run
 
 test('a card is signed with a name; one that came without shows «Без названия»', async () => {
   const p = await env.phone('pixelfox');
-  // The import: the title emptied, signing asks for one instead.
-  await tab(p, 'import');
-  await choose(p, () => p.click('.import-preview'), await heart(env.dir));
-  await p.waitForFunction(() => document.querySelector('.import-body input:not([type])')?.value === 'heart-x6');
-  await p.fill('.import-body input:not([type])', '   ');
-  await p.click('text=Подписать и добавить');
-  assert.match(await toast(p), /Сначала назовите карточку/);
-  assert.equal(await p.evaluate(() => document.activeElement?.matches('.import-body input:not([type])')), true, 'the title field, ready to type');
-  assert.equal(await cards(p), 0);
-  // The editor: the same.
-  await tab(p, 'draw');
-  await p.locator('.ed-art').waitFor();
-  await p.click('.ed-art'); // one cell: something to sign
+  // A picture from a file comes without a name: signing asks for one.
+  await picture(p, await heart(env.dir));
+  await p.click('.overlay .btn.key');
+  assert.equal(await p.inputValue('.ed-title'), '', 'the file name is no card title');
   await p.click('.ed-sign');
   assert.match(await textMatching(p, '.toast span', /назовите/), /Сначала назовите карточку/);
   assert.equal(await p.evaluate(() => document.activeElement?.classList.contains('ed-title')), true);
@@ -1248,4 +1244,47 @@ test('the editor: a still picture shows no frames to mistake for colours, and an
   assert.deepEqual(await p.$$eval('.ed-frame-list .ed-frame-n', (e) => e.map((x) => x.textContent)), ['1', '2']);
   assert.equal(await height(), h1, 'the strip does not jump');
   await p.context().close();
+});
+
+test('give: one’s own cards with their codes, as a link, a file or a picture; a new card from one', async () => {
+  const p = await env.phone('givefox');
+  await tab(p, 'give');
+  assert.match(await p.textContent('section.view:visible .empty'), /Пока нечего отдать/);
+  await ownCard(p, 'Сердце');
+  await ownCard(p, 'Второе');
+  await tab(p, 'give');
+  // The newest first, chosen; another one a tap away, on its own paper.
+  assert.equal(await p.locator('.give-mini:not(.add)').count(), 2);
+  assert.equal(await p.textContent('.give-paper .paper-body > b'), 'Второе');
+  await p.click('.give-mini >> nth=1');
+  assert.equal(await p.textContent('.give-paper .paper-body > b'), 'Сердце');
+  assert.equal(await p.getAttribute('.give-mini >> nth=1', 'aria-pressed'), 'true');
+  assert.ok(await p.isVisible('.give-paper .qr-box canvas'), 'the code, ready');
+  // The other ways: a .pips file another phone opens, and the picture as a PNG.
+  const [file] = await Promise.all([p.waitForEvent('download'), p.click('.give-paper .share-link:has-text("Файлом")')]);
+  assert.equal(file.suggestedFilename(), 'Serdtse.pips', 'a download keeps to Latin letters');
+  const pips = join(env.dir, 'given.pips');
+  await file.saveAs(pips);
+  const [pic] = await Promise.all([p.waitForEvent('download'), p.click('.give-paper .share-link:has-text("Картинкой")')]);
+  assert.equal(pic.suggestedFilename(), 'Serdtse.png');
+  const pngPath = join(env.dir, 'given.png');
+  await pic.saveAs(pngPath);
+  const head = await readFile(pngPath);
+  assert.ok(head.readUInt32BE(16) >= 512, 'at least 512 pixels across');
+  const q = await env.phone('lumen');
+  await tab(q, 'receive');
+  await choose(q, () => q.click('section.view:visible >> text=Файл .pips'), pips);
+  await q.waitForTimeout(800);
+  assert.equal(await cards(q), 1, 'the file opens on another phone');
+
+  // One's own card starts a new one in the editor: the picture, without the name.
+  await tab(p, 'collection');
+  await p.evaluate(async () => (await import('/src/ui/shell.js')).go('collection', { open: [...(await import('/src/state.js')).app.cards.keys()][0] }));
+  await p.waitForTimeout(900);
+  await act(p, 'derive');
+  await p.locator('.ed-art').waitFor();
+  assert.match(await toast(p), /Новая карточка из прежней/);
+  assert.equal(await p.inputValue('.ed-title'), '');
+  assert.equal(await p.$eval('.ed-layer', (c) => c.width), 16, 'the heart’s canvas');
+  for (const x of [p, q]) await x.context().close();
 });

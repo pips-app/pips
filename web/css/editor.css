@@ -179,3 +179,32 @@
   .ed-frames { justify-content: center; padding-bottom: 18px; }
   .ed-frame-scroll { flex: 0 1 auto; }
 }
+
+/* editor/picture.js: a picture from a file. The result is shown on the
+   frame's paper, without a caption: it has no name yet. */
+.pic-body { display: flex; flex-direction: column; align-items: stretch; gap: 4px; padding-bottom: 12px; }
+.pic-tile { position: relative; align-self: center; width: min(240px, 62vw); aspect-ratio: 1; padding: 10px; border: 0; border-radius: 3px;
+  background: var(--paper); box-shadow: 0 24px 40px -22px #000; display: block; }
+.pic-tile canvas, .pic-tile img { display: block; width: 100%; height: 100%; image-rendering: pixelated; object-fit: contain; }
+.pic-tile.small { width: 88px; padding: 6px; align-self: auto; flex: none; box-shadow: 0 14px 22px -14px #000; }
+.pic-why { text-align: center; margin: 0 0 10px; }
+.pic-stage { position: relative; align-self: center; max-width: 100%; touch-action: none; user-select: none; -webkit-user-select: none; overflow: hidden; border-radius: 6px; }
+.pic-source { display: block; }
+.pic-source.pixel { image-rendering: pixelated; }
+.pic-crop { position: absolute; box-shadow: 0 0 0 9999px #0b0c10b8, inset 0 0 0 1px #fffd; cursor: move; }
+.pic-crop .c { position: absolute; width: 22px; height: 22px; border: 0 solid #fff; pointer-events: none; }
+.pic-crop .tl { left: -3px; top: -3px; border-width: 4px 0 0 4px; }
+.pic-crop .tr { right: -3px; top: -3px; border-width: 4px 4px 0 0; }
+.pic-crop .bl { left: -3px; bottom: -3px; border-width: 0 0 4px 4px; }
+.pic-crop .br { right: -3px; bottom: -3px; border-width: 0 4px 4px 0; }
+.pic-result { display: flex; align-items: center; gap: 14px; margin-top: 16px; }
+.pic-result .import-status { flex: 1; text-align: left; margin: 0; min-height: 0; }
+.pic-body .ed-set-row { margin-top: 14px; }
+
+/* The two ways to start a card, first in the editor's settings. */
+.ed-new { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.ed-new-tile { border: 0; border-radius: 14px; background: var(--raise2); color: var(--text); padding: 12px 14px; text-align: left;
+  display: flex; flex-direction: column; align-items: flex-start; gap: 2px; font: inherit; }
+.ed-new-tile .i { width: 22px; height: 22px; color: var(--cobalt-hi); margin-bottom: 6px; }
+.ed-new-tile b { font-weight: 500; font-size: 14px; }
+.ed-new-tile small { font-size: 12px; color: var(--text3); }

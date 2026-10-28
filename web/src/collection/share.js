@@ -1,12 +1,16 @@
 // @ts-check
 // What the share sheet holds for a card: its code, ready to be scanned,
-// and the same envelope as a link, for someone who is not in the room.
+// and the ways for someone who is not in the room — the same envelope as
+// a link or as a .pips file, and, for one's own card, the picture as a
+// PNG (the picture only: no signature goes with it, so not for a card
+// someone else drew).
 // An own card goes out signed by its author, as a plain copy or as a
 // numbered one; someone else's card goes out as a copy passed on by you.
 
 import { h, icon } from '../dom.js';
 import { t } from '../i18n.js';
-import { linkBase } from '../links.js';
+import { linkBase, MAGIC } from '../links.js';
+import { sendLink, sendFile, fileName, pixelPng } from '../ui/send.js';
 import { toast } from '../ui/shell.js';
 import { caught } from '../diagnostics.js';
 import { app, subscribe } from '../state.js';
@@ -20,16 +24,18 @@ import { FRAME_SHADES, cardTitle } from '../ui/card.js';
  * Fills `body` and returns a function that stops what keeps running
  * (a QR carousel, the screen lock).
  * @param {HTMLElement} body @param {import('../state.js').Entry} entry
+ * @param {{size?: number, hint?: string}} [o] size: the code's side; hint: what to
+ * do with it — both where the room and the gesture are not the sheet's
  */
-export function fillShare(body, entry) {
+export function fillShare(body, entry, o = {}) {
+  const size = o.size ?? codeSize();
   let stop = () => {};
   let release = () => {};
   keepAwake().then((r) => (release = r));
   // The code area keeps one height whether it shows a code or the
   // numbered-copy panel, so switching between them does not jump.
-  const size = codeSize();
   const code = h('div', { class: 'share-code' });
-  code.style.height = `${size + 28 + 72 + 44}px`; // + the link button
+  code.style.height = `${size + 28 + 72 + 52}px`; // + the row of ways
 
   /** @param {Uint8Array} env @param {string} note */
   const showCode = (env, note) => {
@@ -39,11 +45,25 @@ export function fillShare(body, entry) {
     code.replaceChildren(q.el,
       h('p', {}, note),
       h('p', { class: 'small' }, q.plan.kind === 'single' ? t('give.single', env.length) : t('give.carousel', q.plan.fragments)),
-      h('button', { type: 'button', class: 'share-link', onclick: () => sendLink(env, cardTitle(entry.card)) }, icon('link'), t('share.link')));
+      ways(env));
   };
-  const copy = () => showCode(app.identity.sealAsAuthor(entry.rec.payload, undefined), t('share.hint'));
+  const name = cardTitle(entry.card);
+  /** @param {Uint8Array} env */
+  const ways = (env) => h('div', { class: 'share-ways', role: 'group', 'aria-label': t('share.ways') },
+    h('button', { type: 'button', class: 'share-link', onclick: () => sendLink(app.core.cardLink(linkBase(location), env), name, t('share.link.text', name)) }, icon('link'), t('share.link')),
+    h('button', { type: 'button', class: 'share-link', onclick: () => sendFile(new File([new Uint8Array([...MAGIC, ...env])], fileName(name, 'pips'), { type: 'application/octet-stream' }), name) }, icon('file'), t('share.file')),
+    entry.rec.mine ? h('button', { type: 'button', class: 'share-link', onclick: () => picture() }, icon('image'), t('share.png')) : '');
+  const picture = async () => {
+    try {
+      await sendFile(new File([await pixelPng(app.core.render(entry.card, 0))], fileName(name, 'png'), { type: 'image/png' }), name);
+    } catch (e) {
+      caught(e, 'share');
+      toast(t('err.generic'));
+    }
+  };
+  const copy = () => showCode(app.identity.sealAsAuthor(entry.rec.payload, undefined), o.hint ?? t('share.hint'));
 
-  const title = h('b', {}, cardTitle(entry.card));
+  const title = h('b', {}, name);
   if (entry.rec.mine) {
     const mode = segmented({
       label: t('share.title'), value: 'copy',
@@ -65,31 +85,6 @@ export function fillShare(body, entry) {
     showCode(app.identity.sealAsSender(entry.rec.payload, app.profile.nick || 'pips'), t('give.copy-of', entry.card.author ? `@${entry.card.author}` : '—'));
   }
   return () => { stop(); release(); };
-}
-
-/**
- * The envelope as a link, the device's way: its share sheet (a messenger),
- * else the clipboard. Links point at this app (or the published one, when
- * this one is not on https), with the card after '#'.
- * @param {Uint8Array} env @param {string} title
- */
-async function sendLink(env, title) {
-  const url = app.core.cardLink(linkBase(location), env);
-  if (navigator.share) {
-    try {
-      await navigator.share({ title, text: t('share.link.text', title), url });
-      return;
-    } catch (e) {
-      if (/** @type {any} */ (e)?.name === 'AbortError') return; // the person changed their mind
-    }
-  }
-  try {
-    await navigator.clipboard.writeText(url);
-    toast(t('share.link.copied'));
-  } catch (e) {
-    caught(e, 'share');
-    toast(t('share.link.failed'));
-  }
 }
 
 /**

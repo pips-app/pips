@@ -14,7 +14,7 @@ import { mountShell, go, toast, currentView } from './ui/shell.js';
 import { openJournal } from './ui/journal-view.js';
 import { collectionView } from './collection/view.js';
 import { editorView } from './editor/view.js';
-import { importView } from './ui/import.js';
+import { giveView } from './ui/give.js';
 import { receiveView } from './ui/receive.js';
 import { meView } from './ui/me.js';
 import { onboarding } from './ui/onboarding.js';
@@ -58,7 +58,7 @@ async function main() {
   let incoming = fromAddress();
   const start = () => {
     mountShell(root, {
-      collection: collectionView({ draw: () => go('draw') }), draw: editorView(), import: importView(), receive: receiveView(), me: meView(),
+      collection: collectionView({ draw: () => go('draw') }), draw: editorView(), give: giveView(), receive: receiveView(), me: meView(),
     });
     go('collection');
     locate(() => currentView() ?? '');

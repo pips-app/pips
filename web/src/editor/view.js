@@ -29,6 +29,7 @@ import { FRAME_SHADES } from '../ui/card.js';
 import { bottomSheet } from '../kit/bottom-sheet.js';
 import { clamp } from '../kit/motion.js';
 import { blank, createModel, T, SIZES } from './model.js';
+import { pickPicture } from './picture.js';
 import { inside } from './raster.js';
 import { parseHex, hex, fromRgb } from './color.js';
 import { createCanvas } from './canvas.js';
@@ -136,6 +137,7 @@ export function editorView() {
     grid: (on) => { state.grid = on; canvas.grid(on); },
     axes: (a) => { state.axes = a; state.mirror = true; paint(); },
     fresh: () => fresh(),
+    picture: () => { more.close(); pickPicture((doc) => load(doc, t('ed.from-picture'))); },
   });
   const historyBtn = h('button', { type: 'button', class: 'btn', onclick: () => { more.close(); history.show(); } }, icon('history'), t('ed.history'));
   settings.el.append(historyBtn);
@@ -301,12 +303,20 @@ export function editorView() {
     if (model.cropsAt(n) && !(await ask(t('ed.size.crop', n), { yes: t('ed.size.yes') }))) return settings.set(model.doc);
     model.resize(n);
   }
-  async function fresh() {
+  function fresh() {
     more.close();
-    model.replace(blank(32, defaultPalette()));
+    load(blank(32, defaultPalette()), t('ed.fresh'));
+  }
+  /**
+   * A new picture on the canvas — blank, from a file, from a card — as
+   * one step: the one before is a tap away. @param {import('./model.js').Doc} doc @param {string} said
+   */
+  function load(doc, said) {
+    stop();
+    model.replace(doc);
     state.frame = 0;
     state.color = Math.min(4, model.doc.colors.length - 1);
-    toast(t('ed.fresh'), { label: t('toast.undo'), run: () => undo() });
+    toast(said, { label: t('toast.undo'), run: () => undo() });
   }
 
   // ------------------------------------------------------------ the card --
@@ -486,7 +496,8 @@ export function editorView() {
 
   return {
     el,
-    async show() {
+    /** @param {{doc?: import('./model.js').Doc, said?: string}} [arg] a picture to start from */
+    async show(arg) {
       hideTabs(true);
       if (!loaded) {
         loaded = true;
@@ -497,6 +508,7 @@ export function editorView() {
           model.reset({ ...d.doc, frames: d.doc.frames.map((/** @type {any} */ f) => Uint8Array.from(f)) }, d.history);
         }
       }
+      if (arg?.doc) load(arg.doc, arg.said ?? t('ed.from-card'));
       requestAnimationFrame(() => { canvas.relayout(); paint('all'); });
     },
     hide() {
