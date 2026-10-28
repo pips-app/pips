@@ -8,9 +8,17 @@
 import { h, icon } from '../dom.js';
 import { t } from '../i18n.js';
 import { qrReader } from '../qrscan.js';
+import { envelopeIn } from '../png-card.js';
 
-/** @param {(text: string) => void} onText @param {string} [hint] */
-export function scanner(onText, hint = t('receive.point')) {
+/** Pictures larger than this are only looked at for a code. */
+const MAX_PICTURE = 16 * 1024 * 1024;
+
+/**
+ * @param {(text: string) => void} onText @param {string} [hint]
+ * @param {{onEnvelope?: (envelope: Uint8Array) => void}} [o] onEnvelope: a picture
+ * from Pips carries its card inside (png-card.js): taken before any code is read
+ */
+export function scanner(onText, hint = t('receive.point'), o = {}) {
   const video = /** @type {HTMLVideoElement} */ (h('video', { playsInline: true, muted: true, hidden: true }));
   // Words have two places: inside the frame, under the button, while the
   // camera is off; along the bottom, over the picture, while it is on.
@@ -91,6 +99,10 @@ export function scanner(onText, hint = t('receive.point')) {
     const f = imageInput.files?.[0];
     imageInput.value = '';
     if (!f) return;
+    if (o.onEnvelope && f.size <= MAX_PICTURE) {
+      const env = envelopeIn(new Uint8Array(await f.arrayBuffer()));
+      if (env) return o.onEnvelope(env);
+    }
     const r = await reader();
     if (!r) return;
     // A file that is not a picture, or one too big to decode, simply holds no code.

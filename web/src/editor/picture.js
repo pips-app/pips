@@ -22,6 +22,8 @@ import { toast } from '../ui/shell.js';
 import { caught } from '../diagnostics.js';
 import { issuable } from '../budget.js';
 import { fromCard } from './from-card.js';
+import { isPng, envelopeIn } from '../png-card.js';
+import { peek, arrive } from '../ui/arrival.js';
 import { SIZES } from './model.js';
 
 const ACCEPT = 'image/*,.png,.aseprite,.ase';
@@ -63,6 +65,15 @@ export async function openPicture(file, done) {
     stopPlay();
     if (sourceUrl) URL.revokeObjectURL(sourceUrl);
   });
+  // A picture of a card from Pips holds the card itself: offered first —
+  // it is most likely what the person meant — the drawing still below.
+  const inside = isPng(bytes) ? envelopeIn(bytes) : null;
+  const who = inside && peek(inside);
+  const carried = inside && who
+    ? h('div', { class: 'pic-card' },
+      h('p', {}, t('pic.has-card', who.title, who.author ? `@${who.author}` : '—')),
+      h('button', { class: 'btn key wide', onclick: () => { sheet.close(); arrive(inside); } }, t('pic.add-card')))
+    : '';
   const toCanvas = /** @type {HTMLButtonElement} */ (h('button', { class: 'btn key' }, t('pic.place')));
   const other = h('button', { class: 'btn', onclick: () => { sheet.close(); pickPicture(done); } }, t('pic.other'));
   replace(sheet.foot, h('div', { class: 'row-btns' }, other, toCanvas));
@@ -102,17 +113,17 @@ export async function openPicture(file, done) {
   const isPicture = /\.(png|aseprite|ase)$/i.test(file.name) || file.type === 'image/png';
   if (isPicture) run();
 
-  // Square and small enough: the canvas takes it as it is.
+  // Pixel art the canvas holds (up to 64 a side): as it is, centred if need be.
   if (result && fromCard(result.card, builtinColors)) return pixelView();
   // Otherwise a crop — of the pixel art itself, or of the picture as the browser shows it.
   if (aseprite) {
-    replace(sheet.body, h('p', { class: 'import-status bad' }, error ? explain(error) : t('pic.ase-square')));
+    replace(sheet.body, carried, h('p', { class: 'import-status bad' }, error ? explain(error) : t('pic.ase-square')));
     toCanvas.disabled = true;
     return;
   }
   const source = result && !error ? await bitmapOf(result.card) : await createImageBitmap(file).catch(() => null);
   if (!source) {
-    replace(sheet.body, h('p', { class: 'import-status bad' }, t('pic.unreadable')));
+    replace(sheet.body, carried, h('p', { class: 'import-status bad' }, t('pic.unreadable')));
     toCanvas.disabled = true;
     return;
   }
@@ -125,7 +136,7 @@ export async function openPicture(file, done) {
     const status = h('p', { class: 'import-status', 'aria-live': 'polite' });
     const palette = paletteSelect(opts.fit ? `fit:${opts.fit}` : '', (v) => { setPalette(v); autoFit = false; run(); paint(); });
     const extras = h('div', { class: 'group import-extras' });
-    replace(sheet.body, h('div', { class: 'pic-body' }, preview, status, h('div', { class: 'group' }, h('div', { class: 'field' }, h('label', {}, t('import.opt.palette')), palette)), extras));
+    replace(sheet.body, carried, h('div', { class: 'pic-body' }, preview, status, h('div', { class: 'group' }, h('div', { class: 'field' }, h('label', {}, t('import.opt.palette')), palette)), extras));
     toCanvas.onclick = () => { if (result) place(result.card); };
 
     function paint() {
@@ -186,7 +197,7 @@ export async function openPicture(file, done) {
       onChange: (v) => { size = Number(v); remake(); },
     });
     const palette = paletteSelect(crop.palette, (v) => { crop.palette = v; remake(); });
-    replace(sheet.body, h('div', { class: 'pic-body' },
+    replace(sheet.body, carried, h('div', { class: 'pic-body' },
       h('p', { class: 'hint pic-why' }, t(pixel ? 'pic.crop.pixel' : 'pic.crop.photo')),
       stage,
       h('div', { class: 'pic-result' }, tile, status),

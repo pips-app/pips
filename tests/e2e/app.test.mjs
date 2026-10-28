@@ -1288,3 +1288,46 @@ test('give: one’s own cards with their codes, as a link, a file or a picture; 
   assert.equal(await p.$eval('.ed-layer', (c) => c.width), 16, 'the heart’s canvas');
   for (const x of [p, q]) await x.context().close();
 });
+
+test('a picture of a card opens as the card: from the file, or by its code after re-encoding', async () => {
+  const p = await env.phone('picfox');
+  await ownCard(p, 'Сердце');
+  await tab(p, 'give');
+  const [pic] = await Promise.all([p.waitForEvent('download'), p.click('.give-paper .share-link:has-text("Картинкой")')]);
+  const file = join(env.dir, 'card-picture.png');
+  await pic.saveAs(file);
+  const bytes = await readFile(file);
+  assert.equal(bytes.readUInt32BE(16), 1080, 'a card-shaped picture');
+
+  // As sent, a file: the card itself, signed, on another phone.
+  const q = await env.phone('lumen');
+  await tab(q, 'receive');
+  await fromPicture(q, 'section.view:visible', file);
+  await q.locator('.turn:not([hidden])').waitFor();
+  const got = await q.evaluate(async () => [...(await import('/src/state.js')).app.cards.values()].map((e) => [e.card.title, e.author?.hex.length > 0]));
+  assert.deepEqual(got, [['Сердце', true]], 'the card, with its author');
+
+  // Re-encoded on the way (a messenger, a screenshot): the code on it.
+  const jpeg = join(env.dir, 'card-picture.jpg');
+  const data = await p.evaluate(async (b64) => {
+    const img = await createImageBitmap(new Blob([Uint8Array.from(atob(b64), (c) => c.charCodeAt(0))], { type: 'image/png' }));
+    const cv = new OffscreenCanvas(img.width / 2, img.height / 2);
+    cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
+    const blob = await cv.convertToBlob({ type: 'image/jpeg', quality: 0.8 });
+    return btoa(String.fromCharCode(...new Uint8Array(await blob.arrayBuffer())));
+  }, bytes.toString('base64'));
+  await writeFile(jpeg, Buffer.from(data, 'base64'));
+  const r = await env.phone('rook');
+  await tab(r, 'receive');
+  await fromPicture(r, 'section.view:visible', jpeg);
+  await r.locator('.turn:not([hidden])').waitFor({ timeout: 15000 });
+  assert.equal(await cards(r), 1, 'read off the picture');
+
+  // In the editor, the picture says what it is before anything else.
+  await picture(r, file);
+  assert.match(await r.textContent('.overlay .pic-card'), /карточка «Сердце», @picfox/);
+  await r.click('.overlay .pic-card .btn');
+  await r.locator('.overlay').waitFor({ state: 'detached' });
+  assert.equal(await cards(r), 1, 'the same card: nothing new');
+  for (const x of [p, q, r]) await x.context().close();
+});

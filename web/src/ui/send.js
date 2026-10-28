@@ -56,23 +56,6 @@ export function fileName(title, ext) {
   return `${base}.${ext}`;
 }
 
-/**
- * A card's first frame as a PNG, each pixel a square block, at least
- * `min` pixels across — the size people post, and one the import reads
- * back as pixel art. @param {{width: number, height: number, rgba: ArrayLike<number>}} r @param {number} [min]
- * @returns {Promise<Blob>}
- */
-export function pixelPng(r, min = 512) {
-  const k = Math.max(1, Math.ceil(min / r.width));
-  const src = h('canvas', { width: r.width, height: r.height });
-  /** @type {CanvasRenderingContext2D} */ (/** @type {HTMLCanvasElement} */ (src).getContext('2d')).putImageData(new ImageData(new Uint8ClampedArray(r.rgba), r.width, r.height), 0, 0);
-  const out = /** @type {HTMLCanvasElement} */ (h('canvas', { width: r.width * k, height: r.height * k }));
-  const g = /** @type {CanvasRenderingContext2D} */ (out.getContext('2d'));
-  g.imageSmoothingEnabled = false;
-  g.drawImage(/** @type {HTMLCanvasElement} */ (src), 0, 0, out.width, out.height);
-  return new Promise((ok, fail) => out.toBlob((b) => (b ? ok(b) : fail(new Error('the picture could not be made'))), 'image/png'));
-}
-
 const CYR = 'а:a б:b в:v г:g д:d е:e ё:yo ж:zh з:z и:i й:y к:k л:l м:m н:n о:o п:p р:r с:s т:t у:u ф:f х:kh ц:ts ч:ch ш:sh щ:shch ъ: ы:y ь: э:e ю:yu я:ya';
 const TO_LATIN = new Map(CYR.split(' ').map((p) => /** @type {[string, string]} */ (p.split(':'))));
 

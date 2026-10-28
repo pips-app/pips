@@ -1,16 +1,16 @@
 // @ts-check
 // What the share sheet holds for a card: its code, ready to be scanned,
 // and the ways for someone who is not in the room — the same envelope as
-// a link or as a .pips file, and, for one's own card, the picture as a
-// PNG (the picture only: no signature goes with it, so not for a card
-// someone else drew).
+// a link, as a .pips file, or as a picture of the card that carries it
+// (card-picture.js): its code drawn on it, the envelope inside.
 // An own card goes out signed by its author, as a plain copy or as a
 // numbered one; someone else's card goes out as a copy passed on by you.
 
 import { h, icon } from '../dom.js';
 import { t } from '../i18n.js';
 import { linkBase, MAGIC } from '../links.js';
-import { sendLink, sendFile, fileName, pixelPng } from '../ui/send.js';
+import { sendLink, sendFile, fileName } from '../ui/send.js';
+import { cardPicture } from '../ui/card-picture.js';
 import { toast } from '../ui/shell.js';
 import { caught } from '../diagnostics.js';
 import { app, subscribe } from '../state.js';
@@ -52,10 +52,11 @@ export function fillShare(body, entry, o = {}) {
   const ways = (env) => h('div', { class: 'share-ways', role: 'group', 'aria-label': t('share.ways') },
     h('button', { type: 'button', class: 'share-link', onclick: () => sendLink(app.core.cardLink(linkBase(location), env), name, t('share.link.text', name)) }, icon('link'), t('share.link')),
     h('button', { type: 'button', class: 'share-link', onclick: () => sendFile(new File([new Uint8Array([...MAGIC, ...env])], fileName(name, 'pips'), { type: 'application/octet-stream' }), name) }, icon('file'), t('share.file')),
-    entry.rec.mine ? h('button', { type: 'button', class: 'share-link', onclick: () => picture() }, icon('image'), t('share.png')) : '');
-  const picture = async () => {
+    h('button', { type: 'button', class: 'share-link', onclick: () => picture(env) }, icon('image'), t('share.png')));
+  /** @param {Uint8Array} env */
+  const picture = async (env) => {
     try {
-      await sendFile(new File([await pixelPng(app.core.render(entry.card, 0))], fileName(name, 'png'), { type: 'image/png' }), name);
+      await sendFile(new File([await cardPicture(entry.card, env)], fileName(name, 'png'), { type: 'image/png' }), name);
     } catch (e) {
       caught(e, 'share');
       toast(t('err.generic'));
