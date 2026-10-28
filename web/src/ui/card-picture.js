@@ -64,44 +64,42 @@ export async function cardPicture(card, envelope) {
 }
 
 /**
- * The code in the paper's own colours, so it sits on the card quietly:
- * on light paper, the paper is its ground and the modules are the ink
- * softened toward the paper's grey; on dark paper — where a code light on
- * dark would not scan everywhere — a small ground in the ink's light
- * colour, the modules in the paper's. Always dark on light, and never
- * below a contrast every reader takes (checked in the tests, after JPEG).
+ * The code in the paper's own colours, on a small rounded ground of its
+ * own — a label on the card, alike on every paper. On light paper the
+ * ground is the paper lightened and the modules are the ink softened
+ * toward the paper's grey; on dark paper — where a code light on dark
+ * would not scan everywhere — the ground is the ink's light colour and the
+ * modules the paper's. Always dark on light, never below a contrast every
+ * reader takes (checked in the tests, after JPEG).
  * @param {{paper: string, ink: string, dim: string}} shade
- * @returns {{ground: string, modules: string, box: boolean}}
+ * @returns {{ground: string, modules: string}}
  */
 export function codeColours(shade) {
   const paper = rgb(shade.paper), ink = rgb(shade.ink), dim = rgb(shade.dim);
   if (luma(paper) > luma(ink)) {
+    const ground = mix(paper, [255, 255, 255], 0.6);
     // As far toward the grey as the contrast allows.
     let best = ink;
     for (let k = 0.05; k <= 0.6; k += 0.05) {
       const c = mix(ink, dim, k);
-      if (contrast(paper, c) < MIN_CONTRAST) break;
+      if (contrast(ground, c) < MIN_CONTRAST) break;
       best = c;
     }
-    return { ground: shade.paper, modules: hex(best), box: false };
+    return { ground: hex(ground), modules: hex(best) };
   }
-  return { ground: hex(mix(ink, paper, 0.06)), modules: shade.paper, box: true };
+  return { ground: hex(mix(ink, paper, 0.06)), modules: shade.paper };
 }
 const MIN_CONTRAST = 7; // with 3+ px a module: read at full size and at 3/4, after JPEG (tests)
 
-/** A code with whole pixels to each module. @param {CanvasRenderingContext2D} g @param {string} text @param {number} x @param {number} y @param {number} side @param {{ground: string, modules: string, box: boolean}} c */
+/** A code with whole pixels to each module. @param {CanvasRenderingContext2D} g @param {string} text @param {number} x @param {number} y @param {number} side @param {{ground: string, modules: string}} c */
 function drawQr(g, text, x, y, side, c) {
   const m = app.core.qrMatrix(text);
   const n = m.size + 2 * QUIET, px = Math.floor(side / n), s = n * px;
   const ox = x + side - s, oy = y + side - s; // flush with the corner
   g.fillStyle = c.ground;
-  if (c.box) {
-    g.beginPath();
-    g.roundRect(ox, oy, s, s, 14);
-    g.fill();
-  } else {
-    g.fillRect(ox, oy, s, s);
-  }
+  g.beginPath();
+  g.roundRect(ox, oy, s, s, 14);
+  g.fill();
   g.fillStyle = c.modules;
   for (let r = 0; r < m.size; r++) {
     for (let k = 0; k < m.size; k++) if (m.modules[r * m.size + k]) g.fillRect(ox + (k + QUIET) * px, oy + (r + QUIET) * px, px, px);
