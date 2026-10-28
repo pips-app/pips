@@ -11,7 +11,7 @@
 // The stage knows how cards move, not what they mean: taps, holds and pulls
 // are reported to its owner (the collection view), which decides.
 
-import { h } from '../dom.js';
+import { h, cssNumber } from '../dom.js';
 import { Spring, SPRINGS, loop, mix, clamp, ease, rubber } from '../kit/motion.js';
 import { gestures } from '../kit/gestures.js';
 import { grid, feedRect, feedWidth, feedTarget, runs, groupKey } from './layout.js';
@@ -44,6 +44,8 @@ import { grid, feedRect, feedWidth, feedTarget, runs, groupKey } from './layout.
  * }} o
  */
 export function createStage(o) {
+  /** A card's caption, as the CSS draws it (.cap): this share of the width plus this much. */
+  const cap = { share: 0, add: 0 };
   const Z = new Spring(1, SPRINGS.zoom);
   const scroll = [new Spring(0, SPRINGS.scroll), new Spring(0, SPRINGS.scroll)];
   const fling = [0, 0];
@@ -81,6 +83,8 @@ export function createStage(o) {
   /** Both grids, with their labels' words, for the current list and frame. */
   function layouts() {
     fr = o.frame();
+    cap.share = cssNumber('--cap-share');
+    cap.add = cssNumber('--cap-add');
     return /** @type {const} */ ([0, 1]).map((l) => {
       const g = grid(l, runs(list, (c) => groupKey(l, o.by(), c)), fr);
       return { ...g, texts: g.labels.map((lab) => o.label(l, lab)) };
@@ -148,7 +152,7 @@ export function createStage(o) {
           r.y += dragY.v;
         }
       }
-      const hgt = r.w + (r.w * 0.19 + 10) * r.cap; // as .cap in app.css
+      const hgt = r.w + (r.w * cap.share + cap.add) * r.cap;
       c.rr = { x: r.x, y: r.y, w: r.w, h: hgt, cap: r.cap, o: r.o, z: r.z };
       const s = c.el.style;
       s.width = `${r.w}px`;

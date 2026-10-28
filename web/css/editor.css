@@ -41,7 +41,7 @@
 .ed-layer { position: absolute; inset: 0; width: 100%; height: 100%; image-rendering: pixelated; }
 .ed-onion { opacity: .45; }
 .ed-art.playing .ed-onion { display: none; }
-.ed-lines { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 2; }
+.ed-lines { position: absolute; left: 0; top: 0; pointer-events: none; z-index: 2; } /* sized and placed by canvas.js, on whole device pixels */
 /* Zoomed in, the card is brought closer: scaled from its corner, clipped by its place. */
 .ed-card-wrap { overflow: hidden; touch-action: none; }
 .ed-card { transform-origin: 0 0; }
@@ -97,11 +97,16 @@
 .ed-shape[aria-pressed="true"] { background: var(--raise); color: var(--text); }
 
 /* The selection's actions take the place of the frames while there is a box. */
-.ed-sel-bar { display: flex; gap: 4px; justify-content: center; padding: 10px 12px 4px; }
+.ed-place { display: grid; }
+.ed-place > * { grid-area: 1 / 1; }
+.ed-view.precise .ed-main > .ed-place { display: none; }
+.ed-sel-bar { display: flex; gap: 4px; justify-content: center; align-items: center; padding: 10px 12px 4px; }
+.ed-pad .ed-sel-bar { min-height: 0; padding: 0; }
+.ed-view.selecting .ed-pad p { visibility: hidden; }
 .ed-sel-bar[hidden] { display: none; }
 .ed-sel-btn { width: 44px; height: 44px; border: 0; border-radius: 12px; background: var(--raise2); color: var(--text); display: grid; place-items: center; }
 .ed-sel-btn[aria-pressed="true"] { background: var(--cobalt); color: #fff; }
-.ed-view.selecting .ed-frames { display: none; }
+.ed-view.selecting .ed-frames { visibility: hidden; } /* keeps its height: the canvas stays put */
 
 /* The precise mode: the pad takes the place of the frames. */
 .ed-pad { display: none; flex: 1; min-height: 180px; margin: 4px 12px 8px; border-radius: 22px; background: var(--raise); border: 1px solid var(--line);

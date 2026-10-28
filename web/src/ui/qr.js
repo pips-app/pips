@@ -7,14 +7,19 @@ import { app } from '../state.js';
 const QUIET = 4;
 const FRAME_MS = 220;
 
-/** Draws text as a QR symbol with whole pixels per module. @param {HTMLCanvasElement} cv @param {string} text @param {number} maxPx */
+/**
+ * Draws text as a QR symbol with whole pixels of the screen per module —
+ * not CSS pixels: a phone has two or three of those to each, so the step
+ * is fine, and a code of any size nearly fills its square.
+ * @param {HTMLCanvasElement} cv @param {string} text @param {number} maxPx
+ */
 function draw(cv, text, maxPx) {
   const m = app.core.qrMatrix(text);
-  const side = m.size + QUIET * 2;
-  const scale = Math.max(1, Math.floor(maxPx / side));
+  const side = m.size + QUIET * 2, dpr = devicePixelRatio || 1;
+  const scale = Math.max(1, Math.floor((maxPx * dpr) / side)); // device pixels a module
   cv.width = side;
   cv.height = side;
-  cv.style.width = cv.style.height = `${side * scale}px`;
+  cv.style.width = cv.style.height = `${(side * scale) / dpr}px`;
   const g = /** @type {CanvasRenderingContext2D} */ (cv.getContext('2d'));
   const img = g.createImageData(side, side);
   img.data.fill(255);
@@ -52,7 +57,19 @@ export function qrFor(bytes, maxPx) {
     next();
     timer = window.setInterval(next, FRAME_MS);
   }
-  return { el: h('div', { class: 'qr-box' }, cv), plan, stop: () => clearInterval(timer) };
+  return { el: box(cv, maxPx), plan, stop: () => clearInterval(timer) };
+}
+
+/**
+ * The white square a code lies on: always `side` across, whatever the code.
+ * Each module takes whole pixels of the screen, so a code may come out a
+ * hair smaller than the square; the square itself does not, and nothing around it moves when
+ * one code gives way to another. @param {HTMLCanvasElement} cv @param {number} side
+ */
+function box(cv, side) {
+  const el = h('div', { class: 'qr-box' }, cv);
+  el.style.width = el.style.height = `${side}px`;
+  return el;
 }
 
 /** A QR display for text that is already in the QR alphabet (a paper key,
@@ -60,7 +77,7 @@ export function qrFor(bytes, maxPx) {
 export function qrText(text, maxPx) {
   const cv = /** @type {HTMLCanvasElement} */ (h('canvas', { 'aria-label': 'QR' }));
   draw(cv, text, maxPx);
-  return h('div', { class: 'qr-box' }, cv);
+  return box(cv, maxPx);
 }
 
 /** Keeps the screen on while a code is shown, where the browser allows it. */

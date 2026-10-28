@@ -141,7 +141,15 @@ export function drawInput(el, o) {
       g = null;
       o.point?.(e.pointerType === 'touch' ? null : { x: e.clientX, y: e.clientY });
     } else if (g?.kind === 'view') {
-      if (pts.size) return; // the gesture ends with the last finger
+      if (pts.size) {
+        // The gesture ends with the last finger. Until then the fingers left
+        // carry on from where the view is now: measured from its start, a
+        // single finger has no spread, and the zoom would spring back.
+        g.mid0 = mid();
+        g.d0 = spread();
+        o.view.start(g.mid0, g.d0);
+        return;
+      }
       const v = g;
       g = null;
       o.view.end();

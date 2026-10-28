@@ -526,7 +526,7 @@ test('the editor: drawing, undo that loses nothing, palettes, frames, a draft, s
   // A line, undone with the keyboard, redone with the button.
   await stroke([2, 2], [9, 2]);
   assert.equal(await cell(5, 2), '#17151f');
-  assert.equal(await undoLabel(), 'Отменить: карандаш');
+  assert.equal(await undoLabel(), 'Отменить: штрих карандашом');
   await p.keyboard.press('Control+z');
   assert.equal(await cell(5, 2), null);
   await p.click('.ed-bar .ib >> nth=2');
@@ -574,7 +574,7 @@ test('the editor: drawing, undo that loses nothing, palettes, frames, a draft, s
   await p.keyboard.press('d');
   await stroke([2, 20], [9, 20]);
   assert.deepEqual([await cell(2, 20), await cell(3, 20), await cell(4, 20)], ['#17151f', null, '#17151f']);
-  assert.equal(await undoLabel(), 'Отменить: шахматка');
+  assert.equal(await undoLabel(), 'Отменить: штрих шахматкой');
   await p.keyboard.press('d');
 
   // Zooming brings the whole card closer; 0 puts it back.
@@ -591,7 +591,7 @@ test('the editor: drawing, undo that loses nothing, palettes, frames, a draft, s
   await p.click('.bottom-sheet.on .btn.key');
   assert.match(await p.textContent('.ed-pal-name'), /Sweetie 16/);
   assert.notEqual(await cell(5, 2), '#17151f');
-  assert.equal(await undoLabel(), 'Отменить: другая палитра');
+  assert.equal(await undoLabel(), 'Отменить: смена палитры');
 
   // A second frame, a title; the meter says one code.
   await p.click('.ed-frame.add');
@@ -606,7 +606,7 @@ test('the editor: drawing, undo that loses nothing, palettes, frames, a draft, s
   await tab(p, 'draw');
   await p.locator('.ed-frame-list .ed-frame >> nth=1').waitFor();
   assert.equal(await p.inputValue('.ed-title'), 'Лесенка');
-  assert.match(await undoLabel(), /название/);
+  assert.match(await undoLabel(), /смена названия/);
 
   // Signed, it opens in the collection.
   await p.click('.ed-sign');
@@ -1022,8 +1022,8 @@ test('the tab bar waits for the card to land in the archive and the strip to go'
 });
 
 test('the editor grid lies exactly on the cells, from edge to edge', async () => {
-  for (const desk of [false, true]) {
-    const p = await env.phone('pixelfox', undefined, desk);
+  for (const [desk, scale] of [[false, 1], [true, 1], [false, 2.625], [false, 3]]) {
+    const p = await env.phone('pixelfox', undefined, desk, scale);
     await tab(p, 'draw');
     await p.locator('.ed-art').waitFor();
     await p.waitForTimeout(400);
@@ -1041,6 +1041,15 @@ test('the editor grid lies exactly on the cells, from edge to edge', async () =>
     });
     // The grid's lines start and end on the art's edges (within a pixel).
     m.art.forEach((a, i) => assert.ok(Math.abs(a - m.grid[i]) <= 1.5, `${desk ? 'computer' : 'phone'}: ${JSON.stringify(m)}`));
+    // And the canvas they are on lies on whole device pixels, one of its
+    // pixels to each: anything else is resampled, and a line blurs over two.
+    // At 2.625 that is only every 8th CSS pixel.
+    const fit = await p.evaluate(() => {
+      const c = /** @type {HTMLCanvasElement} */ (document.querySelector('.ed-lines')), r = c.getBoundingClientRect(), k = devicePixelRatio;
+      const whole = (v) => Math.abs(v - Math.round(v)) < 1e-3;
+      return { ok: whole(r.left) && whole(r.top) && whole(r.left * k) && whole(r.top * k) && Math.abs(r.width * k - c.width) < 1e-3 && Math.abs(r.height * k - c.height) < 1e-3, r: [r.left, r.top, r.width, r.height], c: [c.width, c.height], k };
+    });
+    assert.ok(fit.ok, JSON.stringify(fit));
     await p.context().close();
   }
 });
@@ -1357,5 +1366,46 @@ test('the code on a card picture takes the paper’s colours and still reads, on
     return out;
   });
   assert.deepEqual(results, Array(16).fill(true), `every paper, at both sizes: ${results.map(Number).join('')}`);
+  await p.context().close();
+});
+
+test('the editor holds still: a pinch keeps its zoom as the fingers lift, a selection moves nothing', async () => {
+  const p = await env.phone('stillfox');
+  await tab(p, 'draw');
+  await p.locator('.ed-art').waitFor();
+  const width = () => p.evaluate(() => document.querySelector('.ed-art').getBoundingClientRect().width);
+  const w0 = await width();
+  /** A finger on the canvas, by its offset from the middle. */
+  const finger = (type, id, dx, dy = 0) => p.evaluate(([type, id, dx, dy]) => {
+    const el = document.querySelector('.ed-card-wrap'), r = el.getBoundingClientRect();
+    el.dispatchEvent(new PointerEvent(type, { bubbles: true, pointerId: id, pointerType: 'touch', clientX: r.left + r.width / 2 + dx, clientY: r.top + r.height / 2 + dy }));
+  }, [type, id, dx, dy]);
+  // Two fingers spread to three times as far apart: the zoom.
+  await finger('pointerdown', 1, -30);
+  await finger('pointerdown', 2, 30);
+  for (const d of [45, 60, 75, 90]) { await finger('pointermove', 1, -d); await finger('pointermove', 2, d); }
+  const w1 = await width();
+  assert.ok(w1 > w0 * 2, `zoomed in (${w0} → ${w1})`);
+  // One lifts first; the other moves a little before it lifts too.
+  await finger('pointerup', 2, 90);
+  await finger('pointermove', 1, -80, 6);
+  await finger('pointermove', 1, -70, 12);
+  await finger('pointerup', 1, -70, 12);
+  await p.waitForTimeout(400);
+  assert.ok(Math.abs((await width()) - w1) < 1, `the zoom stays as the fingers lift (${w1} → ${await width()})`);
+
+  // A selection, plain and precise: the card does not move by a pixel.
+  const rect = () => p.evaluate(() => JSON.stringify(document.querySelector('.ed-card-wrap').getBoundingClientRect()));
+  await p.click('.ed-tool-select');
+  for (const precise of [false, true]) {
+    if (precise) await p.click('.ed-tool-precise');
+    const r0 = await rect();
+    await p.keyboard.press('Control+a');
+    await p.waitForTimeout(100);
+    assert.equal(await rect(), r0, `${precise ? 'precise' : 'plain'}: the card stays as the selection's bar comes`);
+    await p.keyboard.press('Escape');
+    await p.waitForTimeout(100);
+    assert.equal(await rect(), r0, `${precise ? 'precise' : 'plain'}: and as it goes`);
+  }
   await p.context().close();
 });
