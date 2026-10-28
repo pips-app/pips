@@ -1331,3 +1331,31 @@ test('a picture of a card opens as the card: from the file, or by its code after
   assert.equal(await cards(r), 1, 'the same card: nothing new');
   for (const x of [p, q, r]) await x.context().close();
 });
+
+test('the code on a card picture takes the paper’s colours and still reads, on every paper, after JPEG', async () => {
+  const p = await env.phone('shadefox');
+  const results = await p.evaluate(async () => {
+    const s = await import('/src/state.js');
+    const { cardPicture } = await import('/src/ui/card-picture.js');
+    const { qrReader } = await import('/src/qrscan.js');
+    const reader = await qrReader();
+    const out = [];
+    for (const scale of [1, 0.75]) for (let shade = 0; shade < 8; shade++) {
+      const card = { width: 16, height: 16, opaque: true, palette: { builtin: 0 }, frame: shade, frames: 1, delay_ms: 0, title: `Рамка ${shade}`, author: 'shadefox', handle: null, link: '', pixels: new Uint8Array(256).map((_, i) => i % 7) };
+      const env = s.app.identity.sealAsAuthor(s.app.identity.signCard(card), undefined);
+      const png = await cardPicture(card, env);
+      // As a messenger passes a photo on: a JPEG, at the size it was (they
+      // keep 1280 px), and a screenshot of it on a smaller screen.
+      const img = await createImageBitmap(png);
+      const cv = new OffscreenCanvas(img.width * scale, img.height * scale);
+      cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
+      const jpeg = await createImageBitmap(await cv.convertToBlob({ type: 'image/jpeg', quality: 0.75 }));
+      const texts = await reader.read(jpeg);
+      const want = s.app.core.qrPlan(env).text;
+      out.push(texts.includes(want));
+    }
+    return out;
+  });
+  assert.deepEqual(results, Array(16).fill(true), `every paper, at both sizes: ${results.map(Number).join('')}`);
+  await p.context().close();
+});

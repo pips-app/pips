@@ -13,7 +13,7 @@ import { t } from '../i18n.js';
 
 const W = 1080, H = 1440, PAD = 60;
 const ART = W - 2 * PAD; // the drawing's square
-const QR = 320; // the code's square, quiet zone included
+const QR = 380; // the code's square, quiet zone included: 3+ px a module
 const QUIET = 4;
 
 /**
@@ -45,7 +45,7 @@ export async function cardPicture(card, envelope) {
   const plan = app.core.qrPlan(envelope);
   const top = PAD + ART + 44;
   const textRight = plan.kind === 'single' ? W - PAD - QR - 32 : W - PAD;
-  if (plan.kind === 'single') drawQr(g, plan.text, W - PAD - QR, H - PAD - QR, QR);
+  if (plan.kind === 'single') drawQr(g, plan.text, W - PAD - QR, H - PAD - QR, QR, codeColours(shade));
 
   // The name and the artist, as on the card.
   g.textBaseline = 'top';
@@ -63,18 +63,64 @@ export async function cardPicture(card, envelope) {
   return new Blob([withEnvelope(new Uint8Array(await /** @type {Blob} */ (png).arrayBuffer()), envelope)], { type: 'image/png' });
 }
 
-/** A code with whole pixels to each module, dark on white. @param {CanvasRenderingContext2D} g @param {string} text @param {number} x @param {number} y @param {number} side */
-function drawQr(g, text, x, y, side) {
+/**
+ * The code in the paper's own colours, so it sits on the card quietly:
+ * on light paper, the paper is its ground and the modules are the ink
+ * softened toward the paper's grey; on dark paper — where a code light on
+ * dark would not scan everywhere — a small ground in the ink's light
+ * colour, the modules in the paper's. Always dark on light, and never
+ * below a contrast every reader takes (checked in the tests, after JPEG).
+ * @param {{paper: string, ink: string, dim: string}} shade
+ * @returns {{ground: string, modules: string, box: boolean}}
+ */
+export function codeColours(shade) {
+  const paper = rgb(shade.paper), ink = rgb(shade.ink), dim = rgb(shade.dim);
+  if (luma(paper) > luma(ink)) {
+    // As far toward the grey as the contrast allows.
+    let best = ink;
+    for (let k = 0.05; k <= 0.6; k += 0.05) {
+      const c = mix(ink, dim, k);
+      if (contrast(paper, c) < MIN_CONTRAST) break;
+      best = c;
+    }
+    return { ground: shade.paper, modules: hex(best), box: false };
+  }
+  return { ground: hex(mix(ink, paper, 0.06)), modules: shade.paper, box: true };
+}
+const MIN_CONTRAST = 7; // with 3+ px a module: read at full size and at 3/4, after JPEG (tests)
+
+/** A code with whole pixels to each module. @param {CanvasRenderingContext2D} g @param {string} text @param {number} x @param {number} y @param {number} side @param {{ground: string, modules: string, box: boolean}} c */
+function drawQr(g, text, x, y, side, c) {
   const m = app.core.qrMatrix(text);
   const n = m.size + 2 * QUIET, px = Math.floor(side / n), s = n * px;
   const ox = x + side - s, oy = y + side - s; // flush with the corner
-  g.fillStyle = '#ffffff';
-  g.fillRect(ox, oy, s, s);
-  g.fillStyle = '#17151f';
+  g.fillStyle = c.ground;
+  if (c.box) {
+    g.beginPath();
+    g.roundRect(ox, oy, s, s, 14);
+    g.fill();
+  } else {
+    g.fillRect(ox, oy, s, s);
+  }
+  g.fillStyle = c.modules;
   for (let r = 0; r < m.size; r++) {
-    for (let c = 0; c < m.size; c++) if (m.modules[r * m.size + c]) g.fillRect(ox + (c + QUIET) * px, oy + (r + QUIET) * px, px, px);
+    for (let k = 0; k < m.size; k++) if (m.modules[r * m.size + k]) g.fillRect(ox + (k + QUIET) * px, oy + (r + QUIET) * px, px, px);
   }
 }
+
+/** @param {string} h '#rrggbb' */
+const rgb = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+/** @param {number[]} c */
+const hex = (c) => `#${c.map((v) => Math.round(v).toString(16).padStart(2, '0')).join('')}`;
+/** @param {number[]} a @param {number[]} b @param {number} k */
+const mix = (a, b, k) => a.map((v, i) => v + (b[i] - v) * k);
+/** Relative luminance (WCAG). @param {number[]} c */
+const luma = (c) => {
+  const [r, g, b] = c.map((v) => { const s = v / 255; return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4; });
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+};
+/** @param {number[]} a @param {number[]} b */
+const contrast = (a, b) => { const [x, y] = [luma(a), luma(b)].sort((p, q) => q - p); return (x + 0.05) / (y + 0.05); };
 
 /** The text in at most `max` lines of `width`, the last cut with an ellipsis. @param {CanvasRenderingContext2D} g @param {string} text @param {number} width @param {number} max */
 function wrap(g, text, width, max) {
