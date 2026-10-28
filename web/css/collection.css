@@ -156,7 +156,7 @@ input.tag.add::placeholder { color: var(--shade-dim); }
 .share-code p { margin: 0; font-size: 13px; text-align: center; max-width: 34ch; color: var(--shade-dim); }
 .share-code p.small { font-size: 11.5px; }
 .share-code .qr-box { box-shadow: none; }
-.share-ways { margin-top: 4px; display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; }
+.share-ways { margin-top: auto; padding-top: 4px; display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; }
 .share-link { display: inline-flex; align-items: center; gap: 6px; border: 0; border-radius: 99px; padding: 8px 12px;
   background: color-mix(in srgb, var(--shade-ink) 8%, transparent); color: var(--shade-ink); font: 500 13px var(--sans); }
 .share-link .i { width: 16px; height: 16px; }

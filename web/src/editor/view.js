@@ -151,7 +151,10 @@ export function editorView() {
   const aside = h('aside', { class: 'ed-aside' });
   const wrap = h('div', { class: 'ed-card-wrap' }, card, coords);
   canvas.mount(wrap, card);
-  const main = h('div', { class: 'ed-main' }, wrap, frames.el);
+  // The frames' strip and the selection's actions share one place, one on
+  // top of the other: it is as tall as the taller, whichever shows.
+  const strip = h('div', { class: 'ed-place' }, frames.el);
+  const main = h('div', { class: 'ed-main' }, wrap, strip);
   const el = h('section', { class: 'view ed-view' },
     bar, h('div', { class: 'ed-body' }, tools.el, main, h('div', { class: 'ed-lower' }, palette.el, pad.el), aside),
     ...more.els, ...palettes.els, ...colors.els, ...history.els, ...frameSheet.els);
@@ -179,7 +182,14 @@ export function editorView() {
     model, selection, pick: (c) => pickAt(c),
     now: () => ({ frame: state.frame, color: state.color, shape: state.shape, pen: state.pen, mirror: state.mirror, axes: state.axes }),
   });
-  main.insertBefore(selection.bar, frames.el);
+  // The selection's actions take a place that is already there, so the
+  // canvas never moves when a box appears: the frames' strip, or, in the
+  // precise mode (no strip), the top of the pad, over its hint.
+  const placeSelBar = () => {
+    if (state.precise) pad.top.append(selection.bar);
+    else strip.append(selection.bar);
+  };
+  placeSelBar();
 
   /** The pipette: an empty cell picks the eraser. @param {Cell} c */
   function pickAt(c) {
@@ -433,7 +443,10 @@ export function editorView() {
     settings.setAxes(state.axes);
     const puts = state.tool === 'pen' || state.tool === 'fill' || state.tool === 'shapes';
     pad.mode(t(`ed.precise.${state.tool}`), puts ? hex(d.colors[state.color] ?? 0) : null);
-    el.classList.toggle('precise', state.precise);
+    if (el.classList.contains('precise') !== state.precise) {
+      el.classList.toggle('precise', state.precise);
+      placeSelBar();
+    }
     canvas.el.classList.toggle('playing', state.playing);
     if (state.precise) {
       cursor = { x: clamp(cursor.x, 0, d.size - 0.01), y: clamp(cursor.y, 0, d.size - 0.01) };

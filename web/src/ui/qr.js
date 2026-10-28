@@ -52,7 +52,19 @@ export function qrFor(bytes, maxPx) {
     next();
     timer = window.setInterval(next, FRAME_MS);
   }
-  return { el: h('div', { class: 'qr-box' }, cv), plan, stop: () => clearInterval(timer) };
+  return { el: box(cv, maxPx), plan, stop: () => clearInterval(timer) };
+}
+
+/**
+ * The white square a code lies on: always `side` across, whatever the code.
+ * Each module takes whole pixels, so a code with fewer modules comes out a
+ * little smaller; its square does not, and nothing around it moves when
+ * one code gives way to another. @param {HTMLCanvasElement} cv @param {number} side
+ */
+function box(cv, side) {
+  const el = h('div', { class: 'qr-box' }, cv);
+  el.style.width = el.style.height = `${side}px`;
+  return el;
 }
 
 /** A QR display for text that is already in the QR alphabet (a paper key,
@@ -60,7 +72,7 @@ export function qrFor(bytes, maxPx) {
 export function qrText(text, maxPx) {
   const cv = /** @type {HTMLCanvasElement} */ (h('canvas', { 'aria-label': 'QR' }));
   draw(cv, text, maxPx);
-  return h('div', { class: 'qr-box' }, cv);
+  return box(cv, maxPx);
 }
 
 /** Keeps the screen on while a code is shown, where the browser allows it. */

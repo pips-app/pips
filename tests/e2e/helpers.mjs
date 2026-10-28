@@ -44,10 +44,10 @@ export async function setup() {
   const browser = await engine.launch();
   const dir = await mkdtemp(join(tmpdir(), 'pips-e2e-'));
   const errors = [];
-  /** A fresh phone at its first screen; `desk`: a computer's screen instead. */
-  async function blank(name, desk = false) {
+  /** A fresh phone at its first screen; `desk`: a computer's screen instead; `scale`: device pixels to a CSS pixel. */
+  async function blank(name, desk = false, scale = 1) {
     const viewport = desk ? { width: 1440, height: 900 } : { width: 390, height: 844 };
-    const ctx = await browser.newContext({ viewport, locale: 'ru-RU', acceptDownloads: true });
+    const ctx = await browser.newContext({ viewport, locale: 'ru-RU', acceptDownloads: true, deviceScaleFactor: scale });
     const p = await ctx.newPage();
     p.on('pageerror', (e) => errors.push(`${name}: ${e.message}`));
     p.on('console', (m) => { if (m.type() === 'error') errors.push(`${name}: ${m.text()}`); });
@@ -55,8 +55,8 @@ export async function setup() {
     return p;
   }
   /** A fresh phone with a key; with `words`, restored instead of created. */
-  async function phone(nick, words, desk = false) {
-    const p = await blank(nick, desk);
+  async function phone(nick, words, desk = false, scale = 1) {
+    const p = await blank(nick, desk, scale);
     if (words) {
       await p.click('text=У меня уже есть ключ');
       await p.fill('.words-entry input >> nth=0', words); // a phrase pasted fills every cell

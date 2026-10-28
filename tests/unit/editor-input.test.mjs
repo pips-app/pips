@@ -48,7 +48,24 @@ test('a second finger takes the stroke back; a quick two-finger tap undoes', () 
   s.down(2, 100, 10);
   s.up(2, 100, 10);
   s.up(1, 10, 10);
-  assert.deepEqual(s.log0(), [['draw', 10], ['cancel'], ['view'], ['view-end'], ['taps', 2]]);
+  // The view starts again from the finger that stays (see the next test).
+  assert.deepEqual(s.log0(), [['draw', 10], ['cancel'], ['view'], ['view'], ['view-end'], ['taps', 2]]);
+});
+
+test('a finger left after a pinch carries on from where the view is, not from the pinch’s start', () => {
+  const starts = [];
+  const on = {};
+  drawInput(/** @type {any} */ ({ addEventListener: (type, f) => { on[type] = f; }, setPointerCapture() {} }), {
+    draw: () => ({ move() {}, end() {}, cancel() {} }), pick() {}, taps() {},
+    view: { start: (m, d) => starts.push([m.x, d]), move() {}, end() {} },
+  });
+  const ev = (type, id, x) => on[type]({ type, pointerId: id, pointerType: 'touch', clientX: x, clientY: 0, button: 0, target: { closest: () => null } });
+  ev('pointerdown', 1, 0);
+  ev('pointerdown', 2, 100);
+  ev('pointermove', 2, 300);
+  ev('pointerup', 2, 300);
+  // Measured from its start, one finger has no spread, and the zoom would spring back.
+  assert.deepEqual(starts, [[50, 100], [0, 0]]);
 });
 
 test('three fingers tapped together redo', () => {

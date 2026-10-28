@@ -35,7 +35,9 @@ export function precisePad(o) {
   const put = hold('ed-put', null, t('ed.precise.put'), false);
   const erase = hold('ed-round', 'eraser', t('ed.precise.erase'), true);
   const pick = h('button', { type: 'button', class: 'ed-round', 'aria-label': t('ed.tool.pick'), title: t('ed.tool.pick'), onclick: o.pick }, icon('pick'));
-  const el = h('div', { class: 'ed-pad', 'aria-label': t('ed.precise') }, hint, h('div', { class: 'ed-pad-btns' }, pick, erase, put));
+  // The hint's place: the selection's actions take it over (view.js).
+  const top = h('div', { class: 'ed-place' }, hint);
+  const el = h('div', { class: 'ed-pad', 'aria-label': t('ed.precise') }, top, h('div', { class: 'ed-pad-btns' }, pick, erase, put));
 
   // Any finger on the pad (not on its buttons) moves the cursor.
   /** @type {Map<number, {x: number, y: number}>} */
@@ -55,7 +57,7 @@ export function precisePad(o) {
   for (const ev of ['pointerup', 'pointercancel']) el.addEventListener(ev, (e) => fingers.delete(/** @type {PointerEvent} */ (e).pointerId));
 
   return {
-    el,
+    el, top,
     /**
      * What the big button will do, in a word, and the colour it puts (none
      * for a tool that puts no colour). @param {string} label @param {string|null} css

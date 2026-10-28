@@ -6,11 +6,13 @@
 //
 // Zooming brings the whole card closer, paper and all, like a card lifted
 // to the eye: the card is scaled and moved inside its viewport, which clips
-// it. Three small canvases at the picture's own resolution, scaled up with
-// pixelated sampling, keep cells, checks and onion exactly in line at any
-// zoom; the thin lines (grid, cursor, the light of an undo) are drawn on one
-// more canvas over the viewport, at the screen's resolution, so they stay
-// sharp however close the card is.
+// it. What is drawn over the card's art — the checks, the cells, the onion,
+// the grid, the cursor, the light of an undo — is drawn on one canvas over
+// the viewport, at the screen's resolution, every cell edge on the same
+// whole device pixel as the grid line beside it. Left to the browser (a
+// small canvas scaled up), a cell edge falls where its rounding puts it,
+// which at most sizes and screens is a pixel off the grid. The card keeps
+// three small canvases of its own for its layout and the tests' eyes.
 
 import { h } from '../dom.js';
 import { T } from './model.js';
@@ -31,6 +33,8 @@ export function createCanvas() {
   let viewport = el, target = el;
 
   let size = 0, zoom = 1, tx = 0, ty = 0, paper = 0xf6f3eb;
+  /** What the screen layer draws: the frame, its colours, the onion frame, the checks' two tones. */
+  const shown = { buf: /** @type {Uint8Array|null} */ (null), colors: /** @type {number[]} */ ([]), onion: /** @type {Uint8Array|null} */ (null), checks: ['#000', '#000'] };
   /** @type {{cursor: {x: number, y: number}|null, grid: boolean, flash: {cells: number[], until: number}|null, box: import('./raster.js').Rect|null}} */
   const marks = { cursor: null, grid: true, flash: null, box: null };
 
@@ -63,6 +67,7 @@ export function createCanvas() {
   function drawChecker() {
     const { h: hu, s, v } = toHsv(paper);
     const a = fromHsv(hu, s, v * 0.9), b = fromHsv(hu, s, v * 0.85);
+    shown.checks = [a, b].map((c) => `rgb(${rgb(c).join(',')})`);
     const g = /** @type {CanvasRenderingContext2D} */ (checker.getContext('2d'));
     const img = g.createImageData(size, size);
     for (let i = 0; i < size * size; i++) {
@@ -74,18 +79,44 @@ export function createCanvas() {
 
   /** The thin things, over the viewport, at the screen's resolution. */
   function drawLines() {
-    const W = viewport.clientWidth, H = viewport.clientHeight, dpr = devicePixelRatio || 1;
-    const pw = Math.round(W * dpr), ph = Math.round(H * dpr);
-    if (lines.width !== pw || lines.height !== ph) { lines.width = pw; lines.height = ph; }
+    const dpr = devicePixelRatio || 1;
+    // One canvas pixel to one device pixel, exactly: the canvas covers the
+    // viewport from a place and with a size that are whole CSS pixels and
+    // whole device pixels at once — otherwise the browser resamples it, and
+    // the edges blur off the grid.
+    const r = viewport.getBoundingClientRect(), q = step(dpr);
+    const left = Math.floor(r.left / q) * q, top = Math.floor(r.top / q) * q; // in page CSS pixels
+    const cw = Math.ceil((r.right - left) / q) * q, chh = Math.ceil((r.bottom - top) / q) * q;
+    const ox = Math.round(left * dpr), oy = Math.round(top * dpr), pw = Math.round(cw * dpr), ph = Math.round(chh * dpr);
+    if (lines.width !== pw || lines.height !== ph) {
+      lines.width = pw;
+      lines.height = ph;
+      Object.assign(lines.style, { width: `${cw}px`, height: `${chh}px` });
+    }
+    Object.assign(lines.style, { left: `${left - r.left}px`, top: `${top - r.top}px` });
     const g = /** @type {CanvasRenderingContext2D} */ (lines.getContext('2d'));
     g.clearRect(0, 0, pw, ph);
     if (!size) return;
     const a = art(), cell = a.w / size;
-    const X = (/** @type {number} */ k) => Math.round((a.x + k * cell) * dpr), Y = (/** @type {number} */ k) => Math.round((a.y + k * cell) * dpr);
+    /** A cell edge on the device's pixel grid, in the canvas's pixels. */
+    const X = (/** @type {number} */ k) => Math.round((r.left + a.x + k * cell) * dpr) - ox, Y = (/** @type {number} */ k) => Math.round((r.top + a.y + k * cell) * dpr) - oy;
     g.save();
     g.beginPath();
     g.rect(X(0), Y(0), X(size) - X(0), Y(size) - Y(0));
     g.clip(); // nothing over the paper
+    // The checks, then the onion, then the cells: each cell from one whole
+    // device pixel to the next, exactly where the grid's lines are.
+    g.fillStyle = shown.checks[1];
+    g.fillRect(X(0), Y(0), X(size) - X(0), Y(size) - Y(0));
+    g.fillStyle = shown.checks[0];
+    for (let y = 0; y < size; y++) for (let x = (y + 1) % 2; x < size; x += 2) g.fillRect(X(x), Y(y), X(x + 1) - X(x), Y(y + 1) - Y(y));
+    if (shown.onion) {
+      g.globalAlpha = 0.45;
+      g.fillStyle = `rgb(${ONION.join(',')})`;
+      cells(g, shown.onion, X, Y, () => g.fillStyle);
+      g.globalAlpha = 1;
+    }
+    if (shown.buf) cells(g, shown.buf, X, Y, (v) => `rgb(${rgb(shown.colors[v] ?? 0).join(',')})`);
     if (marks.grid && cell >= GRID_MIN) {
       g.strokeStyle = 'rgba(0,0,0,.2)';
       g.lineWidth = 1;
@@ -125,6 +156,25 @@ export function createCanvas() {
       g.strokeRect(x0 + lw / 2, y0 + lw / 2, s - lw, s - lw);
       g.strokeStyle = '#ffffff';
       g.strokeRect(x0 + lw * 1.5, y0 + lw * 1.5, s - lw * 3, s - lw * 3);
+    }
+  }
+
+  /**
+   * The cells of a frame on the screen layer, one colour run at a time.
+   * @param {CanvasRenderingContext2D} g @param {Uint8Array} buf
+   * @param {(k: number) => number} X @param {(k: number) => number} Y @param {(v: number) => string|CanvasGradient|CanvasPattern} paint
+   */
+  function cells(g, buf, X, Y, paint) {
+    for (let y = 0; y < size; y++) {
+      for (let x = 0; x < size; x++) {
+        const v = buf[y * size + x];
+        if (v === T) continue;
+        let e = x + 1; // a run of one colour is one rectangle
+        while (e < size && buf[y * size + e] === v) e++;
+        g.fillStyle = paint(v);
+        g.fillRect(X(x), Y(y), X(e) - X(x), Y(y + 1) - Y(y));
+        x = e - 1;
+      }
     }
   }
 
@@ -181,6 +231,9 @@ export function createCanvas() {
       }
       drawCells(pix, doc.frames[f], doc.colors, null);
       drawCells(onion, o.onion == null ? null : doc.frames[o.onion], doc.colors, ONION);
+      shown.buf = doc.frames[f];
+      shown.colors = doc.colors;
+      shown.onion = o.onion == null ? null : doc.frames[o.onion];
       place();
     },
     /** The cell under a point of the page (it may lie outside). @param {{x: number, y: number}} p */
@@ -249,6 +302,18 @@ export function createCanvas() {
     relayout: () => place(),
     get zoomed() { return zoom > 1.01; },
   };
+}
+
+/**
+ * The fewest whole CSS pixels that are also whole device pixels. Browsers
+ * put a canvas on whole CSS pixels (Chrome rounds its place and size), so
+ * at 2.625 only every 8th one starts a device pixel: a canvas anywhere
+ * else is resampled, and every line on it blurs over two pixels.
+ * @param {number} dpr
+ */
+function step(dpr) {
+  for (let q = 1; q <= 64; q++) if (Math.abs(q * dpr - Math.round(q * dpr)) < 1e-6) return q;
+  return 1;
 }
 
 /** Where `el` sits inside `outer`, before transforms. @param {HTMLElement} el @param {HTMLElement} outer */
