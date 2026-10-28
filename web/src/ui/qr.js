@@ -7,14 +7,19 @@ import { app } from '../state.js';
 const QUIET = 4;
 const FRAME_MS = 220;
 
-/** Draws text as a QR symbol with whole pixels per module. @param {HTMLCanvasElement} cv @param {string} text @param {number} maxPx */
+/**
+ * Draws text as a QR symbol with whole pixels of the screen per module —
+ * not CSS pixels: a phone has two or three of those to each, so the step
+ * is fine, and a code of any size nearly fills its square.
+ * @param {HTMLCanvasElement} cv @param {string} text @param {number} maxPx
+ */
 function draw(cv, text, maxPx) {
   const m = app.core.qrMatrix(text);
-  const side = m.size + QUIET * 2;
-  const scale = Math.max(1, Math.floor(maxPx / side));
+  const side = m.size + QUIET * 2, dpr = devicePixelRatio || 1;
+  const scale = Math.max(1, Math.floor((maxPx * dpr) / side)); // device pixels a module
   cv.width = side;
   cv.height = side;
-  cv.style.width = cv.style.height = `${side * scale}px`;
+  cv.style.width = cv.style.height = `${(side * scale) / dpr}px`;
   const g = /** @type {CanvasRenderingContext2D} */ (cv.getContext('2d'));
   const img = g.createImageData(side, side);
   img.data.fill(255);
@@ -57,8 +62,8 @@ export function qrFor(bytes, maxPx) {
 
 /**
  * The white square a code lies on: always `side` across, whatever the code.
- * Each module takes whole pixels, so a code with fewer modules comes out a
- * little smaller; its square does not, and nothing around it moves when
+ * Each module takes whole pixels of the screen, so a code may come out a
+ * hair smaller than the square; the square itself does not, and nothing around it moves when
  * one code gives way to another. @param {HTMLCanvasElement} cv @param {number} side
  */
 function box(cv, side) {
