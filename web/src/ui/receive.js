@@ -10,15 +10,18 @@ import { toast } from './shell.js';
 import { scanner } from './scan.js';
 import { caught } from '../diagnostics.js';
 import { showRecipientCode } from './edition.js';
-import { FORGED, arrived } from './arrival.js';
+import { FORGED, arrived, arrive } from './arrival.js';
+import { MAGIC } from '../links.js';
+import { isPng, envelopeIn } from '../png-card.js';
 
-const MAGIC = [0x50, 0x50, 0x1a, 0x0a];
+/** The first byte of an envelope (pips-wasm). */
+const ENVELOPE = 0x45; // 'E'
 
 export function receiveView() {
-  const scan = scanner((text) => handle(text));
+  const scan = scanner((text) => handle(text), undefined, { onEnvelope: (env) => { stopCamera(); arrive(env); } });
   const bar = h('i');
   const progress = h('div', { class: 'progress', hidden: true }, bar);
-  const fileInput = /** @type {HTMLInputElement} */ (h('input', { type: 'file', accept: '.pips,application/octet-stream', hidden: true, onchange: () => fromFile() }));
+  const fileInput = /** @type {HTMLInputElement} */ (h('input', { type: 'file', accept: '.pips,application/octet-stream,image/png', hidden: true, onchange: () => fromFile() }));
   const linkInput = /** @type {HTMLInputElement} */ (h('input', { type: 'url', placeholder: t('receive.paste.placeholder'), autocomplete: 'off' }));
   const progressText = h('small', {});
   const el = h('section', { class: 'view' },
@@ -67,11 +70,28 @@ export function receiveView() {
   async function fromFile() {
     const f = fileInput.files?.[0];
     fileInput.value = '';
-    if (!f || f.size > 70 * 1024) { toast(t('receive.not-pips')); return; }
+    if (!f || f.size > 16 * 1024 * 1024) { toast(t('receive.not-pips')); return; }
     const bytes = new Uint8Array(await f.arrayBuffer());
+    // A picture of a card from Pips holds the card itself.
+    if (isPng(bytes)) {
+      const env = envelopeIn(bytes);
+      if (!env) { toast(t('receive.no-card-in-picture')); return; }
+      stopCamera();
+      await arrive(env);
+      return;
+    }
+    if (bytes.length > 70 * 1024) { toast(t('receive.not-pips')); return; }
     if (!MAGIC.every((b, i) => bytes[i] === b)) { toast(t('receive.not-pips')); return; }
+    const body = bytes.subarray(MAGIC.length);
+    // A file holds what a code holds — an envelope, every signature in it
+    // checked — or, from before envelopes, a bare signed card.
+    if (body[0] === ENVELOPE) {
+      stopCamera();
+      await arrive(body);
+      return;
+    }
     try {
-      done(await receivePayload(bytes.subarray(MAGIC.length)));
+      done(await receivePayload(body));
     } catch {
       toast(t('receive.not-pips'));
     }

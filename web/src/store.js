@@ -15,6 +15,8 @@
  *   from: {nick: string, key: string}|null, note: string, tags?: string[],
  *   editions?: import('./state.js').EditionLog}} CardRecord */
 
+import { SCHEMA, stepsFrom } from './schema.js';
+
 /** @type {IDBDatabase} */
 let db;
 /** When IndexedDB is unavailable (some private modes, blocked site data),
@@ -22,11 +24,28 @@ let db;
 export let memoryOnly = false;
 const mem = { meta: new Map(), cards: new Map() };
 
-/** @param {string} name */
+/** Called when another tab, with a newer app, needs the data: this one must stop using it. */
+let replaced = () => {};
+/** @param {() => void} fn */
+export function onReplaced(fn) { replaced = fn; }
+/** Called while an older tab still holds the data this one needs to upgrade. */
+let blocked = () => {};
+/** @param {() => void} fn */
+export function onBlocked(fn) { blocked = fn; }
+
+/**
+ * Opens the data, upgrading its layout first if it is older (see schema.js).
+ * Data from a newer app is refused with the code `newer_data` — falling
+ * back to memory then would show an empty app over a full collection.
+ * @param {string} name
+ */
 export async function open(name) {
   try {
     await openDb(name);
   } catch (e) {
+    // Data that is there but cannot be used as it is must not be hidden
+    // behind an empty app; only a browser without storage falls back.
+    if (['newer_data', 'upgrade_failed'].includes(/** @type {any} */ (e)?.code)) throw e;
     console.warn('pips: IndexedDB unavailable, keeping data in memory', e);
     memoryOnly = true;
   }
@@ -36,18 +55,57 @@ export async function open(name) {
 function openDb(name) {
   return new Promise((resolve, reject) => {
     if (!globalThis.indexedDB) throw new Error('no IndexedDB');
-    const req = indexedDB.open(name, 1);
-    req.onupgradeneeded = () => {
-      const d = req.result;
-      d.createObjectStore('meta');
-      d.createObjectStore('cards', { keyPath: 'digest' });
+    const req = indexedDB.open(name, SCHEMA);
+    let upgrading = false;
+    req.onupgradeneeded = (e) => {
+      upgrading = e.oldVersion > 0;
+      upgrade(req.result, /** @type {IDBTransaction} */ (req.transaction), e.oldVersion);
     };
+    // Tabs of an app from before onversionchange cannot be asked to let go:
+    // the person is, and the upgrade goes on by itself once they have.
+    req.onblocked = () => blocked();
     req.onsuccess = () => {
       db = req.result;
+      db.onversionchange = () => {
+        db.close();
+        replaced();
+      };
       resolve(undefined);
     };
-    req.onerror = () => reject(req.error);
+    req.onerror = () => {
+      const err = req.error;
+      if (err?.name === 'VersionError') reject(Object.assign(new Error('the data was stored by a newer version of the app'), { code: 'newer_data' }));
+      // A failed upgrade changed nothing (its transaction is undone), but the
+      // data is not usable by this version as it is.
+      else if (upgrading) reject(Object.assign(new Error(`could not upgrade the stored data: ${err?.message ?? err}`), { code: 'upgrade_failed' }));
+      else reject(err);
+    };
   });
+}
+
+/**
+ * Walks the data through every step from its version to this app's, inside
+ * the upgrade's own transaction: if anything fails, nothing has changed.
+ * @param {IDBDatabase} d @param {IDBTransaction} t @param {number} from
+ */
+function upgrade(d, t, from) {
+  const steps = stepsFrom(from);
+  // Stores first, all of them: a later step's records may live in them.
+  for (const s of steps) s.stores?.(d);
+  const card = (/** @type {any} */ rec) => steps.reduce((r, s) => (s.card ? s.card(r) : r), rec);
+  const meta = (/** @type {string} */ key, /** @type {any} */ value) => steps.reduce((v, s) => (s.meta ? s.meta(key, v) : v), value);
+  /** @param {string} store @param {(cur: IDBCursorWithValue) => any} next */
+  const walk = (store, next) => {
+    t.objectStore(store).openCursor().onsuccess = (e) => {
+      const cur = /** @type {IDBCursorWithValue|null} */ (/** @type {IDBRequest} */ (e.target).result);
+      if (!cur) return;
+      const v = next(cur);
+      if (v !== cur.value) cur.update(v);
+      cur.continue();
+    };
+  };
+  if (steps.some((s) => s.card)) walk('cards', (cur) => card(cur.value));
+  if (steps.some((s) => s.meta)) walk('meta', (cur) => meta(String(cur.key), cur.value));
 }
 
 /** @param {IDBRequest} req */

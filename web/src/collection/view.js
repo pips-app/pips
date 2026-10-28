@@ -20,7 +20,8 @@ import { t } from '../i18n.js';
 import { app, subscribe } from '../state.js';
 import { getMeta, setMeta } from '../store.js';
 import { frame, FRAME_SHADES } from '../ui/card.js';
-import { go, hideTabs } from '../ui/shell.js';
+import { go, hideTabs, toast } from '../ui/shell.js';
+import { fromCard } from '../editor/from-card.js';
 import { playOnly } from '../ui/player.js';
 import { loop, clamp } from '../kit/motion.js';
 import { iconButton } from '../kit/icon-button.js';
@@ -126,6 +127,8 @@ export function collectionView(o) {
   });
   el.append(probe);
 
+  /** Whether the card in front is one's own (it has one more action). */
+  let frontIsMine = false;
   const stage = createStage({
     host, surface: el, frame: frameOf,
     by: () => filter.by,
@@ -301,6 +304,8 @@ export function collectionView(o) {
   /** Things that follow the zoom every frame: cheap writes only. @param {number} z */
   function drawn(z) {
     const c = stage.current();
+    const mine = !!c && !!app.cards.get(c.id)?.rec.mine;
+    if (mine !== frontIsMine) { frontIsMine = mine; paintActions(); }
     // A finger on the back's pencil is a touch too: only a pinch or a
     // flight makes the back stop taking presses.
     turn.draw(z, c, build, !stage.pinching && !busy.n);
@@ -370,6 +375,14 @@ export function collectionView(o) {
     paintActions();
   }
 
+  /** The card's picture in the editor, as the start of a new card. @param {Item} c */
+  function derive(c) {
+    const e = app.cards.get(c.id);
+    const doc = e && fromCard(e.card, (id) => app.core.palettes().find((/** @type {any} */ p) => p.id === id)?.colors);
+    if (!doc) return toast(t('act.derive.too-big'));
+    go('draw', { doc: { ...doc, title: '' } });
+  }
+
   /** What can be done with the chosen cards, and with the card in front. */
   function paintActions() {
     const chosen = () => stage.list.filter((c) => selection.has(c.id));
@@ -389,6 +402,8 @@ export function collectionView(o) {
         { id: 'purge', label: t('act.purge'), icon: 'trash', run: one((c) => moves.purgeAll([c.id])) }]
       : [{ id: 'share', label: t('act.share'), icon: 'share', run: one(share) },
         { id: 'turn', label: t('act.turn'), icon: 'turn', run: turnOver },
+        // One's own card can start the next one; someone else's drawing cannot become one's own.
+        ...(filter.place === 'collection' && frontIsMine ? [{ id: 'derive', label: t('act.derive'), icon: /** @type {const} */ ('copy'), run: one(derive) }] : []),
         ...(filter.place === 'archive' ? [{ id: 'trash', label: t('act.to-trash'), icon: /** @type {const} */ ('trash'), run: one((c) => moves.toTrash([c.id])) }] : []),
         { id: 'down', label: t(filter.place === 'archive' ? 'act.to-collection' : 'act.archive'), icon: filter.place === 'archive' ? 'restore' : 'archive', run: one((c) => moves.send([c], true)) }]);
   }

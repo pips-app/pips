@@ -1,10 +1,12 @@
 // @ts-check
 // The picture's settings: its size, the frame's colour, how long a frame
-// is shown, and what the canvas shows (grid, which way the mirror works).
+// is shown, and what the canvas shows (grid, which way the mirror works);
+// first of all, the two ways to start a new card — a blank canvas, or a
+// picture from a file.
 // On a phone they live in a sheet behind "More"; on a computer, beside
 // the canvas. The same element either way.
 
-import { h } from '../dom.js';
+import { h, icon } from '../dom.js';
 import { t } from '../i18n.js';
 import { FRAME_SHADES } from '../ui/card.js';
 import { segmented } from '../kit/segmented.js';
@@ -15,7 +17,7 @@ const DELAYS = [80, 120, 160, 250, 400];
 /**
  * @param {{
  *   size: (n: number) => void, shade: (i: number) => void, delay: (ms: number) => void,
- *   grid: (on: boolean) => void, axes: (a: {x: boolean, y: boolean}) => void, fresh: () => void,
+ *   grid: (on: boolean) => void, axes: (a: {x: boolean, y: boolean}) => void, fresh: () => void, picture: () => void,
  * }} o
  */
 export function settingsPanel(o) {
@@ -36,13 +38,18 @@ export function settingsPanel(o) {
   });
   const grid = /** @type {HTMLInputElement} */ (h('input', { type: 'checkbox', checked: true, onchange: () => o.grid(grid.checked) }));
   let shade = -1;
+  /** @param {any} ic @param {string} label @param {string} note @param {() => void} run */
+  const start = (ic, label, note, run) => h('button', { type: 'button', class: 'ed-new-tile', onclick: run }, icon(ic), h('b', {}, label), h('small', {}, note));
   const el = h('div', { class: 'ed-settings' },
+    h('div', { class: 'ed-set-row' }, h('h3', {}, t('ed.set.new')),
+      h('div', { class: 'ed-new' },
+        start('plus', t('ed.new.blank'), t('ed.new.blank.note'), o.fresh),
+        start('image', t('ed.new.picture'), t('ed.new.picture.note'), o.picture))),
     h('div', { class: 'ed-set-row' }, h('h3', {}, t('ed.set.size')), size.el),
     h('div', { class: 'ed-set-row' }, h('h3', {}, t('ed.set.shade')), shades),
     delayRow,
     h('div', { class: 'ed-set-row' }, h('h3', {}, t('ed.set.axes')), axes.el),
-    h('label', { class: 'check' }, grid, h('span', {}, t('ed.set.grid'))),
-    h('button', { type: 'button', class: 'btn', onclick: o.fresh }, t('ed.set.new')));
+    h('label', { class: 'check' }, grid, h('span', {}, t('ed.set.grid'))));
 
   return {
     el,

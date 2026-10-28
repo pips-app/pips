@@ -106,9 +106,11 @@ def mushroom():
         (1, 'M5 2h6v1h-6zM3 3h2v1h-2zM7 3h6v1h-6zM2 4h2v1h-2zM7 4h4v1h-4zM13 4h1v1h-1zM2 5h3v1h-3zM6 5h5v1h-5zM13 5h1v1h-1zM1 6h7v1h-7zM9 6h6v1h-6zM1 7h1v1h-1zM4 7h11v1h-11z'),
         (2, 'M5 3h2v1h-2zM4 4h3v1h-3zM11 4h2v1h-2zM5 5h1v1h-1zM11 5h2v1h-2zM8 6h1v1h-1zM2 7h2v1h-2z'),
         (3, 'M2 8h12v1h-12z'),
+        # The cap's underside edge is the cap's: it sinks with it, over the stem.
+        (0, 'M2 9h4v1h-4zM10 9h4v1h-4z'),
     ]
     stem = [
-        (0, 'M2 9h4v1h-4zM10 9h4v1h-4zM5 10h1v1h-1zM10 10h1v1h-1zM4 11h1v1h-1zM11 11h1v1h-1zM4 12h1v1h-1zM11 12h1v1h-1zM4 13h1v1h-1zM11 13h1v1h-1zM5 14h6v1h-6z'),
+        (0, 'M5 10h1v1h-1zM10 10h1v1h-1zM4 11h1v1h-1zM11 11h1v1h-1zM4 12h1v1h-1zM11 12h1v1h-1zM4 13h1v1h-1zM11 13h1v1h-1zM5 14h6v1h-6z'),
         (4, 'M6 9h4v1h-4zM6 10h4v1h-4zM5 11h4v1h-4zM5 12h4v1h-4zM5 13h3v1h-3z'),
         (5, 'M9 11h2v1h-2zM9 12h2v1h-2zM8 13h3v1h-3z'),
     ]
