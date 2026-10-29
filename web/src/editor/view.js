@@ -171,7 +171,8 @@ export function editorView() {
     const b = h('button', { type: 'button', class: 'ib', onclick: () => { if (!fired) tap(); } }, icon(ic));
     b.addEventListener('pointerdown', () => { fired = false; timer = window.setTimeout(() => { fired = true; navigator.vibrate?.(10); long(); }, HOLD_MS); });
     for (const ev of ['pointerup', 'pointerleave', 'pointercancel']) b.addEventListener(ev, () => clearTimeout(timer));
-    b.addEventListener('contextmenu', (e) => { e.preventDefault(); long(); });
+    // A long press is also a context menu on some phones: one of the two, never both.
+    b.addEventListener('contextmenu', (e) => { e.preventDefault(); clearTimeout(timer); if (!fired) { fired = true; long(); } });
     return b;
   }
 
@@ -474,6 +475,10 @@ export function editorView() {
   document.addEventListener('keydown', (e) => {
     if (el.hidden || document.querySelector('.dialog') || [more, palettes, colors, history, frameSheet].some((s) => s.open)) return;
     const typing = e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement;
+    // Enter and Space press a button reached with the keyboard (Tab); after
+    // a click its focus is not shown, and Space still pans, Enter still plays.
+    const pressed = e.target instanceof Element && e.target.matches(':focus-visible') && !!e.target.closest('button, a[href], select, summary');
+    if (pressed && (e.key === 'Enter' || e.key === ' ')) return;
     const mod = e.ctrlKey || e.metaKey, k = e.key.toLowerCase();
     if (mod && k === 'z') { e.preventDefault(); if (e.shiftKey) redo(); else undo(); return; }
     if (mod && k === 'y') { e.preventDefault(); redo(); return; }

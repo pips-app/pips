@@ -1409,3 +1409,93 @@ test('the editor holds still: a pinch keeps its zoom as the fingers lift, a sele
   }
   await p.context().close();
 });
+
+test('the archive strip goes away after an undo, even when the write takes its time', async () => {
+  const p = await env.phone('stripfox');
+  await tab(p, 'me');
+  await samples(p);
+  await tab(p, 'collection');
+  await p.waitForTimeout(800);
+  await p.keyboard.press('+'); // the feed
+  await p.waitForTimeout(900);
+  // A slow phone: every write lands 1.5 s after it was asked for.
+  await p.evaluate(() => {
+    const d = Object.getOwnPropertyDescriptor(IDBTransaction.prototype, 'oncomplete');
+    Object.defineProperty(IDBTransaction.prototype, 'oncomplete', {
+      configurable: true,
+      get() { return d.get.call(this); },
+      set(f) { d.set.call(this, f && ((e) => setTimeout(() => f.call(this, e), /** @type {any} */ (window).slowWrites ?? 0))); },
+    });
+  });
+  const stripUp = () => p.evaluate(() => {
+    const r = document.querySelector('section.view:not([hidden]) .strip').getBoundingClientRect();
+    return r.top < innerHeight;
+  });
+  const title = await p.$eval('.stage-host .on-stage.centre .cap b', (e) => e.textContent);
+  await p.click('section.view:not([hidden]) .action-bar.up button[data-act="down"]');
+  await p.locator('.toast:not([hidden]) button').waitFor();
+  assert.ok(await stripUp(), 'the strip shows where the card went');
+  // Undone at once, while the strip is still up; the write is slow.
+  await p.evaluate(() => { /** @type {any} */ (window).slowWrites = 1500; });
+  await p.click('.toast button');
+  await p.waitForTimeout(3200);
+  assert.equal(await stripUp(), false, 'the strip went down');
+  assert.equal(await p.$eval('.stage-host .on-stage.centre .cap b', (e) => e.textContent), title, 'the card is back in the feed');
+  await p.context().close();
+});
+
+test('a camera granted after the scanner was left is switched off at once', async () => {
+  const p = await env.phone('camfox');
+  // A browser that takes its time to ask: the camera comes 600 ms after it was requested.
+  await p.evaluate(() => {
+    const w = /** @type {any} */ (window);
+    navigator.mediaDevices.getUserMedia = () => new Promise((ok) => setTimeout(() => {
+      const c = document.createElement('canvas');
+      c.width = c.height = 64;
+      c.getContext('2d').fillRect(0, 0, 64, 64);
+      const s = c.captureStream(5);
+      w.tracks = (w.tracks ?? []).concat(s.getTracks());
+      ok(s);
+    }, 600));
+  });
+  await tab(p, 'receive');
+  await p.click('section.view:not([hidden]) .scanner-start');
+  await p.click('section.view:not([hidden]) .scanner-start'); // twice, impatiently
+  await tab(p, 'collection'); // and away before the camera came
+  await p.waitForTimeout(1200);
+  const states = await p.evaluate(() => /** @type {any} */ (window).tracks?.map((t) => t.readyState) ?? []);
+  assert.ok(states.length <= 1, `asked for the camera once (${states.length})`);
+  assert.ok(states.every((s) => s === 'ended'), `no camera left on: ${states}`);
+  await p.context().close();
+});
+
+test('the keyboard: a sheet holds focus, Escape closes only what is on top, focus comes back', async () => {
+  const p = await env.phone('keyfox');
+  await tab(p, 'draw');
+  await p.locator('.ed-art').waitFor();
+  // A dot in the corner, so that a smaller canvas would cut it off.
+  const art = await p.locator('.ed-art').boundingBox();
+  await p.mouse.click(art.x + 3, art.y + 3);
+  // Reached with the keyboard (a step back and forth), as Tab would.
+  await p.focus('.ed-tool-more');
+  await p.keyboard.press('Shift+Tab');
+  await p.keyboard.press('Tab');
+  await p.keyboard.press('Enter');
+  await p.waitForTimeout(400);
+  const inside = (sel) => p.evaluate((sel) => !!document.activeElement?.closest(sel), sel);
+  assert.ok(await inside('.bottom-sheet.on'), 'focus went into the sheet');
+  for (let i = 0; i < 25; i++) await p.keyboard.press('Tab');
+  assert.ok(await inside('.bottom-sheet.on'), 'Tab goes round inside it');
+  await p.click('.bottom-sheet.on .ed-set-row .seg button:text-is("16")');
+  await p.locator('.dialog').waitFor();
+  assert.ok(await inside('.dialog'), 'the question takes focus');
+  await p.keyboard.press('Escape');
+  assert.equal(await p.locator('.dialog').count(), 0, 'Escape answers the question…');
+  assert.equal(await p.locator('.bottom-sheet.on').count(), 1, '…and leaves the sheet under it');
+  await p.keyboard.press('Escape');
+  await p.waitForTimeout(400);
+  assert.equal(await p.locator('.bottom-sheet.on').count(), 0, 'the next one closes the sheet');
+  assert.ok(await p.isVisible('.ed-tools'), 'the editor stayed');
+  assert.ok(await p.evaluate(() => document.activeElement?.classList.contains('ed-tool-more')), 'focus is back where it was');
+  await p.context().close();
+});

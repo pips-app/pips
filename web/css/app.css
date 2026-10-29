@@ -68,7 +68,7 @@ svg.i { width: 22px; height: 22px; stroke: currentColor; fill: none; stroke-widt
 .bar { flex: 0 0 auto; display: flex; align-items: center; gap: 4px; min-height: 60px;
   padding: calc(10px + var(--safe-t)) 10px 8px 20px; }
 .bar .title { flex: 1; min-width: 0; }
-.bar h1 { margin: 0; font: 600 23px/1.15 var(--serif); letter-spacing: -.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bar h1 { margin: 0; font: 600 clamp(17px, 7.2vw - 5px, 23px)/1.15 var(--serif); /* full size from 390 px across down to 18 px at 320 */ letter-spacing: -.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .bar .sub { display: block; font-size: 12px; color: var(--text3); }
 .scroll { flex: 1; overflow-y: auto; overflow-x: hidden; padding: 0 16px 24px; overscroll-behavior: contain;
   scrollbar-width: none; touch-action: pan-y; }
@@ -90,6 +90,9 @@ svg.i { width: 22px; height: 22px; stroke: currentColor; fill: none; stroke-widt
 .tabs .main i { width: 54px; height: 54px; margin-top: -18px; border-radius: 50%; display: grid; place-items: center; background: var(--cobalt);
   color: #f3f1ea; box-shadow: 0 10px 24px -10px #000, 0 0 0 5px var(--void); font-style: normal; }
 .tabs .main .i { width: 26px; height: 26px; }
+/* Narrower than any phone (a phone zoomed in): the names would run into
+   each other; the icons stay, the names are still read out. */
+@media (max-width: 299px) { .tabs button span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; } }
 
 /* -------------------------------------------------------------- controls -- */
 .icon-btn { border: 0; background: none; color: var(--text2); width: 42px; height: 42px; border-radius: 12px;
@@ -103,7 +106,7 @@ svg.i { width: 22px; height: 22px; stroke: currentColor; fill: none; stroke-widt
 .btn:disabled { opacity: .45; cursor: default; }
 .row-btns { display: flex; gap: 8px; }
 .row-btns .btn { flex: 1; }
-.pill { border: 0; border-radius: 99px; padding: 8px 14px; font-size: 14px; font-weight: 500; background: var(--raise2); color: var(--text); flex: none; }
+.pill { border: 0; border-radius: 99px; padding: 8px clamp(10px, 3.6vw, 14px); font-size: 14px; font-weight: 500; background: var(--raise2); color: var(--text); flex: none; }
 .text-btn { border: 0; background: none; color: var(--cobalt-hi); font-weight: 500; padding: 10px; border-radius: 10px; }
 .field { display: flex; align-items: center; gap: 10px; background: var(--raise); border-radius: 12px; min-height: 48px;
   padding: 0 12px; box-shadow: inset 0 0 0 1px var(--line); margin-bottom: 8px; }
@@ -130,7 +133,8 @@ svg.i { width: 22px; height: 22px; stroke: currentColor; fill: none; stroke-widt
 .toast { position: fixed; left: max(14px, calc((100% - 460px) / 2)); right: max(14px, calc((100% - 460px) / 2)); top: calc(64px + var(--safe-t)); z-index: 1500;
   display: flex; align-items: center; gap: 10px; background: #2e313b; border-radius: 13px; padding: 6px 6px 6px 16px;
   min-height: 48px; font-size: 14px; box-shadow: 0 14px 30px -12px #000; transition: opacity .2s, transform .2s; }
-.toast[hidden] { display: flex !important; opacity: 0; transform: translateY(-12px); pointer-events: none; }
+/* Gone, it fades out; and once faded it is out of reach — of the Tab key and of screen readers too. */
+.toast[hidden] { display: flex !important; visibility: hidden; opacity: 0; transform: translateY(-12px); pointer-events: none; transition: opacity .2s, transform .2s, visibility 0s .2s; }
 .toast span { flex: 1; }
 
 /* ----------------------------------------------------------------- cards -- */
@@ -321,8 +325,8 @@ a.btn { text-decoration: none; }
   box-shadow: 0 30px 50px -26px #000; }
 .paper-body { display: flex; flex-direction: column; align-items: center; gap: 12px; }
 .give-deck-box { flex: none; }
-.give-deck-head { display: flex; justify-content: space-between; padding: 6px 20px 0; font-size: 12px; font-weight: 500; color: var(--text3); }
-.give-deck { display: flex; gap: 14px; align-items: flex-end; overflow-x: auto; scrollbar-width: none; padding: 16px 20px 26px; } /* clear of the raised scan button */
+.give-deck-head { display: flex; justify-content: space-between; padding: 6px max(20px, calc((100% - 560px) / 2 + 4px)) 0; font-size: 12px; font-weight: 500; color: var(--text3); }
+.give-deck { display: flex; gap: 14px; align-items: flex-end; overflow-x: auto; scrollbar-width: none; padding: 16px max(20px, calc((100% - 560px) / 2 + 4px)) 26px; } /* clear of the raised scan button */
 .give-deck::-webkit-scrollbar { display: none; }
 .give-mini { flex: none; width: 76px; height: 76px; padding: 6px; border: 0; border-radius: 3px; background: var(--shade, var(--paper));
   opacity: .82; box-shadow: 0 8px 12px -9px #000; transition: transform .25s cubic-bezier(.2, .9, .25, 1), box-shadow .25s, opacity .25s; }

@@ -30,8 +30,9 @@ import { FRAME_SHADES, cardTitle } from '../ui/card.js';
 export function fillShare(body, entry, o = {}) {
   const size = o.size ?? codeSize();
   let stop = () => {};
-  let release = () => {};
-  keepAwake().then((r) => (release = r));
+  // The lock may come after the share was already put away: then it goes at once.
+  let release = () => {}, stopped = false;
+  keepAwake().then((r) => { if (stopped) r(); else release = r; });
   // The code area is as tall as the code with its notes and ways: the
   // numbered-copy panel lies over it, in the same place, so switching
   // between them does not jump (and the code stays laid out under it).
@@ -92,7 +93,7 @@ export function fillShare(body, entry, o = {}) {
     body.replaceChildren(title, code);
     showCode(app.identity.sealAsSender(entry.rec.payload, app.profile.nick || 'pips'), t('give.copy-of', entry.card.author ? `@${entry.card.author}` : '—'));
   }
-  return () => { stop(); release(); };
+  return () => { stopped = true; stop(); release(); };
 }
 
 /**

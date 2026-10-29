@@ -104,7 +104,7 @@ export function collectionView(o) {
   const first = firstRun({ draw: o.draw, scan: () => go('receive') });
   const coach = h('div', { class: 'coach', hidden: true }, t(MOUSE ? 'collection.coach.desk' : 'collection.coach'));
   const strip = makeStrip();
-  const sheet = createShareSheet({ busy, closed: () => sync() });
+  const sheet = createShareSheet({ busy, closed: () => { sync(); moves.settleStrip(); } });
   const feedBar = actionBar({ label: t('collection.card'), compact: true });
   const selectBar = actionBar({ label: t('collection.select-title') });
 

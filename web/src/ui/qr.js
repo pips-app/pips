@@ -80,12 +80,32 @@ export function qrText(text, maxPx) {
   return box(cv, maxPx);
 }
 
-/** Keeps the screen on while a code is shown, where the browser allows it. */
+/**
+ * Keeps the screen on while a code is shown, where the browser allows it.
+ * The browser lets go of the lock whenever the page is hidden; coming back
+ * to the code takes it again. Returns the function that lets go for good —
+ * callable at once, even before the lock was granted.
+ * @returns {Promise<() => void>}
+ */
 export async function keepAwake() {
-  try {
-    const lock = await /** @type {any} */ (navigator).wakeLock?.request('screen');
-    return () => lock?.release();
-  } catch {
-    return () => {};
-  }
+  const wl = /** @type {any} */ (navigator).wakeLock;
+  if (!wl) return () => {};
+  /** @type {any} */
+  let lock = null;
+  let done = false;
+  const take = async () => {
+    try {
+      const l = await wl.request('screen');
+      if (done) l.release(); else lock = l;
+    } catch { /* refused (battery saver, hidden page): the screen may dim */ }
+  };
+  const again = () => { if (document.visibilityState === 'visible' && !done && (!lock || lock.released)) take(); };
+  document.addEventListener('visibilitychange', again);
+  await take();
+  return () => {
+    done = true;
+    document.removeEventListener('visibilitychange', again);
+    lock?.release();
+    lock = null;
+  };
 }

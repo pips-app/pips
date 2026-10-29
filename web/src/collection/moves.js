@@ -40,15 +40,31 @@ export function createMoves(o) {
   /** @type {null | {from: Place, to: Place, ids: Set<string>, at: number}} */
   let series = null;
   // The strip is up while a card is pulled down, while cards fly to it and
-  // a moment after they landed — unless another pull or flight took it on.
+  // a moment after they landed. Then it is due to go down: at once, or as
+  // soon as nothing holds it — a finger pulling a card (its release decides
+  // anew), or cards on their way somewhere (an undo, a delete). A due
+  // descent is never dropped, only put off: once missed, nothing else would
+  // take the strip down.
   let stripTimer = 0;
-  let stripUp = false;
+  let stripUp = false, stripDue = false;
 
   /** @param {number} f @param {boolean} [anim] */
   function showStrip(f, anim = false) {
     clearTimeout(stripTimer);
+    stripDue = false; // whoever shows or hides it now decides what comes next
     strip.reveal(f, anim);
     if (stripUp !== f > 0) { stripUp = f > 0; o.stripMoved(stripUp); }
+  }
+  /** Takes the strip down if it is due and nothing holds it. */
+  function settleStrip() {
+    if (stripDue && !o.pulling() && !o.busy.n) showStrip(0, true);
+  }
+  /** Lets go of `busy` taken for a move: the screen catches up, and the strip may go. */
+  function release() {
+    o.busy.n--;
+    if (stripUp) drawStrip(); // the cards it shows may have moved again
+    o.sync();
+    settleStrip();
   }
 
   /** @param {number} [room] @param {string} [landed] @param {Place} [target] */
@@ -127,7 +143,7 @@ export function createMoves(o) {
       o.selection.stop();
       o.sync();
       moved(list.map((c) => c.id), from, to);
-      stripTimer = window.setTimeout(() => { if (!o.pulling() && !o.busy.n) showStrip(0, true); }, 1300);
+      stripTimer = window.setTimeout(() => { stripDue = true; settleStrip(); }, 1300);
     }, start - now + (list.length - 1) * gap + dur + 40);
   }
 
@@ -144,7 +160,13 @@ export function createMoves(o) {
     const s = series;
     toast(t(`moved.${to}`, s.ids.size), {
       label: t('toast.undo'),
-      run: () => { if (series === s) series = null; relocate([...s.ids], s.from); },
+      run: async () => {
+        if (series === s) series = null;
+        await relocate([...s.ids], s.from);
+        // In the feed, the card that came back is the one in the middle again.
+        const back = stage.list.findIndex((c) => s.ids.has(c.id));
+        if (back >= 0 && stage.Z.v > 1.5) { stage.feed.to = back; stage.kick(); }
+      },
     });
   }
 
@@ -155,13 +177,12 @@ export function createMoves(o) {
     try {
       for (const id of ids) await move(id, to);
     } finally {
-      o.busy.n--;
-      o.sync();
+      release();
     }
   }
 
   return {
-    send, relocate, drawStrip, showStrip,
+    send, relocate, drawStrip, showStrip, settleStrip,
     /** Into the bin, from where they are. @param {string[]} ids */
     async toTrash(ids) {
       const from = o.place();
@@ -182,10 +203,9 @@ export function createMoves(o) {
       try {
         for (const id of ids) await purge(id);
       } finally {
-        o.busy.n--;
+        release();
       }
       o.selection.stop();
-      o.sync();
       toast(t('moved.purged', ids.length));
     },
   };

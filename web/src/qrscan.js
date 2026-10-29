@@ -33,15 +33,28 @@ async function make() {
     read: async (/** @type {any} */ src) => {
       const w0 = src.videoWidth || src.width, h0 = src.videoHeight || src.height;
       if (!w0 || !h0) return [];
+      const video = src instanceof HTMLVideoElement;
       // Camera frames are read smaller (speed); pictures larger, since the
       // code may fill only part of a photo.
-      const k = Math.min(1, (src instanceof HTMLVideoElement ? 960 : 2048) / Math.max(w0, h0));
-      const w = Math.round(w0 * k), h = Math.round(h0 * k);
-      cv.width = w;
-      cv.height = h;
-      g.drawImage(src, 0, 0, w, h);
-      const px = g.getImageData(0, 0, w, h).data;
-      return m.scanQr(new Uint8Array(px.buffer, px.byteOffset, px.byteLength), w, h);
+      const k = Math.min(1, (video ? 960 : 2048) / Math.max(w0, h0));
+      const found = at(src, w0, h0, k);
+      if (found.length || video) return found;
+      // A small picture (a card picture a messenger halved, a screenshot
+      // of one) can have codes of two pixels a module, which the reader
+      // misses; twice as large, smoothed, they read. Tried only when the
+      // first look found nothing.
+      const k2 = Math.min(2, 2048 / Math.max(w0, h0));
+      return k2 > k * 1.4 ? at(src, w0, h0, k2) : found;
     },
   };
+  /** The codes in `src` drawn at `k` times its size. @param {any} src @param {number} w0 @param {number} h0 @param {number} k @returns {string[]} */
+  function at(src, w0, h0, k) {
+    const w = Math.round(w0 * k), h = Math.round(h0 * k);
+    cv.width = w;
+    cv.height = h;
+    g.imageSmoothingQuality = 'high';
+    g.drawImage(src, 0, 0, w, h);
+    const px = g.getImageData(0, 0, w, h).data;
+    return m.scanQr(new Uint8Array(px.buffer, px.byteOffset, px.byteLength), w, h);
+  }
 }

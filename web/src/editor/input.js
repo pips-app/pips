@@ -102,6 +102,12 @@ export function drawInput(el, o) {
         g = { kind: 'done' };
       }, HOLD_MS);
       g = d;
+    } else if (g?.kind === 'view' && pts.size <= g.fingers) {
+      // A finger put back during the gesture: the fingers carry on from
+      // the view as it is, measured anew (as when one lifts, below).
+      g.mid0 = mid();
+      g.d0 = spread();
+      o.view.start(g.mid0, g.d0);
     } else if (g?.kind === 'draw' || (g?.kind === 'view' && pts.size > g.fingers)) {
       // A second (or third) finger: it was never a stroke.
       o.point?.(null);
