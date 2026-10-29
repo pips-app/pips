@@ -4,13 +4,15 @@
 // up, a tap on the dimmed screen or Escape.
 
 import { h } from '../dom.js';
+import { holdFocus } from './focus.js';
 
 /** @param {{label: string, onClose?: () => void}} o */
 export function topSheet(o) {
   const body = h('div', { class: 'top-sheet-body' });
-  const el = h('div', { class: 'top-sheet', role: 'dialog', 'aria-label': o.label, 'aria-hidden': 'true' }, body, h('div', { class: 'grab' }));
+  const el = h('div', { class: 'top-sheet', role: 'dialog', 'aria-label': o.label, 'aria-hidden': 'true', inert: true }, body, h('div', { class: 'grab' }));
   const scrim = h('div', { class: 'scrim', onclick: () => close() });
   let open = false;
+  let release = () => {};
 
   /** 0 hidden … 1 shown. @param {number} f @param {boolean} [anim] */
   function follow(f, anim = false) {
@@ -22,20 +24,21 @@ export function topSheet(o) {
   function show() {
     open = true;
     el.setAttribute('aria-hidden', 'false');
+    el.inert = false;
+    release = holdFocus(el, { escape: () => close() });
     scrim.classList.add('on');
     follow(1, true);
-    document.addEventListener('keydown', onKey);
   }
   function close() {
     if (!open) return follow(0, true);
     open = false;
+    release();
     el.setAttribute('aria-hidden', 'true');
+    el.inert = true;
     scrim.classList.remove('on');
     follow(0, true);
-    document.removeEventListener('keydown', onKey);
     o.onClose?.();
   }
-  const onKey = (/** @type {KeyboardEvent} */ e) => { if (e.key === 'Escape') close(); };
   // A swipe up puts it away.
   let y0 = /** @type {number|null} */ (null);
   el.addEventListener('pointerdown', (e) => { y0 = e.clientY; });

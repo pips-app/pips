@@ -2,7 +2,7 @@
    script each frame; the styles only say what things look like. */
 
 .view.collection-view { inset: 0; touch-action: none; -webkit-user-select: none; user-select: none; }
-.bar.collection-bar { position: absolute; z-index: 50; left: 0; right: 0; top: 0; gap: 8px;
+.bar.collection-bar { position: absolute; z-index: 50; left: 0; right: 0; top: 0; gap: clamp(3px, 2.4vw - 1px, 8px); /* narrower on a small phone: the title keeps its word */
   padding-left: max(20px, calc((100% - 1100px) / 2 + 16px)); padding-right: max(16px, calc((100% - 1100px) / 2 + 16px));
   background: linear-gradient(var(--void) calc(100% - 8px), #1a1b2100); pointer-events: none; } /* solid under the line below the title too */
 .collection-bar > * { pointer-events: auto; }
@@ -141,9 +141,11 @@ input.tag.add::placeholder { color: var(--shade-dim); }
   font-size: 12.5px; color: var(--text2); pointer-events: none; box-shadow: 0 8px 20px -10px #000; }
 
 /* An empty collection: the person's own calling card, and two ways to begin. */
-.first-run { position: absolute; z-index: 5; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
-  gap: 14px; padding: calc(90px + var(--safe-t)) 28px calc(var(--tabs) + var(--safe-b) + 24px); text-align: center; }
-.me-card { display: flex; flex-direction: column; align-items: stretch; width: min(210px, 56vw); flex: none; border: 0; border-radius: 4px; padding: 12px; background: var(--paper); color: var(--ink); text-align: left;
+.first-run { position: absolute; z-index: 5; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: safe center;
+  overflow-y: auto; touch-action: pan-y; /* a short screen scrolls it, never puts it under the tabs */
+  gap: 14px; padding: calc(72px + var(--safe-t)) 28px calc(var(--tabs) + var(--safe-b) + 24px); text-align: center; }
+@media (max-height: 600px) { .first-run { gap: 8px; padding-top: calc(64px + var(--safe-t)); } } /* the smallest phones: all of it above the tabs */
+.me-card { display: flex; flex-direction: column; align-items: stretch; width: min(210px, 56vw, 24vh); flex: none; border: 0; border-radius: 4px; padding: 12px; background: var(--paper); color: var(--ink); text-align: left;
   box-shadow: 0 30px 60px -30px #000, 0 2px 4px #0006; transform: rotate(-2deg); }
 .me-art canvas { display: block; width: 100%; aspect-ratio: 1; image-rendering: pixelated; }
 .me-card b { display: block; font: 600 17px/1.2 var(--serif); margin-top: 10px; }

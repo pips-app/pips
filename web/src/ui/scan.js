@@ -59,39 +59,60 @@ export function scanner(onText, hint = t('receive.point'), o = {}) {
     }
   }
 
+  // Each start is a turn; stop() ends the turn. A camera granted after its
+  // turn ended (the person left the scanner while the browser asked) is
+  // switched off at once instead of filming a hidden screen.
+  let turn = 0, starting = false;
+
   async function start() {
-    if (stream) return;
-    say(t('scan.loading'));
-    const r = await reader();
-    if (!r) return;
+    if (stream || starting) return;
+    const mine = ++turn;
+    starting = true;
     try {
-      stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false });
-    } catch {
-      // Refused, or none: the frame says so, and a tap asks again (the
-      // permission may have been given in the browser's settings meanwhile).
-      label.textContent = t('scan.no-camera');
-      say(t('scan.no-camera.how'));
-      return;
-    }
-    label.textContent = t('receive.start');
-    video.srcObject = stream;
-    live(true);
-    await video.play();
-    // The browser's detector is fast; ours is given more time per frame.
-    timer = window.setInterval(async () => {
-      if (busy || video.readyState < 2) return;
-      busy = true;
+      say(t('scan.loading'));
+      const r = await reader();
+      if (!r || mine !== turn) return;
+      /** @type {MediaStream} */
+      let s;
       try {
-        for (const text of await r.read(video)) onText(text);
-      } catch { /* a frame that could not be read */ }
-      busy = false;
-    }, r.native ? 150 : 250);
+        s = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false });
+      } catch {
+        if (mine !== turn) return;
+        // Refused, or none: the frame says so, and a tap asks again (the
+        // permission may have been given in the browser's settings meanwhile).
+        label.textContent = t('scan.no-camera');
+        say(t('scan.no-camera.how'));
+        return;
+      }
+      if (mine !== turn) { s.getTracks().forEach((tr) => tr.stop()); return; }
+      stream = s;
+      label.textContent = t('receive.start');
+      video.srcObject = stream;
+      live(true);
+      // Stopped while starting to play: nothing to report.
+      await video.play().catch(() => {});
+      if (mine !== turn) return;
+      // The browser's detector is fast; ours is given more time per frame.
+      timer = window.setInterval(async () => {
+        if (busy || video.readyState < 2) return;
+        busy = true;
+        try {
+          for (const text of await r.read(video)) onText(text);
+        } catch { /* a frame that could not be read */ }
+        busy = false;
+      }, r.native ? 150 : 250);
+    } finally {
+      if (mine === turn) starting = false;
+    }
   }
 
   function stop() {
+    turn++;
+    starting = false;
     clearInterval(timer);
     stream?.getTracks().forEach((tr) => tr.stop());
     stream = null;
+    video.srcObject = null;
     live(false);
   }
 
@@ -106,7 +127,9 @@ export function scanner(onText, hint = t('receive.point'), o = {}) {
     const r = await reader();
     if (!r) return;
     // A file that is not a picture, or one too big to decode, simply holds no code.
-    const texts = await createImageBitmap(f).then((b) => r.read(b)).catch(() => /** @type {string[]} */ ([]));
+    const texts = await createImageBitmap(f).then(async (b) => {
+      try { return await r.read(b); } finally { b.close(); } // a photo's pixels, freed at once
+    }).catch(() => /** @type {string[]} */ ([]));
     if (!texts.length) return say(t('scan.none'));
     for (const text of texts) onText(text);
   }

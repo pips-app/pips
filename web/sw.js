@@ -20,7 +20,9 @@ self.addEventListener('message', (e) => {
 
 self.addEventListener('activate', (e) => {
   e.waitUntil(caches.keys()
-    .then((keys) => Promise.all(keys.filter((k) => k !== VERSION).map((k) => caches.delete(k))))
+    // Only our own old versions: other apps may share this origin (a
+    // github.io site hosts every project of its owner) and their caches.
+    .then((keys) => Promise.all(keys.filter((k) => k.startsWith('pips-') && k !== VERSION).map((k) => caches.delete(k))))
     .then(() => self.clients.claim()));
 });
 

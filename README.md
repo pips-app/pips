@@ -5,8 +5,10 @@ picture, put your handle on the back, sign it, and hand it over: the other
 phone scans it, checks the signature, and the card joins their collection
 with its history — who drew it, who passed it on, which copy of how many.
 
-No server, no accounts, no tracking. Everything lives on the device; the
-only way a card moves is a QR code (or a link carrying one).
+No server, no accounts, no tracking. Everything lives on the device; a card
+moves only as the person sends it: a QR code on the screen, or a link, a
+`.pips` file or a picture of the card, each carrying the same signed
+envelope.
 
 > **Status: early.** The core is complete and tested; the app works end to
 > end but its design is still a first draft. Formats may change before 1.0.
@@ -16,13 +18,16 @@ only way a card moves is a QR code (or a link carrying one).
 - Identity: an Ed25519 key, restored from 24 words or a paper QR code.
 - Cards up to 64×64 px in the app (the format holds 128), 32 colours,
   animation; 33 built-in palettes; a pixel editor with an undo tree.
-- New cards from PNG and Aseprite files (layers, frames, upscaled exports).
+- New cards from pictures: PNG and Aseprite files as they are (layers,
+  frames, upscaled exports), photos and larger pictures through a square
+  crop; a picture of a Pips card opens as the card itself.
 - Giving and receiving by QR — one code, or a fountain-coded carousel for
   large cards; every card and envelope signature is checked. QR codes are
   read by the browser where it can, by our own reader everywhere else.
 - Numbered copies: the artist scans the recipient's code and issues
   "№3 of 50", signed and bound to that person.
-- Collection by weeks and months, archive, bin, personal notes.
+- Collection by weeks and months, a feed and single cards; archive, bin,
+  personal notes and tags.
 - Encrypted backups that open only with the same key (its words or paper QR);
   restoring brings back the key and the collection in one step.
 - Russian and English; installable, works offline.
@@ -62,10 +67,12 @@ scripts/serve.sh            # http://localhost:8000
 ```
 
 Browser tests drive the app in Chromium (and, in CI, Firefox) through its
-real journeys — import, exchange by QR, refusals, numbered copies, backups,
-restoring, the editor:
+real journeys — import, exchange by QR, link, file and picture, refusals,
+numbered copies, backups, restoring, the editor; unit tests (`tests/unit`,
+plain node) cover the app's logic:
 
 ```sh
+node --test tests/unit/*.test.mjs
 cd tests/e2e && npm ci && npx playwright install chromium && npm test
 ```
 

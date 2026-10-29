@@ -5,19 +5,15 @@
 // foot (buttons), if any, stays.
 
 import { h, icon } from '../dom.js';
+import { holdFocus } from './focus.js';
 import { t } from '../i18n.js';
 
 /** @param {string} title @param {() => void} [onClose] */
 export function fullSheet(title, onClose) {
   const body = h('div', { class: 'scroll sheet-body' });
   const foot = h('div', { class: 'sheet-foot' });
-  const onKey = (/** @type {KeyboardEvent} */ e) => {
-    if (e.key !== 'Escape') return;
-    e.stopPropagation(); // the screen beneath must not take it as its own
-    close();
-  };
   const close = () => {
-    document.removeEventListener('keydown', onKey, true);
+    release();
     overlay.remove();
     onClose?.();
   };
@@ -27,6 +23,6 @@ export function fullSheet(title, onClose) {
       h('div', { class: 'title' }, h('h1', {}, title))),
     body, foot);
   document.body.append(overlay);
-  document.addEventListener('keydown', onKey, true);
+  const release = holdFocus(overlay, { escape: () => close() });
   return { body, foot, close };
 }

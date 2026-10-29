@@ -1,6 +1,7 @@
 // @ts-check
 // The frame around the views: the tab bar, view switching, toasts.
 
+import { holdFocus } from '../kit/focus.js';
 import { h, icon } from '../dom.js';
 import { t } from '../i18n.js';
 
@@ -40,6 +41,7 @@ export function mountShell(root, all, actions = {}) {
 /** The feed, a single card and the archive take the whole screen. @param {boolean} hide */
 export function hideTabs(hide) {
   tabs.classList.toggle('away', hide);
+  tabs.inert = hide; // out of sight, out of the Tab key's reach too
   document.body.classList.toggle('tabs-away', hide);
 }
 
@@ -94,17 +96,19 @@ export function toast(text, action) {
  */
 export function ask(text, opts) {
   return new Promise((resolve) => {
-    const finish = (/** @type {boolean} */ v) => { box.remove(); document.removeEventListener('keydown', onKey); resolve(v); };
-    const onKey = (/** @type {KeyboardEvent} */ e) => { if (e.key === 'Escape') finish(false); };
+    let release = () => {};
+    const finish = (/** @type {boolean} */ v) => { release(); box.remove(); resolve(v); };
     const yesCls = `btn ${opts.danger ? 'warn' : 'key'}`;
     const yes = opts.href
       ? h('a', { class: yesCls, href: opts.href, target: '_blank', rel: 'noopener noreferrer', onclick: () => finish(true) }, opts.yes)
       : h('button', { class: yesCls, onclick: () => finish(true) }, opts.yes);
-    const box = h('div', { class: 'dialog', role: 'alertdialog', 'aria-modal': 'true', onclick: (/** @type {Event} */ e) => { if (e.target === box) finish(false); } },
-      h('div', { class: 'dialog-box' }, h('p', {}, text),
-        h('div', { class: 'row-btns' }, h('button', { class: 'btn', onclick: () => finish(false) }, opts.no ?? t('ask.cancel')), yes)));
-    document.addEventListener('keydown', onKey);
+    const no = h('button', { class: 'btn', onclick: () => finish(false) }, opts.no ?? t('ask.cancel'));
+    const words = h('p', { id: `ask-${Date.now()}` }, text);
+    const box = h('div', { class: 'dialog', role: 'alertdialog', 'aria-modal': 'true', 'aria-labelledby': words.id, onclick: (/** @type {Event} */ e) => { if (e.target === box) finish(false); } },
+      h('div', { class: 'dialog-box' }, words, h('div', { class: 'row-btns' }, no, yes)));
     document.body.append(box);
-    /** @type {HTMLElement} */ (yes).focus();
+    // Escape is "no", for this dialog only (focus.js). Enter takes the
+    // safe answer where the other cannot be undone.
+    release = holdFocus(box, { first: /** @type {HTMLElement} */ (opts.danger ? no : yes), escape: () => finish(false) });
   });
 }

@@ -130,3 +130,20 @@ test('a press on a field of the card is not a stroke', () => {
   s.up(1, 10, 10, 'mouse');
   assert.deepEqual(s.log0(), []);
 });
+
+test('a finger put back during a pinch zooms again, from where the view is', () => {
+  const calls = [];
+  const on = {};
+  drawInput(/** @type {any} */ ({ addEventListener: (type, f) => { on[type] = f; }, setPointerCapture() {} }), {
+    draw: () => ({ move() {}, end() {}, cancel() {} }), pick() {}, taps() {},
+    view: { start: (m, d) => calls.push(['start', d]), move: (m, d) => calls.push(['move', d]), end() {} },
+  });
+  const ev = (type, id, x) => on[type]({ type, pointerId: id, pointerType: 'touch', clientX: x, clientY: 0, button: 0, target: { closest: () => null } });
+  ev('pointerdown', 1, 0);
+  ev('pointerdown', 2, 100);
+  ev('pointerup', 2, 100);
+  ev('pointerdown', 2, 50); // back on, closer
+  ev('pointermove', 2, 150);
+  // The pinch measures from the spread it was put back with (50), not from none.
+  assert.deepEqual(calls, [['start', 100], ['start', 0], ['start', 50], ['move', 150]]);
+});
