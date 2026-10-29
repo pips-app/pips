@@ -1476,7 +1476,10 @@ test('the keyboard: a sheet holds focus, Escape closes only what is on top, focu
   // A dot in the corner, so that a smaller canvas would cut it off.
   const art = await p.locator('.ed-art').boundingBox();
   await p.mouse.click(art.x + 3, art.y + 3);
+  // Reached with the keyboard (a step back and forth), as Tab would.
   await p.focus('.ed-tool-more');
+  await p.keyboard.press('Shift+Tab');
+  await p.keyboard.press('Tab');
   await p.keyboard.press('Enter');
   await p.waitForTimeout(400);
   const inside = (sel) => p.evaluate((sel) => !!document.activeElement?.closest(sel), sel);
