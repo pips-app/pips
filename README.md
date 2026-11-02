@@ -91,6 +91,12 @@ formatting, clippy, tests, the minimum Rust version, a type check of the
 app and the browser tests, and deploys `main`; a second workflow fuzzes
 every target on each push and for longer once a week.
 
+## Contributing
+
+Start with [docs/GUIDE.md](docs/GUIDE.md) (Russian): how the project is
+put together, where things live, how to fix a bug properly and what not to
+touch. AI assistants: [AGENTS.md](AGENTS.md).
+
 ## Licence
 
 Code: [Apache-2.0](LICENSE). Fonts in `web/fonts`: SIL Open Font Licence
@@ -103,4 +109,5 @@ published): MIT, Kazuhiko Arase.
 **По-русски.** Pips — пиксельные карточки для обмена через QR-код, без
 сервера и аккаунтов. Проект на ранней стадии: ядро готово и покрыто
 тестами, приложение работает целиком, дизайн — первый черновик. Решения и их
-причины — в [DECISIONS.md](DECISIONS.md).
+причины — в [DECISIONS.md](DECISIONS.md); как устроен проект и как в нём
+работать — в [docs/GUIDE.md](docs/GUIDE.md), для ИИ — [AGENTS.md](AGENTS.md).
