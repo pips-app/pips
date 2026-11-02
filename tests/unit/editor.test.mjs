@@ -391,3 +391,39 @@ test('a draft kept before layers is taken up with its history', () => {
   assert.equal(m.doc.frames[0][0][0], T, 'the old step undoes on the one layer');
   assert.equal(upgradeDraft(d), d, 'a draft as it is now is left as it is');
 });
+
+test('any mix of layer and frame changes keeps the picture whole, and undoes and redoes exactly', () => {
+  // A fixed seed: the same steps on every run, so a failure can be replayed.
+  let seed = 20261102;
+  const rnd = (n) => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed % n; };
+  const snap = (d) => JSON.stringify({ ...d, frames: d.frames.map((f) => f.map((c) => [...c])) });
+  for (let run = 0; run < 120; run++) {
+    const m = createModel(blank(8, PAL));
+    const start = snap(m.doc);
+    for (let k = 0; k < 40; k++) {
+      const F = m.doc.frames.length, L = m.doc.layers.length, f = rnd(F), l = rnd(L);
+      const op = rnd(12);
+      if (op === 0) { const s = m.stroke(f, l); for (let i = 0; i < 3; i++) s.set(rnd(64), 1 + rnd(3)); s.commit('pen'); }
+      else if (op === 1) m.addLayer(l);
+      else if (op === 2) m.removeLayer(l);
+      else if (op === 3) m.moveLayer(l, rnd(L));
+      else if (op === 4) m.setHidden(l, !m.doc.layers[l].hidden);
+      else if (op === 5) { if (m.canMerge(l)) m.mergeDown(l); }
+      else if (op === 6) m.addFrame(f);
+      else if (op === 7) m.removeFrame(f);
+      else if (op === 8) m.moveFrame(f, rnd(F));
+      else if (op === 9) { const n = 1 + rnd(MAX_HOLD); if (m.canHold(f, n)) m.setHold(f, n); }
+      else if (op === 10) m.clearFrame(f, l);
+      else m.resize([8, 16][rnd(2)]);
+      const d = m.doc, where = `run ${run}, step ${k}, change ${op}`;
+      assert.ok(d.layers.length >= 1 && d.layers.length <= 8 && d.frames.length >= 1, where);
+      assert.ok(d.frames.every((fr) => fr.length === d.layers.length && fr.every((c) => c.length === d.size * d.size)), `every frame has a cel per layer: ${where}`);
+      assert.ok(d.holds.length === d.frames.length && d.holds.every((h) => h >= 1 && h <= MAX_HOLD) && m.ticks() <= MAX_FRAMES, `holds: ${where}`);
+    }
+    const end = snap(m.doc);
+    for (let i = 0; i < 100; i++) m.undo();
+    assert.equal(snap(m.doc), start, `undone to the start: run ${run}`);
+    for (let i = 0; i < 100; i++) m.redo();
+    assert.equal(snap(m.doc), end, `redone to the end: run ${run}`);
+  }
+});

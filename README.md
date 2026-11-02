@@ -95,7 +95,8 @@ every target on each push and for longer once a week.
 
 Start with [docs/GUIDE.md](docs/GUIDE.md) (Russian): how the project is
 put together, where things live, how to fix a bug properly and what not to
-touch. AI assistants: [AGENTS.md](AGENTS.md).
+touch. First project ever? [docs/FIRST-STEPS.md](docs/FIRST-STEPS.md).
+AI assistants: [AGENTS.md](AGENTS.md).
 
 ## Licence
 
@@ -110,4 +111,5 @@ published): MIT, Kazuhiko Arase.
 сервера и аккаунтов. Проект на ранней стадии: ядро готово и покрыто
 тестами, приложение работает целиком, дизайн — первый черновик. Решения и их
 причины — в [DECISIONS.md](DECISIONS.md); как устроен проект и как в нём
-работать — в [docs/GUIDE.md](docs/GUIDE.md), для ИИ — [AGENTS.md](AGENTS.md).
+работать — в [docs/GUIDE.md](docs/GUIDE.md), первый шаг для новичков —
+[docs/FIRST-STEPS.md](docs/FIRST-STEPS.md), для ИИ — [AGENTS.md](AGENTS.md).
