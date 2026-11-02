@@ -15,7 +15,7 @@
 // three small canvases of its own for its layout and the tests' eyes.
 
 import { h } from '../dom.js';
-import { T } from './model.js';
+import { T, composite } from './model.js';
 import { rgb, toHsv, fromHsv } from './color.js';
 import { clamp } from '../kit/motion.js';
 
@@ -229,11 +229,13 @@ export function createCanvas() {
         for (const cv of [checker, onion, pix]) { cv.width = size; cv.height = size; }
         drawChecker();
       }
-      drawCells(pix, doc.frames[f], doc.colors, null);
-      drawCells(onion, o.onion == null ? null : doc.frames[o.onion], doc.colors, ONION);
-      shown.buf = doc.frames[f];
+      // A frame as it shows: its visible layers, each over the ones below.
+      const buf = composite(doc, f), under = o.onion == null ? null : composite(doc, o.onion);
+      drawCells(pix, buf, doc.colors, null);
+      drawCells(onion, under, doc.colors, ONION);
+      shown.buf = buf;
       shown.colors = doc.colors;
-      shown.onion = o.onion == null ? null : doc.frames[o.onion];
+      shown.onion = under;
       place();
     },
     /** The cell under a point of the page (it may lie outside). @param {{x: number, y: number}} p */

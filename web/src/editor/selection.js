@@ -1,6 +1,6 @@
 // @ts-check
-// The selection: a box on the open frame, and what can be done with what
-// is inside — move it (or a copy of it), mirror it, turn it, empty it. A
+// The selection: a box on the open frame's chosen layer, and what can be
+// done with what is inside — move it (or a copy of it), mirror it, turn it, empty it. A
 // drag outside the box draws a new one; a drag inside moves its cells; a
 // tap outside lets go. Every change is a stroke of the model, one step of
 // the undo history; the box itself is not part of the picture, so it is
@@ -19,7 +19,7 @@ import { span, within, lift, flip, turn, place } from './raster.js';
 /**
  * @param {{
  *   model: ReturnType<typeof import('./model.js').createModel>,
- *   frame: () => number,
+ *   frame: () => number, layer: () => number,
  *   changed: () => void,
  * }} o changed: the box or its bar changed (to be drawn again)
  */
@@ -58,12 +58,13 @@ export function createSelection(o) {
     for (const w of writes) st.set(w.i, w.v);
     return st;
   }
-  const fresh = () => model.stroke(o.frame());
+  const fresh = () => model.stroke(o.frame(), o.layer());
+  const cells = () => model.cel(o.frame(), o.layer());
 
   /** Mirrors or turns what is in the box, about its middle. @param {(p: import('./raster.js').Piece) => import('./raster.js').Piece} fn @param {string} label */
   function transform(fn, label) {
     if (!box) return;
-    const size = model.doc.size, p = lift(model.doc.frames[o.frame()], size, box), q = fn(p);
+    const size = model.doc.size, p = lift(cells(), size, box), q = fn(p);
     const x = box.x0 + Math.floor((p.w - q.w) / 2), y = box.y0 + Math.floor((p.h - q.h) / 2);
     const r = box;
     box = null; // the stroke's change would let it go
@@ -82,7 +83,7 @@ export function createSelection(o) {
   /** Moves the cells by (dx, dy), as one step. @param {number} dx @param {number} dy */
   function nudge(dx, dy) {
     if (!box) return;
-    const size = model.doc.size, p = lift(model.doc.frames[o.frame()], size, box), r = box;
+    const size = model.doc.size, p = lift(cells(), size, box), r = box;
     box = null;
     rewrite(fresh(), r, place(p, r.x0 + dx, r.y0 + dy, size, T), copy).commit(copy ? 'ed.h.copy' : 'ed.h.move');
     box = span({ x: r.x0 + dx, y: r.y0 + dy }, { x: r.x1 + dx, y: r.y1 + dy }, size);
@@ -108,7 +109,7 @@ export function createSelection(o) {
     start(c) {
       const size = model.doc.size;
       if (box && within(box, c)) {
-        const r = box, p = lift(model.doc.frames[o.frame()], size, r), dup = copy;
+        const r = box, p = lift(cells(), size, r), dup = copy;
         const st = fresh();
         let dx = 0, dy = 0;
         box = null;

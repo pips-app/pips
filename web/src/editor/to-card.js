@@ -1,12 +1,15 @@
 // @ts-check
-// A drawn picture as card data for the core: the palette is kept as a
+// A drawn picture as card data for the core. Each frame is its visible
+// layers pressed into one, and is there as many times as it lasts (a card
+// has one delay for all its frames; a frame shown for three ticks is three
+// frames alike, which deflate makes nearly free). The palette is kept as a
 // built-in one when it still is one (it then costs only its number), or cut
 // down to the colours actually used. An empty cell is index 0 of a card that
 // is not opaque, so a built-in palette whose first colour is drawn with
 // cannot also have empty cells: those cards carry their colours inline.
 // No DOM: runs under node for tests.
 
-import { T } from './model.js';
+import { T, composite } from './model.js';
 import { rgb } from './color.js';
 
 /**
@@ -15,9 +18,15 @@ import { rgb } from './color.js';
  * @returns {{card: any} | {problem: 'too_many_colors'}}
  */
 export function toCard(doc, by) {
+  // The card's frames, in order, as they show.
+  // A still picture is one frame, however long it was once said to last.
+  const shown = doc.frames.length === 1 ? [composite(doc, 0)] : doc.frames.flatMap((_, k) => {
+    const c = composite(doc, k);
+    return Array.from({ length: doc.holds[k] }, () => c);
+  });
   const used = new Set();
   let empty = false;
-  for (const f of doc.frames) {
+  for (const f of shown) {
     for (const v of f) {
       if (v === T) empty = true;
       else used.add(v);
@@ -40,13 +49,13 @@ export function toCard(doc, by) {
     map[T] = 0;
     palette = { inline: colors };
   }
-  const n = doc.size * doc.size, pixels = new Uint8Array(n * doc.frames.length);
-  doc.frames.forEach((f, k) => { for (let i = 0; i < n; i++) pixels[k * n + i] = map[f[i]]; });
-  const animated = doc.frames.length > 1;
+  const n = doc.size * doc.size, pixels = new Uint8Array(n * shown.length);
+  shown.forEach((f, k) => { for (let i = 0; i < n; i++) pixels[k * n + i] = map[f[i]]; });
+  const animated = shown.length > 1;
   return {
     card: {
       width: doc.size, height: doc.size, opaque: !empty, palette, frame: doc.shade,
-      frames: doc.frames.length, delay_ms: animated ? doc.delay : 0,
+      frames: shown.length, delay_ms: animated ? doc.delay : 0,
       title: doc.title.trim(), author: by.nick, handle: by.handle ?? null, link: by.link ?? '', pixels,
     },
   };

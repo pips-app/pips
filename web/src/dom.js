@@ -93,6 +93,12 @@ const ICONS = {
   'flip-x': '<path d="M12 3v18M9 7L4 12l5 5zM15 7l5 5-5 5z"/>',
   'flip-y': '<path d="M3 12h18M7 9l5-5 5 5zM7 15l5 5 5-5z"/>',
   rotate: '<path d="M20 12a8 8 0 1 1-2.3-5.7M20 4v4h-4"/>',
+  layers: '<path d="M12 4l8 4-8 4-8-4z"/><path d="M4 12l8 4 8-4M4 16l8 4 8-4"/>',
+  eye: '<path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="3"/>',
+  'eye-off': '<path d="M4 4l16 16"/><path d="M9.9 5.8A9.5 9.5 0 0 1 12 5.5c6 0 9.5 6.5 9.5 6.5a17 17 0 0 1-2.6 3.4M6.6 6.9C4 8.6 2.5 12 2.5 12S6 18.5 12 18.5c1.5 0 2.9-.4 4.1-1"/>',
+  up: '<path d="M6 15l6-6 6 6"/>',
+  merge: '<path d="M7 4v5a5 5 0 0 0 5 5 5 5 0 0 0 5-5V4"/><path d="M12 14v6M9 17l3 3 3-3"/>',
+  hold: '<circle cx="12" cy="13" r="7.5"/><path d="M12 9v4l2.5 2M10 3h4"/>',
 };
 
 /** An icon from the fixed set above. @param {keyof typeof ICONS} name */

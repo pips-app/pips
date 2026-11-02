@@ -11,6 +11,7 @@
 //   tools.js           the tool bar
 //   palette.js         the colours under the canvas
 //   frames.js          the frames strip
+//   layers-sheet.js    the layers
 //   precise.js         the pad of the precise mode
 //   settings.js        size, frame colour, delay, grid, mirror
 //   *-sheet.js         palettes, a colour, the history
@@ -28,7 +29,7 @@ import { go, hideTabs, toast, ask } from '../ui/shell.js';
 import { FRAME_SHADES } from '../ui/card.js';
 import { bottomSheet } from '../kit/bottom-sheet.js';
 import { clamp } from '../kit/motion.js';
-import { blank, createModel, T, SIZES } from './model.js';
+import { blank, createModel, composite, upgradeDraft, T, SIZES, MAX_HOLD, MAX_FRAMES } from './model.js';
 import { pickPicture } from './picture.js';
 import { inside } from './raster.js';
 import { parseHex, hex, fromRgb } from './color.js';
@@ -39,6 +40,7 @@ import { createStrokes } from './strokes.js';
 import { createSelection } from './selection.js';
 import { paletteGrid } from './palette.js';
 import { framesStrip } from './frames.js';
+import { layersSheet } from './layers-sheet.js';
 import { precisePad } from './precise.js';
 import { settingsPanel } from './settings.js';
 import { palettesSheet } from './palettes-sheet.js';
@@ -69,7 +71,7 @@ const defaultPalette = () => ({ colors: readyPalettes()[0].colors, id: readyPale
 export function editorView() {
   const model = createModel(blank(32, defaultPalette()));
   const state = {
-    frame: 0, color: 4, // the first built-in palette's ink
+    frame: 0, layer: 0, color: 4, // the first built-in palette's ink
     tool: /** @type {Tool} */ ('pen'), shape: /** @type {Shape} */ ('line'), pen: /** @type {import('./tools.js').PenMode} */ ('solid'),
     mirror: false, axes: { x: true, y: false }, precise: false, onion: true, grid: true,
     playing: false, shown: 0,
@@ -96,6 +98,7 @@ export function editorView() {
     play: () => (state.playing ? stop() : play()),
     menu: (f) => frameMenu(f),
     onion: () => { state.onion = !state.onion; paint(); },
+    layers: () => { stop(); layerSheet.show(); },
   });
   const palette = paletteGrid({
     pick: (i) => { state.color = i; if (state.tool === 'eraser' || state.tool === 'pick') state.tool = 'pen'; paint(); },
@@ -123,7 +126,7 @@ export function editorView() {
     },
     // The big button does what the chosen tool does: a pixel, a fill, a
     // shape dragged from where it is pressed to where it is let go.
-    press: (erase) => { stop(); held = strokes.start(cursorCell(), erase ? 'eraser' : state.tool); },
+    press: (erase) => { stop(); held = begin(cursorCell(), erase ? 'eraser' : state.tool); },
     release: () => { held?.end(); held = null; },
     pick: () => pickAt(cursorCell()),
   });
@@ -140,13 +143,17 @@ export function editorView() {
     picture: () => { more.close(); pickPicture((doc) => load(doc, t('ed.from-picture'))); },
   });
   const historyBtn = h('button', { type: 'button', class: 'btn', onclick: () => { more.close(); history.show(); } }, icon('history'), t('ed.history'));
-  settings.el.append(historyBtn);
+  // The layers here too: the precise mode has no frames' strip to reach them from.
+  const layersBtn = h('button', { type: 'button', class: 'btn', onclick: () => { more.close(); stop(); layerSheet.show(); } }, icon('layers'), t('ed.layers'));
+  settings.el.append(layersBtn, historyBtn);
 
   const more = bottomSheet({ label: t('ed.more') });
   const palettes = palettesSheet({ palettes: () => readyPalettes(), model });
   const colors = colorSheet({ model, chosen: (i) => { state.color = i; paint(); } });
   const history = historySheet({ model });
   const frameSheet = bottomSheet({ label: t('ed.frame.menu') });
+  const layerSheet = layersSheet({ model, frame: () => state.frame, layer: () => state.layer, choose: (l) => { state.layer = l; paint(); } });
+  const sheets = [more, palettes, colors, history, frameSheet, layerSheet];
 
   const aside = h('aside', { class: 'ed-aside' });
   const wrap = h('div', { class: 'ed-card-wrap' }, card, coords);
@@ -157,7 +164,7 @@ export function editorView() {
   const main = h('div', { class: 'ed-main' }, wrap, strip);
   const el = h('section', { class: 'view ed-view' },
     bar, h('div', { class: 'ed-body' }, tools.el, main, h('div', { class: 'ed-lower' }, palette.el, pad.el), aside),
-    ...more.els, ...palettes.els, ...colors.els, ...history.els, ...frameSheet.els);
+    ...more.els, ...palettes.els, ...colors.els, ...history.els, ...frameSheet.els, ...layerSheet.els);
 
   // Settings beside the canvas on a wide screen, behind "More" on a phone.
   const wide = typeof matchMedia === 'function' ? matchMedia(WIDE) : null;
@@ -178,10 +185,10 @@ export function editorView() {
 
   // ------------------------------------------------------------ drawing --
   const cursorCell = () => ({ x: Math.floor(cursor.x), y: Math.floor(cursor.y) });
-  const selection = createSelection({ model, frame: () => state.frame, changed: () => paintSelection() });
+  const selection = createSelection({ model, frame: () => state.frame, layer: () => state.layer, changed: () => paintSelection() });
   const strokes = createStrokes({
     model, selection, pick: (c) => pickAt(c),
-    now: () => ({ frame: state.frame, color: state.color, shape: state.shape, pen: state.pen, mirror: state.mirror, axes: state.axes }),
+    now: () => ({ frame: state.frame, layer: state.layer, color: state.color, shape: state.shape, pen: state.pen, mirror: state.mirror, axes: state.axes }),
   });
   // The selection's actions take a place that is already there, so the
   // canvas never moves when a box appears: the frames' strip, or, in the
@@ -192,16 +199,29 @@ export function editorView() {
   };
   placeSelBar();
 
-  /** The pipette: an empty cell picks the eraser. @param {Cell} c */
+  /** The pipette, from the picture as it shows (every visible layer): an empty cell picks the eraser. @param {Cell} c */
   function pickAt(c) {
     if (!inside(c, model.doc.size)) return;
-    const v = model.doc.frames[state.frame][c.y * model.doc.size + c.x];
+    const v = composite(model.doc, state.frame)[c.y * model.doc.size + c.x];
     if (v === T) state.tool = 'eraser';
     else {
       state.color = v;
       if (state.tool === 'pick' || state.tool === 'eraser') state.tool = 'pen';
     }
     paint();
+  }
+  /**
+   * A tool's press, on the chosen layer — unless that layer is hidden: what
+   * is drawn there could not be seen, so it is said, not done. The
+   * pipette reads the picture as it shows, so it still works.
+   * @param {Cell} c @param {Tool} tool
+   */
+  function begin(c, tool) {
+    if (tool !== 'pick' && model.doc.layers[state.layer]?.hidden) {
+      toast(t('ed.layer.hidden'));
+      return null;
+    }
+    return strokes.start(c, tool);
   }
   /** Another frame: the selection stays with the one it was on. @param {number} f */
   function openFrame(f) {
@@ -229,7 +249,7 @@ export function editorView() {
         canvas.cursor(cursorCell());
         return null;
       }
-      const s = strokes.start(canvas.cellAt(p), state.tool);
+      const s = begin(canvas.cellAt(p), state.tool);
       return s && { move: (q) => s.move(canvas.cellAt(q)), end: s.end, cancel: s.cancel };
     },
     pick: (p) => pickAt(canvas.cellAt(p)),
@@ -273,7 +293,8 @@ export function editorView() {
     last = performance.now();
     const tick = (/** @type {number} */ now) => {
       if (!state.playing) return;
-      if (now - last >= model.doc.delay) {
+      // Each frame for as many ticks as it lasts.
+      if (now - last >= model.doc.delay * (model.doc.holds[state.shown] ?? 1)) {
         last = now;
         state.shown = (state.shown + 1) % model.doc.frames.length;
         canvas.paint(model.doc, state.shown, { onion: null, paper: paper() });
@@ -292,17 +313,40 @@ export function editorView() {
   }
 
   // ------------------------------------------------------------- frames --
-  /** What can be done with the open frame. @param {number} f */
+  /**
+   * What can be done with the open frame: how long it lasts (a stepper that
+   * leaves the sheet open, to try a few), then what is done at once.
+   * @param {number} f
+   */
   function frameMenu(f) {
-    const n = model.doc.frames.length;
+    const d = model.doc, n = d.frames.length;
     /** @param {any} ic @param {string} label @param {() => void} run @param {boolean} [off] */
     const item = (ic, label, run, off = false) => h('button', { type: 'button', class: 'btn ed-menu-item', disabled: off, onclick: () => { frameSheet.close(); run(); } }, icon(ic), label);
+    const value = h('b', { class: 'ed-hold-n', 'aria-live': 'polite' });
+    const note = h('small', {});
+    const less = /** @type {HTMLButtonElement} */ (h('button', { type: 'button', class: 'ib', 'aria-label': t('ed.frame.hold.less'), title: t('ed.frame.hold.less'), onclick: () => step(-1) }, icon('minus')));
+    const more1 = /** @type {HTMLButtonElement} */ (h('button', { type: 'button', class: 'ib', 'aria-label': t('ed.frame.hold.more'), title: t('ed.frame.hold.more'), onclick: () => step(1) }, icon('plus')));
+    const holdRow = h('div', { class: 'ed-hold', role: 'group', 'aria-label': t('ed.frame.hold') },
+      icon('hold'), h('div', { class: 'ed-hold-text' }, h('span', {}, t('ed.frame.hold')), note), less, value, more1);
+    const show = () => {
+      const k = d.holds[f];
+      value.textContent = t('ed.frame.hold.n', k);
+      // Why "longer" may be off: the frame is at its longest, or the card is full.
+      note.textContent = k < MAX_HOLD && !model.canHold(f, k + 1) ? t('ed.frame.hold.full', MAX_FRAMES) : t('ed.frame.hold.note', k, k * d.delay);
+      less.disabled = k <= 1;
+      more1.disabled = !model.canHold(f, k + 1);
+    };
+    /** @param {number} by */
+    const step = (by) => { model.setHold(f, d.holds[f] + by); show(); };
+    show();
     frameSheet.retitle(t('ed.frame.open', f + 1, n));
     frameSheet.body.replaceChildren(
-      item('copy', t('ed.frame.copy'), () => model.addFrame(f), n >= 64),
+      holdRow,
+      item('copy', t('ed.frame.copy'), () => model.addFrame(f), model.ticks() + d.holds[f] > MAX_FRAMES),
       item('back', t('ed.frame.left'), () => model.moveFrame(f, f - 1), f === 0),
       item('next', t('ed.frame.right'), () => model.moveFrame(f, f + 1), f === n - 1),
-      item('eraser', t('ed.frame.clear'), () => model.clearFrame(f)),
+      // With layers, a frame is cleared one layer at a time: the chosen one.
+      item('eraser', t(d.layers.length > 1 ? 'ed.frame.clear-layer' : 'ed.frame.clear', t('ed.layer.n', d.layers[state.layer]?.n ?? 1)), () => model.clearFrame(f, state.layer)),
       item('trash', t('ed.frame.remove'), () => model.removeFrame(f), n < 2));
     frameSheet.show();
   }
@@ -326,6 +370,7 @@ export function editorView() {
     stop();
     model.replace(doc);
     state.frame = 0;
+    state.layer = 0;
     state.color = Math.min(4, model.doc.colors.length - 1);
     toast(said, { label: t('toast.undo'), run: () => undo() });
   }
@@ -372,7 +417,7 @@ export function editorView() {
   async function signCard() {
     stop();
     // Nothing drawn, in any frame: nothing to sign — said, not done.
-    if (model.doc.frames.every((f) => f.every((v) => v === T))) {
+    if (model.doc.frames.every((_, f) => composite(model.doc, f).every((v) => v === T))) {
       shake(canvas.el);
       return toast(t('ed.empty'));
     }
@@ -403,7 +448,7 @@ export function editorView() {
   function keep() {
     clearTimeout(saving);
     saving = window.setTimeout(() => {
-      setMeta(DRAFT, { v: 1, doc: { ...model.doc }, history: model.history.save(), frame: state.frame, color: state.color }).catch(() => {});
+      setMeta(DRAFT, { v: 2, doc: { ...model.doc }, history: model.history.save(), frame: state.frame, layer: state.layer, color: state.color }).catch(() => {});
     }, 600);
   }
   model.listen((c) => {
@@ -428,6 +473,7 @@ export function editorView() {
   function paint(dirty = []) {
     const d = model.doc;
     state.frame = clamp(state.frame, 0, d.frames.length - 1);
+    state.layer = clamp(state.layer, 0, d.layers.length - 1);
     state.color = clamp(state.color, 0, d.colors.length - 1);
     const s = FRAME_SHADES[d.shade] ?? FRAME_SHADES[0];
     card.style.setProperty('--shade', s.paper);
@@ -436,7 +482,8 @@ export function editorView() {
     if (!state.playing) canvas.paint(d, state.frame, layers());
     if (document.activeElement !== title) title.value = d.title;
     byline.textContent = `${app.profile.nick ? `@${app.profile.nick}` : '—'} · ${date(Date.now(), { day: '2-digit', month: '2-digit' })}`;
-    frames.set(d, state.frame, { playing: state.playing, shown: state.playing ? state.shown : state.frame, onion: state.onion, delay: d.delay }, dirty);
+    frames.set(d, state.frame, { playing: state.playing, shown: state.playing ? state.shown : state.frame, onion: state.onion, layer: state.layer }, dirty);
+    layerSheet.paint();
     palette.set(d, state.color);
     tools.set({ tool: state.tool, shape: state.shape, pen: state.pen, mirror: state.mirror, precise: state.precise });
     if (state.tool !== 'select') selection.clear();
@@ -473,7 +520,7 @@ export function editorView() {
   const TOOL_KEYS = /** @type {Record<string, Tool>} */ ({ b: 'pen', e: 'eraser', g: 'fill', u: 'shapes', s: 'select', i: 'pick' });
   const ARROWS = /** @type {Record<string, [number, number]>} */ ({ ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] });
   document.addEventListener('keydown', (e) => {
-    if (el.hidden || document.querySelector('.dialog') || [more, palettes, colors, history, frameSheet].some((s) => s.open)) return;
+    if (el.hidden || document.querySelector('.dialog') || sheets.some((s) => s.open)) return;
     const typing = e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement;
     // Enter and Space press a button reached with the keyboard (Tab); after
     // a click its focus is not shown, and Space still pans, Enter still plays.
@@ -519,11 +566,13 @@ export function editorView() {
       hideTabs(true);
       if (!loaded) {
         loaded = true;
-        const d = await getMeta(DRAFT).catch(() => null);
-        if (d?.v === 1 && SIZES.includes(d.doc?.size)) {
+        // A draft kept by an older version is taken up as it is now (layers, holds).
+        const d = upgradeDraft(await getMeta(DRAFT).catch(() => null));
+        if (d?.v === 2 && SIZES.includes(d.doc?.size)) {
           state.frame = d.frame ?? 0;
+          state.layer = d.layer ?? 0;
           state.color = d.color ?? 0;
-          model.reset({ ...d.doc, frames: d.doc.frames.map((/** @type {any} */ f) => Uint8Array.from(f)) }, d.history);
+          model.reset({ ...d.doc, frames: d.doc.frames.map((/** @type {any} */ f) => f.map((/** @type {any} */ c) => Uint8Array.from(c))) }, d.history);
         }
       }
       if (arg?.doc) load(arg.doc, arg.said ?? t('ed.from-card'));
@@ -532,7 +581,7 @@ export function editorView() {
     hide() {
       stop();
       hideTabs(false);
-      for (const s of [more, palettes, colors, history, frameSheet]) if (s.open) s.close();
+      for (const s of sheets) if (s.open) s.close();
     },
   };
 }

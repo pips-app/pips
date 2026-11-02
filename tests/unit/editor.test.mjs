@@ -7,7 +7,7 @@ const { parseHex, hex, toHsv, fromHsv, nearest, ramp } = await import('../../web
 const { line, rect, ellipse, fill, mirror, corner, span, within, lift, flip, turn, place, dithered } = await import('../../web/src/editor/raster.js');
 const { budget, LIMIT, issuable, MAX_EDGE } = await import('../../web/src/budget.js');
 const { createHistory } = await import('../../web/src/editor/history.js');
-const { blank, createModel, T } = await import('../../web/src/editor/model.js');
+const { blank, createModel, composite, upgradeDraft, T, MAX_HOLD, MAX_FRAMES } = await import('../../web/src/editor/model.js');
 const { toCard } = await import('../../web/src/editor/to-card.js');
 
 const PAL = { colors: [0xf7f3ea, 0x17151f, 0xc4392f, 0x3b5fa8], id: 7 };
@@ -108,24 +108,24 @@ test('undo tree: merging, the limit, saving', () => {
 
 test('the picture: strokes, frames, palette and size are all undoable', () => {
   const m = createModel(blank(4, PAL));
-  const s = m.stroke(0);
+  const s = m.stroke(0, 0);
   s.set(0, 2);
   s.set(5, 2);
   s.commit('pen');
-  assert.equal(m.doc.frames[0][5], 2);
+  assert.equal(m.doc.frames[0][0][5], 2);
   m.addFrame(0);
   assert.equal(m.doc.frames.length, 2);
   m.setPalette([0xc4392f, 0xffffff], null);
-  assert.equal(m.doc.frames[1][5], 0, 'red found again in the new palette');
+  assert.equal(m.doc.frames[1][0][5], 0, 'red found again in the new palette');
   m.resize(8);
   assert.equal(m.doc.size, 8);
-  assert.equal(m.doc.frames[0][2 * 8 + 2], 0, 'the picture stays in the middle');
+  assert.equal(m.doc.frames[0][0][2 * 8 + 2], 0, 'the picture stays in the middle');
   m.setTitle('Г');
   m.setTitle('Гр'); // typed in one go
   for (let k = 0; k < 5; k++) m.undo();
   assert.equal(m.doc.size, 4);
   assert.equal(m.doc.frames.length, 1);
-  assert.equal(m.doc.frames[0][5], T);
+  assert.equal(m.doc.frames[0][0][5], T);
   assert.equal(m.doc.title, '');
   assert.equal(m.history.canUndo, false);
   while (m.history.canRedo) m.redo();
@@ -135,16 +135,16 @@ test('the picture: strokes, frames, palette and size are all undoable', () => {
 
 test('a cancelled stroke leaves nothing, not even a step', () => {
   const m = createModel(blank(4, PAL));
-  const s = m.stroke(0);
+  const s = m.stroke(0, 0);
   s.set(3, 1);
   s.cancel();
-  assert.equal(m.doc.frames[0][3], T);
+  assert.equal(m.doc.frames[0][0][3], T);
   assert.equal(m.history.canUndo, false);
 });
 
 test('as a card: built-in palettes cost a number, others only the colours used', () => {
   const m = createModel(blank(4, PAL));
-  const s = m.stroke(0);
+  const s = m.stroke(0, 0);
   s.set(0, 2);
   s.commit('pen');
   let c = /** @type {any} */ (toCard(m.doc, { nick: 'a', handle: null, link: '' })).card;
@@ -153,7 +153,7 @@ test('as a card: built-in palettes cost a number, others only the colours used',
   assert.equal(c.pixels[0], 2);
   assert.equal(c.pixels[1], 0, 'empty cells are index 0');
   // The first colour drawn, with empty cells too: colours go inline.
-  const s2 = m.stroke(0);
+  const s2 = m.stroke(0, 0);
   s2.set(1, 0);
   s2.commit('pen');
   c = /** @type {any} */ (toCard(m.doc, { nick: 'a', handle: null, link: '' })).card;
@@ -206,9 +206,9 @@ test('the pen: corners come out of a curve, never out of what was already drawn'
     const m = createModel(blank(8, PAL));
     const strokes = createStrokes({
       model: m, pick() {}, selection: /** @type {any} */ ({}),
-      now: () => ({ frame: 0, color: 1, shape: 'line', pen, mirror: axes.x || axes.y, axes }),
+      now: () => ({ frame: 0, layer: 0, color: 1, shape: 'line', pen, mirror: axes.x || axes.y, axes }),
     });
-    const at = (/** @type {number} */ x, /** @type {number} */ y) => m.doc.frames[0][y * 8 + x];
+    const at = (/** @type {number} */ x, /** @type {number} */ y) => m.doc.frames[0][0][y * 8 + x];
     return { m, strokes, at };
   };
   const draw = (/** @type {any} */ strokes, /** @type {number[][]} */ cells) => {
@@ -249,12 +249,12 @@ test('a card back into a picture: the same card again, smaller ones centred, oth
   const builtin = (id) => (id === 7 ? PAL.colors.map(rgbOf) : undefined);
   const by = { nick: 'a', handle: null, link: '' };
   const m = createModel(blank(16, PAL));
-  const s = m.stroke(0);
+  const s = m.stroke(0, 0);
   s.set(0, 2);
   s.set(17, 3);
   s.commit('pen');
   m.setTitle?.('Гриб');
-  for (const draw of [() => {}, () => { const t = m.stroke(0); t.set(5, 0); t.commit('pen'); }]) {
+  for (const draw of [() => {}, () => { const t = m.stroke(0, 0); t.set(5, 0); t.commit('pen'); }]) {
     draw(); // the second time the first colour is drawn too: the card's colours go inline
     const card = /** @type {any} */ (toCard(m.doc, by)).card;
     const doc = fromCard(card, builtin);
@@ -269,15 +269,125 @@ test('a card back into a picture: the same card again, smaller ones centred, oth
   const small = { width: 40, height: 40, opaque: true, palette: { inline: [[0, 0, 0], [255, 255, 255]] }, frames: 1, delay_ms: 0, pixels: new Uint8Array(1600).fill(1), title: 'x', frame: 2 };
   const d = fromCard(small, builtin);
   assert.equal(d.size, 48);
-  assert.equal(d.frames[0][0], T, 'the border is empty');
-  assert.equal(d.frames[0][4 * 48 + 4], 1, 'the picture starts 4 cells in');
+  assert.equal(d.frames[0][0][0], T, 'the border is empty');
+  assert.equal(d.frames[0][0][4 * 48 + 4], 1, 'the picture starts 4 cells in');
   assert.equal(d.shade, 2);
   // Not square: the whole of it, in the middle of the canvas that holds it.
   const wide = fromCard({ ...small, width: 10, height: 8, pixels: new Uint8Array(80).fill(1) }, builtin);
   assert.equal(wide.size, 16);
-  assert.deepEqual([wide.frames[0][3 * 16 + 2], wide.frames[0][4 * 16 + 3], wide.frames[0][11 * 16 + 12]], [T, 1, 1], 'from (3, 4) to (12, 11)');
-  assert.equal(wide.frames[0].filter((v) => v === 1).length, 80, 'every cell of it');
+  assert.deepEqual([wide.frames[0][0][3 * 16 + 2], wide.frames[0][0][4 * 16 + 3], wide.frames[0][0][11 * 16 + 12]], [T, 1, 1], 'from (3, 4) to (12, 11)');
+  assert.equal(wide.frames[0][0].filter((v) => v === 1).length, 80, 'every cell of it');
   // Larger than the largest canvas: crop first.
   assert.equal(fromCard({ ...small, width: 128, height: 128 }, builtin), null);
   assert.equal(fromCard({ ...small, width: 80, height: 8 }, builtin), null);
+});
+
+test('holds: a frame lasts several ticks, in the card as frames alike, and back as one', async () => {
+  const { fromCard } = await import('../../web/src/editor/from-card.js');
+  const builtin = (id) => (id === 7 ? PAL.colors.map((c) => [c >> 16, (c >> 8) & 255, c & 255]) : undefined);
+  const by = { nick: 'a', handle: null, link: '' };
+  const m = createModel(blank(4, PAL));
+  const s = m.stroke(0, 0);
+  s.set(0, 1);
+  s.commit('pen');
+  m.addFrame(0);
+  const t = m.stroke(1, 0);
+  t.set(1, 2);
+  t.commit('pen');
+  assert.ok(m.setHold(0, 3));
+  m.setHold(0, 4); // a few taps on "longer": one step
+  assert.deepEqual(m.doc.holds, [4, 1]);
+  assert.equal(m.ticks(), 5);
+  const card = /** @type {any} */ (toCard(m.doc, by)).card;
+  assert.equal(card.frames, 5, 'the first frame four times, then the second');
+  const n = 16;
+  assert.deepEqual([0, 1, 2, 3, 4].map((k) => card.pixels[k * n + 1]), [0, 0, 0, 0, 2]);
+  const back = fromCard(card, builtin);
+  assert.deepEqual([back.frames.length, back.holds], [2, [4, 1]], 'frames alike in a row: one that lasts');
+  // A copy lasts as long as its frame; the card's 64 frames, holds counted, are the limit.
+  m.addFrame(0);
+  assert.deepEqual(m.doc.holds, [4, 4, 1]);
+  assert.equal(m.canHold(0, MAX_HOLD + 1), false);
+  while (m.ticks() + m.doc.holds[0] <= MAX_FRAMES) m.addFrame(0);
+  assert.ok(m.ticks() <= MAX_FRAMES);
+  assert.equal(m.addFrame(0), false, 'no room for another four');
+  m.undo();
+  assert.equal(m.doc.frames.length, m.doc.holds.length);
+  // Moving frames moves how long they last with them.
+  const mm = createModel(blank(4, PAL));
+  mm.addFrame(0);
+  mm.setHold(1, 2);
+  mm.moveFrame(1, 0);
+  assert.deepEqual(mm.doc.holds, [2, 1]);
+  mm.undo();
+  assert.deepEqual(mm.doc.holds, [1, 2]);
+  // One frame only: a still card, however long it was said to last.
+  const still = createModel(blank(4, PAL));
+  still.doc.holds[0] = 3;
+  assert.equal(/** @type {any} */ (toCard(still.doc, by)).card.frames, 1);
+});
+
+test('layers: drawn on one at a time, shown and signed together, hidden ones left out', () => {
+  const by = { nick: 'a', handle: null, link: '' };
+  const m = createModel(blank(4, PAL));
+  const s = m.stroke(0, 0);
+  s.set(0, 1);
+  s.set(1, 1);
+  s.commit('pen');
+  const l = m.addLayer(0);
+  assert.equal(l, 1);
+  assert.equal(m.doc.layers.length, 2);
+  m.addFrame(0); // a copy of every layer
+  assert.equal(m.doc.frames[1].length, 2);
+  const t = m.stroke(0, 1);
+  t.set(1, 2); // over the bottom layer's cell
+  t.set(2, 2);
+  t.commit('pen');
+  assert.deepEqual([...composite(m.doc, 0)].slice(0, 4), [1, 2, 2, T], 'the top layer over the bottom one, empty cells see through');
+  assert.equal(m.doc.frames[0][0][1], 1, 'the bottom layer kept its cell');
+  let card = /** @type {any} */ (toCard(m.doc, by)).card;
+  assert.deepEqual([...card.pixels].slice(0, 4), [1, 2, 2, 0]);
+  m.setHidden(1, true);
+  card = /** @type {any} */ (toCard(m.doc, by)).card;
+  assert.deepEqual([...card.pixels].slice(0, 4), [1, 1, 0, 0], 'a hidden layer is not in the card');
+  assert.equal(m.canMerge(1), false, 'nothing shown to merge');
+  m.setHidden(1, false);
+  // Order: the top one moved under, the bottom one shows through.
+  m.moveLayer(1, 0);
+  assert.deepEqual([...composite(m.doc, 0)].slice(0, 3), [1, 1, 2]);
+  m.undo();
+  // Merged down: one layer, the picture as it was shown.
+  assert.ok(m.mergeDown(1));
+  assert.equal(m.doc.layers.length, 1);
+  assert.deepEqual([...m.doc.frames[0][0]].slice(0, 4), [1, 2, 2, T]);
+  m.undo();
+  assert.deepEqual([m.doc.layers.length, m.doc.frames[0][0][1], m.doc.frames[0][1][1]], [2, 1, 2], 'undone: both layers again');
+  // A layer deleted and brought back, with its cells in every frame.
+  m.removeLayer(1);
+  assert.equal(m.doc.frames[0].length, 1);
+  m.undo();
+  assert.equal(m.doc.frames[0][1][2], 2);
+  // Resize, palette and crop look at every layer.
+  assert.ok(m.cropsAt(16) === false && m.uses(2));
+  m.resize(8);
+  assert.equal(m.doc.frames[0][1][2 * 8 + 2 + 2], 2);
+  // Layers keep their names (numbers) when they move; a new one gets the next.
+  m.addLayer(1);
+  assert.deepEqual(m.doc.layers.map((x) => x.n), [1, 2, 3]);
+});
+
+test('a draft kept before layers is taken up with its history', () => {
+  const old = {
+    v: 1, frame: 0, color: 1,
+    doc: { size: 2, frames: [[1, 255, 255, 255]], colors: PAL.colors, builtin: 7, title: '', shade: 0, delay: 160 },
+    history: { tree: { e: null, l: '', f: -1, t: 0, x: 0, k: [{ e: { k: 'px', f: 0, i: [0], b: [255], a: [1] }, l: 'ed.h.pen', f: 0, t: 1, x: -1, k: [] }] }, at: [0] },
+  };
+  const d = upgradeDraft(old);
+  assert.equal(d.v, 2);
+  const m = createModel(blank(2, PAL));
+  m.reset({ ...d.doc, frames: d.doc.frames.map((f) => f.map((c) => Uint8Array.from(c))) }, d.history);
+  assert.equal(m.doc.frames[0][0][0], 1);
+  m.undo();
+  assert.equal(m.doc.frames[0][0][0], T, 'the old step undoes on the one layer');
+  assert.equal(upgradeDraft(d), d, 'a draft as it is now is left as it is');
 });

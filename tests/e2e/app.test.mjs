@@ -1499,3 +1499,64 @@ test('the keyboard: a sheet holds focus, Escape closes only what is on top, focu
   assert.ok(await p.evaluate(() => document.activeElement?.classList.contains('ed-tool-more')), 'focus is back where it was');
   await p.context().close();
 });
+
+test('the editor: many frames scroll in their strip, frames last longer, layers draw apart and sign as one', async () => {
+  for (const desk of [false, true]) {
+    const p = await env.phone('layerfox', undefined, desk);
+    await tab(p, 'draw');
+    await p.locator('.ed-art').waitFor();
+    // Twenty frames: the strip scrolls, nothing is pushed off the screen.
+    await p.click('.ed-frame.add');
+    for (let i = 0; i < 19; i++) await p.click('.ed-frame.add');
+    const fit = await p.evaluate(() => {
+      const w = document.documentElement.clientWidth, r = (s) => document.querySelector(s).getBoundingClientRect();
+      const s = document.querySelector('.ed-frame-scroll');
+      return { scrolls: s.scrollWidth > s.clientWidth, add: r('.ed-frame.add').right <= w, layers: r('.ed-layers-btn').right <= w, page: document.documentElement.scrollWidth <= w, aside: !document.querySelector('.ed-aside').offsetParent || r('.ed-aside').right <= w };
+    });
+    assert.deepEqual(fit, { scrolls: true, add: true, layers: true, page: true, aside: true }, desk ? 'computer' : 'phone');
+    if (desk) { await p.context().close(); continue; }
+
+    // Back to two frames; the first lasts three ticks.
+    while (await p.locator('.ed-frame-list .ed-frame').count() > 2) {
+      await p.click('.ed-frame[aria-pressed="true"]');
+      await p.click('.bottom-sheet.on .ed-menu-item:has-text("Удалить кадр")');
+      await p.waitForTimeout(150);
+    }
+    await p.click('.ed-frame-list .ed-frame >> nth=0');
+    await p.click('.ed-frame[aria-pressed="true"]');
+    await p.click('.bottom-sheet.on .ed-hold button[aria-label="Дольше"]');
+    await p.click('.bottom-sheet.on .ed-hold button[aria-label="Дольше"]');
+    assert.equal(await p.textContent('.bottom-sheet.on .ed-hold-n'), '×3');
+    await p.keyboard.press('Escape');
+    assert.equal(await p.textContent('.ed-frame-list .ed-frame >> nth=0 >> .ed-frame-hold'), '×3', 'the tile says how long');
+
+    // A dot on the first layer; a new layer above, hidden: nothing is drawn on it.
+    const art = await p.locator('.ed-art').boundingBox();
+    const cell = (x, y) => [art.x + art.width * (x + 0.5) / 32, art.y + art.height * (y + 0.5) / 32];
+    await p.mouse.click(...cell(1, 1));
+    await p.click('.ed-layers-btn');
+    await p.click('.bottom-sheet.on .ed-layer-act:has-text("Новый слой")');
+    assert.equal(await p.textContent('.ed-layers-btn'), '2/2');
+    await p.click('.bottom-sheet.on .ed-layers li.here .ed-layer-eye');
+    await p.keyboard.press('Escape');
+    await p.mouse.click(...cell(2, 1));
+    assert.match(await toast(p), /скрыт/);
+    // Shown again: the dot goes on the second layer, over nothing.
+    await p.click('.ed-layers-btn');
+    await p.click('.bottom-sheet.on .ed-layers li.here .ed-layer-eye');
+    await p.keyboard.press('Escape');
+    await p.mouse.click(...cell(2, 1));
+    const cels = await p.evaluate(() => [...document.querySelectorAll('.ed-frame-list .ed-frame')].length);
+    assert.equal(cels, 2);
+    await p.fill('.ed-title', 'Слоёный');
+    await p.click('.ed-sign');
+    await p.locator('.turn:not([hidden])').waitFor();
+    const card = await p.evaluate(async () => {
+      const c = [...(await import('/src/state.js')).app.cards.values()].find((e) => e.card.title === 'Слоёный').card;
+      return { frames: c.frames, a: c.pixels[1 * 32 + 1], b: c.pixels[1 * 32 + 2] };
+    });
+    assert.equal(card.frames, 4, 'the first frame three times, then the second');
+    assert.ok(card.a !== 0 && card.b !== 0, 'both layers in the picture');
+    await p.context().close();
+  }
+});

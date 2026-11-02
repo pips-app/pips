@@ -4,10 +4,12 @@
 // one from. The picture is square, one of the editor's sizes: a smaller
 // card sits in the middle of the nearest larger canvas, on empty cells.
 // A card that is not square, or larger than the editor's largest canvas,
-// is no picture for it: null, and the caller crops first.
+// is no picture for it: null, and the caller crops first. Frames alike in a
+// row become one frame that lasts that long (to-card.js repeats it again):
+// the animation plays the same, and is drawn once.
 // No DOM: runs under node for tests.
 
-import { T, SIZES, DELAY } from './model.js';
+import { T, SIZES, DELAY, MAX_HOLD } from './model.js';
 
 /** @param {number[]} c [r, g, b] */
 const packed = (c) => (c[0] << 16) | (c[1] << 8) | c[2];
@@ -39,8 +41,17 @@ export function fromCard(card, builtin) {
     }
     return f;
   });
+  /** @type {Uint8Array[]} */
+  const kept = [];
+  /** @type {number[]} */
+  const holds = [];
+  for (const f of frames) {
+    const last = kept[kept.length - 1];
+    if (last && holds[holds.length - 1] < MAX_HOLD && last.every((v, i) => v === f[i])) holds[holds.length - 1]++;
+    else { kept.push(f); holds.push(1); }
+  }
   return {
-    size, frames, colors, builtin: inline ? null : card.palette.builtin,
+    size, frames: kept.map((f) => [f]), layers: [{ n: 1, hidden: false }], holds, colors, builtin: inline ? null : card.palette.builtin,
     title: card.title ?? '', shade: card.frame ?? 0,
     delay: card.frames > 1 ? Math.min(DELAY.max, Math.max(DELAY.min, card.delay_ms)) : DELAY.start,
   };

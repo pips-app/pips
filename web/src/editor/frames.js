@@ -1,21 +1,23 @@
 // @ts-check
 // The frames of the picture as a strip: the first tile plays them (and
 // shows the card as small as in the collection), then a numbered thumbnail
-// of each frame, "+" for a copy of the open one, and the onion skin switch.
-// A tap on the open frame shows what can be done with it. A still picture
-// has nothing to play or choose between: there, the strip is one button
-// that starts an animation, and nothing in it can pass for a colour.
+// of each frame — with how long it lasts, when longer than a tick — which
+// scroll between the tiles at the ends. Those stay put however many frames
+// there are: "+" for a copy of the open one, the onion skin switch, and the
+// layers. A tap on the open frame shows what can be done with it. A still
+// picture has nothing to play or choose between: there, the strip is one
+// button that starts an animation, and nothing in it can pass for a colour.
 
 import { h, icon, reveal } from '../dom.js';
 import { t } from '../i18n.js';
-import { T } from './model.js';
+import { T, MAX_FRAMES, composite, ticks } from './model.js';
 import { rgb } from './color.js';
 
-/** Paints a frame into a small canvas. @param {HTMLCanvasElement} cv @param {import('./model.js').Doc} doc @param {number} f */
-export function thumb(cv, doc, f) {
+/** Paints cells into a small canvas. @param {HTMLCanvasElement} cv @param {import('./model.js').Doc} doc @param {Uint8Array} buf */
+export function paintCells(cv, doc, buf) {
   if (cv.width !== doc.size) { cv.width = doc.size; cv.height = doc.size; }
   const g = /** @type {CanvasRenderingContext2D} */ (cv.getContext('2d'));
-  const img = g.createImageData(doc.size, doc.size), buf = doc.frames[f];
+  const img = g.createImageData(doc.size, doc.size);
   for (let i = 0; i < buf.length; i++) {
     if (buf[i] === T) continue;
     const [r, gg, b] = rgb(doc.colors[buf[i]] ?? 0);
@@ -23,9 +25,11 @@ export function thumb(cv, doc, f) {
   }
   g.putImageData(img, 0, 0);
 }
+/** Paints a frame as it shows. @param {HTMLCanvasElement} cv @param {import('./model.js').Doc} doc @param {number} f */
+export const thumb = (cv, doc, f) => paintCells(cv, doc, composite(doc, f));
 
 /**
- * @param {{select: (f: number) => void, add: () => void, play: () => void, menu: (f: number) => void, onion: () => void}} o
+ * @param {{select: (f: number) => void, add: () => void, play: () => void, menu: (f: number) => void, onion: () => void, layers: () => void}} o
  */
 export function framesStrip(o) {
   const preview = /** @type {HTMLCanvasElement} */ (h('canvas', { class: 'ed-preview-art' }));
@@ -35,46 +39,60 @@ export function framesStrip(o) {
   const addText = h('span', {}, t('ed.frame.first'));
   const add = h('button', { type: 'button', class: 'ed-frame add first', 'aria-label': t('ed.frame.add'), title: t('ed.frame.add'), onclick: o.add }, icon('plus'), addText);
   const onion = h('button', { type: 'button', class: 'ed-onion-btn', onclick: o.onion });
-  const scroller = h('div', { class: 'ed-frame-scroll' }, list, add, onion);
-  const el = h('section', { class: 'ed-frames', 'aria-label': t('ed.frames') }, play, scroller);
+  const layerCount = h('span', { class: 'ed-layers-n' });
+  const layers = h('button', { type: 'button', class: 'ed-layers-btn', onclick: o.layers }, icon('layers'), layerCount);
+  const scroller = h('div', { class: 'ed-frame-scroll' }, list);
+  const el = h('section', { class: 'ed-frames', 'aria-label': t('ed.frames') }, play, scroller, add, onion, layers);
   /** @type {HTMLCanvasElement[]} */
   let thumbs = [];
+  /** @type {HTMLElement[]} */
+  let holds = [];
   let open = 0;
 
   return {
     el,
     /**
      * @param {import('./model.js').Doc} doc @param {number} f the open frame
-     * @param {{playing: boolean, shown: number, onion: boolean, delay: number}} s shown: the frame the preview shows
+     * @param {{playing: boolean, shown: number, onion: boolean, layer: number}} s shown: the frame the preview shows
      * @param {number[]|'all'} dirty the frames whose pictures changed
      */
     set(doc, f, s, dirty) {
       open = f;
       if (thumbs.length !== doc.frames.length) {
         dirty = 'all';
-        thumbs = doc.frames.map((_, k) => /** @type {HTMLCanvasElement} */ (h('canvas', {})));
+        thumbs = doc.frames.map(() => /** @type {HTMLCanvasElement} */ (h('canvas', {})));
+        holds = doc.frames.map(() => h('span', { class: 'ed-frame-hold', 'aria-hidden': 'true' }));
         list.replaceChildren(...thumbs.map((cv, k) => h('button', {
           type: 'button', class: 'ed-frame', onclick: () => (k === open ? o.menu(k) : o.select(k)),
-        }, cv, h('span', { class: 'ed-frame-n', 'aria-hidden': 'true' }, String(k + 1)))));
+        }, cv, h('span', { class: 'ed-frame-n', 'aria-hidden': 'true' }, String(k + 1)), holds[k])));
       }
       thumbs.forEach((cv, k) => {
         if (dirty === 'all' || dirty.includes(k)) thumb(cv, doc, k);
+        const n = doc.holds[k];
+        holds[k].textContent = n > 1 ? t('ed.frame.hold.n', n) : '';
         const b = /** @type {HTMLElement} */ (cv.parentElement);
         b.setAttribute('aria-pressed', String(k === f));
-        b.setAttribute('aria-label', t(k === f ? 'ed.frame.open' : 'ed.frame.n', k + 1, doc.frames.length));
+        b.setAttribute('aria-label', t(k === f ? 'ed.frame.open' : 'ed.frame.n', k + 1, doc.frames.length) + (n > 1 ? ` · ${t('ed.frame.hold.n', n)}` : ''));
       });
       thumb(preview, doc, s.shown);
       badge.replaceChildren(icon(s.playing ? 'pause' : 'play'));
       play.setAttribute('aria-label', t(s.playing ? 'ed.stop' : 'ed.play'));
       play.title = t(s.playing ? 'ed.stop' : 'ed.play');
       const still = doc.frames.length < 2;
-      play.hidden = list.hidden = still;
+      play.hidden = list.hidden = scroller.hidden = still;
       add.classList.toggle('first', still);
       addText.hidden = !still;
-      add.hidden = doc.frames.length >= 64;
+      // A copy lasts as long as the frame it copies: the card's frames, holds counted, must have room.
+      add.hidden = ticks(doc) + doc.holds[f] > MAX_FRAMES;
       onion.replaceChildren(h('b', {}, t('ed.onion')), h('span', {}, s.onion ? t('ed.on') : t('ed.off')));
       onion.setAttribute('aria-pressed', String(s.onion));
-      onion.hidden = doc.frames.length < 2;
+      onion.hidden = still;
+      const many = doc.layers.length > 1;
+      layerCount.textContent = many ? `${s.layer + 1}/${doc.layers.length}` : '';
+      layers.classList.toggle('many', many);
+      const label = t('ed.layers.btn', s.layer + 1, doc.layers.length);
+      layers.setAttribute('aria-label', label);
+      layers.title = label;
       reveal(scroller, list.children[f]);
     },
     /** Just the preview, while playing. @param {import('./model.js').Doc} doc @param {number} f */
