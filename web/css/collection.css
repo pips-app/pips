@@ -43,7 +43,9 @@
   background: #0007; box-shadow: inset 0 0 0 1.5px #fffc; }
 .collection-view.selecting .on-stage.chosen::before { background: var(--cobalt-hi) center/70% no-repeat; box-shadow: none;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%231a1b21' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 12.5l4 4 8-9'/%3E%3C/svg%3E"); }
-.on-stage.chosen::after { content: ""; position: absolute; inset: -3px; border-radius: 6px; box-shadow: 0 0 0 3px var(--cobalt-hi); pointer-events: none; }
+/* The ring lies on the card's own edge, inside it: one drawn outside would reach into the
+   gap between cards (GAP in layout.js), and two chosen neighbours' rings would meet. */
+.on-stage.chosen::after { content: ""; position: absolute; z-index: 1; inset: 0; border-radius: 3px; box-shadow: inset 0 0 0 3px var(--cobalt-hi); pointer-events: none; }
 
 /* Group labels: a cell of the grid, type sized to the cell. */
 .stage-label { position: absolute; left: 0; top: 0; display: flex; flex-direction: column; justify-content: flex-end;
