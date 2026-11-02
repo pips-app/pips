@@ -188,6 +188,19 @@ test('a picture comes onto the canvas: pixel art as it is, the rest through a sq
   await p.click('.overlay .btn.key');
   assert.equal(await size(), '16');
 
+  // Soft edges (alpha between 0 and 255): taken, made solid or clear, and said so.
+  const soft = await png(env.dir, 'soft.png', 12, 12, (x, y) => {
+    const d = Math.hypot(x - 5.5, y - 5.5);
+    return [200, 60, 40, d < 4 ? 255 : d < 5 ? 160 : d < 6 ? 60 : 0];
+  });
+  await picture(p, soft);
+  const said = await textMatching(p, '.overlay .import-status', /полупрозрачн/);
+  assert.match(said, /^\d+ полупрозрачн.*заметные стали сплошными/);
+  assert.match(said, /12×12/);
+  await p.click('.overlay .btn.key');
+  assert.equal(await toast(p), 'Картинка на холсте');
+  assert.equal(await size(), '16');
+
   // The heart: unscaled, and one tap brings the previous picture back.
   await picture(p, await heart(env.dir));
   assert.match(await textMatching(p, '.overlay .import-status', /60×48 → 10×8 \(снято увеличение ×6\)/), /60×48 → 10×8 \(снято увеличение ×6\)/);
@@ -1514,7 +1527,26 @@ test('the editor: many frames scroll in their strip, frames last longer, layers 
       return { scrolls: s.scrollWidth > s.clientWidth, add: r('.ed-frame.add').right <= w, layers: r('.ed-layers-btn').right <= w, page: document.documentElement.scrollWidth <= w, aside: !document.querySelector('.ed-aside').offsetParent || r('.ed-aside').right <= w };
     });
     assert.deepEqual(fit, { scrolls: true, add: true, layers: true, page: true, aside: true }, desk ? 'computer' : 'phone');
-    if (desk) { await p.context().close(); continue; }
+    if (desk) {
+      // A mouse drags the strip as a finger would; letting go over a frame does not choose it.
+      const strip = await p.locator('.ed-frame-scroll').boundingBox();
+      const chosen = () => p.evaluate(() => [...document.querySelectorAll('.ed-frame-list .ed-frame')].findIndex((b) => b.getAttribute('aria-pressed') === 'true'));
+      const at = () => p.evaluate(() => document.querySelector('.ed-frame-scroll').scrollLeft);
+      await p.evaluate(() => { document.querySelector('.ed-frame-scroll').scrollLeft = 0; });
+      const before = await chosen();
+      const y = strip.y + strip.height / 2;
+      await p.mouse.move(strip.x + strip.width - 30, y);
+      await p.mouse.down();
+      await p.mouse.move(strip.x + strip.width - 130, y, { steps: 8 });
+      await p.waitForTimeout(120); // held still: no throw
+      await p.mouse.up();
+      assert.ok(Math.abs(await at() - 100) <= 2, 'the strip moved with the mouse, no further');
+      assert.equal(await chosen(), before, 'a drag chooses nothing');
+      await p.click('.ed-frame-list .ed-frame >> nth=3');
+      assert.equal(await chosen(), 3, 'a click still chooses');
+      await p.context().close();
+      continue;
+    }
 
     // Back to two frames; the first lasts three ticks.
     while (await p.locator('.ed-frame-list .ed-frame').count() > 2) {

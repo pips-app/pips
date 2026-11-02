@@ -1,0 +1,2 @@
+/* kit/drag-scroll.js: a row dragged sideways with a mouse — the hand holds it, nothing is selected. */
+.drag-scrolling, .drag-scrolling * { cursor: grabbing; user-select: none; }

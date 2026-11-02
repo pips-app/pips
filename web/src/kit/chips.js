@@ -2,10 +2,12 @@
 // A row of toggle chips that scrolls sideways: tags to filter by.
 
 import { h } from '../dom.js';
+import { dragScroll } from './drag-scroll.js';
 
 /** @param {{label: string, onToggle: (value: string) => void}} o */
 export function chips(o) {
   const el = h('div', { class: 'chips', role: 'group', 'aria-label': o.label });
+  dragScroll(el);
   return {
     el,
     /** @param {{value: string, text: string, count?: number, on: boolean}[]} items */

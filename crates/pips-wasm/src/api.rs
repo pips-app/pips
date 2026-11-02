@@ -314,6 +314,8 @@ pub struct ImportOptions {
     /// Fit the picture's own palette of at most this many colours (2..=32);
     /// ignored when `palette` is set.
     pub fit: Option<u8>,
+    /// Make semi-transparent pixels solid instead of refusing the picture.
+    pub solid_alpha: bool,
 }
 
 /// A picture ready to become a card, and what was done to get it.
@@ -334,6 +336,8 @@ pub struct Imported {
     pub colors: usize,
     /// Pixels that changed colour to fit the palette.
     pub changed_pixels: usize,
+    /// Semi-transparent pixels made solid or transparent (`solidAlpha`).
+    pub solidified: usize,
 }
 
 /// Turns a PNG or Aseprite file into a card picture.
@@ -353,6 +357,7 @@ pub fn import_picture(bytes: &[u8], o: ImportOptions) -> Result<Imported> {
             (None, Some(n)) => Target::Reduce(n.clamp(2, 32)),
             (None, None) => Target::Auto,
         },
+        solid_alpha: o.solid_alpha,
     };
     let (picture, r) = pips_raster::import(bytes, &options).map_err(|e| {
         use pips_raster::Error as E;
@@ -376,6 +381,7 @@ pub fn import_picture(bytes: &[u8], o: ImportOptions) -> Result<Imported> {
         scale: r.scale,
         colors: r.colors,
         changed_pixels: r.changed_pixels,
+        solidified: r.solidified,
     })
 }
 

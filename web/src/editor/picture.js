@@ -87,8 +87,10 @@ export async function openPicture(file, done) {
   };
 
   // Pixel art first: the core reads PNG and Aseprite as they are.
-  /** @type {{keepScale: boolean, firstFrameOnly: boolean, palette: number|undefined, fit: number|undefined}} */
-  const opts = { keepScale: false, firstFrameOnly: false, palette: undefined, fit: undefined };
+  // Semi-transparent pixels are made solid (half opaque and more) or clear,
+  // and the status says how many: a card pixel is a colour or nothing.
+  /** @type {{keepScale: boolean, firstFrameOnly: boolean, palette: number|undefined, fit: number|undefined, solidAlpha: true}} */
+  const opts = { keepScale: false, firstFrameOnly: false, palette: undefined, fit: undefined, solidAlpha: true };
   /** @type {any} */
   let result = null;
   /** @type {any} */
@@ -303,7 +305,7 @@ export async function openPicture(file, done) {
       const v = crop.palette;
       try {
         made = app.core.importPicture(new Uint8Array(await png.arrayBuffer()), {
-          keepScale: true, firstFrameOnly: true,
+          keepScale: true, firstFrameOnly: true, solidAlpha: true,
           ...(v.startsWith('fit:') ? { fit: Number(v.slice(4)) } : v === '' ? {} : { palette: Number(v) }),
         });
         status.classList.remove('bad');
@@ -374,7 +376,8 @@ function report(r, opts, autoFit) {
   if (r.changedPixels && opts.fit == null) bits.push(t('import.changed', r.changedPixels));
   const { cost } = issuable(c, app.core.shareSize(c));
   bits.push(cost.level === 'one' ? t('import.code.single', cost.bytes) : t('import.code.carousel', cost.bytes, cost.codes, cost.seconds));
-  return (autoFit ? `${t('import.fitted-auto')} ` : '') + bits.join(' · ');
+  const notes = [r.solidified ? t('import.solidified', r.solidified) : '', autoFit ? t('import.fitted-auto') : ''].filter(Boolean);
+  return [...notes, bits.join(' · ')].join(' ');
 }
 
 /** "Sweetie 16" with 16 colours reads "Sweetie · 16": the count once. @param {any} p */

@@ -10,6 +10,7 @@
 
 import { h, icon, reveal } from '../dom.js';
 import { t } from '../i18n.js';
+import { dragScroll } from '../kit/drag-scroll.js';
 import { T, MAX_FRAMES, composite, ticks } from './model.js';
 import { rgb } from './color.js';
 
@@ -42,6 +43,7 @@ export function framesStrip(o) {
   const layerCount = h('span', { class: 'ed-layers-n' });
   const layers = h('button', { type: 'button', class: 'ed-layers-btn', onclick: o.layers }, icon('layers'), layerCount);
   const scroller = h('div', { class: 'ed-frame-scroll' }, list);
+  dragScroll(scroller);
   const el = h('section', { class: 'ed-frames', 'aria-label': t('ed.frames') }, play, scroller, add, onion, layers);
   /** @type {HTMLCanvasElement[]} */
   let thumbs = [];

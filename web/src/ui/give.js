@@ -6,6 +6,7 @@
 // lifted. At a meeting it is one tap from the tab bar to a code.
 
 import { h, icon, replace, reveal } from '../dom.js';
+import { dragScroll } from '../kit/drag-scroll.js';
 import { t } from '../i18n.js';
 import { app } from '../state.js';
 import { go } from './shell.js';
@@ -32,6 +33,7 @@ export function giveView() {
   const body = h('div', { class: 'paper-body' });
   paper.append(body);
   const deck = h('div', { class: 'give-deck', role: 'group', 'aria-label': t('give.yours') });
+  dragScroll(deck);
   const count = h('span', {});
   const deckBox = h('div', { class: 'give-deck-box' }, h('div', { class: 'give-deck-head' }, h('span', {}, t('give.yours')), count), deck);
   const main = h('div', { class: 'scroll give-scroll' }, paper);

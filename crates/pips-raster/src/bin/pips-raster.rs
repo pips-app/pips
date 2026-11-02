@@ -23,6 +23,8 @@ only reports what the conversion would do. FILE '-' is standard input.
                       (2..32) when it has more
   -1, --first-frame   keep only the first frame of an animation
       --keep-scale    do not undo integer upscaling
+      --solid-alpha   make semi-transparent pixels solid (from half opaque)
+                      or transparent, instead of refusing the picture
   -t, --title TEXT    card title
   -o, --output OUT    write the .pips file here ('-' for standard output)
   -h, --help          show this help
@@ -51,6 +53,10 @@ fn main() -> ExitCode {
             }
             "--keep-scale" => {
                 opts.unscale = false;
+                Ok(())
+            }
+            "--solid-alpha" => {
+                opts.solid_alpha = true;
                 Ok(())
             }
             "-p" | "--palette" => value(&a).and_then(|s| match pips_palette::builtin_by_slug(&s) {
@@ -97,25 +103,7 @@ fn main() -> ExitCode {
         Ok(x) => x,
         Err(e) => return fail(&format!("{input}: {e}")),
     };
-    eprintln!(
-        "{}×{}{} → {}×{}, {} frame(s), {} colour(s), palette {}{}",
-        report.source_width,
-        report.source_height,
-        if report.scale > 1 { format!(" at {}×", report.scale) } else { String::new() },
-        picture.width,
-        picture.height,
-        picture.animation.map_or(1, |a| a.frames),
-        report.colors,
-        match picture.palette {
-            PaletteRef::Builtin(id) => pips_palette::builtin(id).map_or("?", |b| b.slug).to_string(),
-            PaletteRef::Inline(p) => format!("own ({} colours)", p.len()),
-        },
-        if report.changed_pixels > 0 {
-            format!(", {} pixel(s) recoloured", report.changed_pixels)
-        } else {
-            String::new()
-        },
-    );
+    eprintln!("{}", summary(&picture, &report));
 
     let Some(output) = output else { return ExitCode::SUCCESS };
     let mut card = Card::new(1, 1);
@@ -135,6 +123,34 @@ fn main() -> ExitCode {
 fn usage_error(msg: &str) -> ExitCode {
     eprintln!("pips-raster: {msg}\nTry 'pips-raster --help'.");
     ExitCode::from(2)
+}
+
+/// What was made, on one line: sizes, frames, colours, and what changed.
+fn summary(picture: &pips_raster::Picture, report: &pips_raster::Report) -> String {
+    format!(
+        "{}×{}{} → {}×{}, {} frame(s), {} colour(s), palette {}{}{}",
+        report.source_width,
+        report.source_height,
+        if report.scale > 1 { format!(" at {}×", report.scale) } else { String::new() },
+        picture.width,
+        picture.height,
+        picture.animation.map_or(1, |a| a.frames),
+        report.colors,
+        match picture.palette {
+            PaletteRef::Builtin(id) => pips_palette::builtin(id).map_or("?", |b| b.slug).to_string(),
+            PaletteRef::Inline(p) => format!("own ({} colours)", p.len()),
+        },
+        if report.changed_pixels > 0 {
+            format!(", {} pixel(s) recoloured", report.changed_pixels)
+        } else {
+            String::new()
+        },
+        if report.solidified > 0 {
+            format!(", {} semi-transparent pixel(s) made solid", report.solidified)
+        } else {
+            String::new()
+        },
+    )
 }
 
 fn fail(msg: &str) -> ExitCode {
