@@ -17,7 +17,8 @@ envelope.
 
 - Identity: an Ed25519 key, restored from 24 words or a paper QR code.
 - Cards up to 64×64 px in the app (the format holds 128), 32 colours,
-  animation; 33 built-in palettes; a pixel editor with an undo tree.
+  animation; 33 built-in palettes; a pixel editor with layers, frames
+  that last as long as they need, and an undo tree.
 - New cards from pictures: PNG and Aseprite files as they are (layers,
   frames, upscaled exports), photos and larger pictures through a square
   crop; a picture of a Pips card opens as the card itself.

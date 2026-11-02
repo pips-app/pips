@@ -4,7 +4,8 @@
 // corners a hand leaves taken out, or every other cell when dithering),
 // empty cells for the eraser, a flood for the fill, a shape dragged from
 // corner to corner, the selection's box or its move. Every change goes
-// through the model as one stroke, so it is one step of the undo history.
+// through the model as one stroke on the chosen layer, so it is one step
+// of the undo history.
 
 import { T } from './model.js';
 import { line, rect, ellipse, fill, mirror, corner, inside, dithered } from './raster.js';
@@ -15,7 +16,7 @@ import { line, rect, ellipse, fill, mirror, corner, inside, dithered } from './r
 /**
  * @param {{
  *   model: ReturnType<typeof import('./model.js').createModel>,
- *   now: () => {frame: number, color: number, shape: import('./tools.js').Shape, pen: import('./tools.js').PenMode,
+ *   now: () => {frame: number, layer: number, color: number, shape: import('./tools.js').Shape, pen: import('./tools.js').PenMode,
  *     mirror: boolean, axes: {x: boolean, y: boolean}},
  *   pick: (c: Cell) => void,
  *   selection: ReturnType<typeof import('./selection.js').createSelection>,
@@ -34,18 +35,18 @@ export function createStrokes(o) {
    * @returns {Handle|null} what follows the finger, or null for a tool that acts at once
    */
   function start(c, tool) {
-    const s = o.now(), f = s.frame, size = model.doc.size;
+    const s = o.now(), f = s.frame, l = s.layer, size = model.doc.size;
     if (tool === 'pick') { o.pick(c); return null; }
     if (tool === 'select') return o.selection.start(c);
     if (tool === 'fill') {
       if (!inside(c, size)) return null;
-      const st = model.stroke(f);
-      for (const p of spots(c, s)) for (const i of fill(model.doc.frames[f], size, p)) st.set(i, s.color);
+      const st = model.stroke(f, l);
+      for (const p of spots(c, s)) for (const i of fill(model.cel(f, l), size, p)) st.set(i, s.color);
       st.commit('ed.h.fill');
       return null;
     }
     if (tool === 'shapes') {
-      const st = model.stroke(f);
+      const st = model.stroke(f, l);
       const draw = (/** @type {Cell} */ b) => {
         st.reset();
         const cells = s.shape === 'line' ? line(c, b)
@@ -58,7 +59,7 @@ export function createStrokes(o) {
       return { move: draw, end: () => st.commit(`ed.h.${s.shape.replace('-fill', '')}`), cancel: () => st.cancel() };
     }
     // Pen and eraser: a line through every cell the finger passes.
-    const st = model.stroke(f), v = tool === 'eraser' ? T : s.color;
+    const st = model.stroke(f, l), v = tool === 'eraser' ? T : s.color;
     const dither = tool === 'pen' && s.pen === 'dither';
     /** @type {Cell[]} */
     const path = [];

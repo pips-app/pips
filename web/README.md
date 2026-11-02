@@ -93,7 +93,7 @@ thing, with one way of fitting together:
      `first-run.js`; `editor/canvas.js`, `input.js` (a finger draws at once,
      so the editor has its own arbiter), `strokes.js` (what each tool does
      with a finger), `selection.js`, `tools.js`, `palette.js`,
-     `frames.js`, `precise.js`, `settings.js` and the editor's sheets.
+     `frames.js`, `layers-sheet.js`, `precise.js`, `settings.js` and the editor's sheets.
   6. Screens — `collection/view.js`, `editor/view.js` only put parts together
      and decide what gestures mean.
 - **Every gesture has a button.** Pull up / down in the feed is the action bar's

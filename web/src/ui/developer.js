@@ -91,7 +91,8 @@ async function seed() {
     const r = toCard({
       size: s.size, title: s.title, shade: s.shade, delay: s.delay, builtin: s.builtin ?? null,
       colors: s.builtin != null ? builtins.get(s.builtin) : s.colors.map((/** @type {string} */ c) => parseHex(c)),
-      frames: s.frames.map((/** @type {string[]} */ rows) => Uint8Array.from(rows.join(''), (ch) => (ch === '.' ? T : DIGITS.indexOf(ch)))),
+      frames: s.frames.map((/** @type {string[]} */ rows) => [Uint8Array.from(rows.join(''), (ch) => (ch === '.' ? T : DIGITS.indexOf(ch)))]),
+      layers: [{ n: 1, hidden: false }], holds: s.frames.map(() => 1),
     }, by);
     if (!('card' in r)) throw new Error(`sample «${s.title}»: ${r.problem}`);
     return r.card;
