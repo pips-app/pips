@@ -33,3 +33,16 @@ test('a bundle that does not hold together is refused whole', () => {
   assert.throws(() => packBundle(Array.from({ length: MAX_CARDS + 1 }, () => env(2, 0))));
   assert.throws(() => packBundle([Uint8Array.from([1, 2])]), 'only envelopes go in');
 });
+
+test('any bytes at all: a bundle is read or refused, never anything else', () => {
+  // A fixed seed, so a failure can be replayed.
+  let seed = 7;
+  const rnd = (n) => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed % n; };
+  const good = packBundle([env(20, 1), env(9, 2), env(40, 3)]);
+  for (let k = 0; k < 20000; k++) {
+    const b = good.slice(0, rnd(good.length + 4));
+    for (let i = rnd(4); i > 0; i--) if (b.length) b[rnd(b.length)] = rnd(256);
+    const out = unpackBundle(b);
+    assert.ok(out === null || (Array.isArray(out) && out.every((e) => e.length > 0 && e[0] === 0x45)));
+  }
+});

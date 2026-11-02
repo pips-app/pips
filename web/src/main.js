@@ -26,6 +26,14 @@ install();
 
 async function main() {
   setLanguage(defaultLanguage());
+  // Inside another site's frame, its page could lay itself over Pips and
+  // steer taps onto its buttons (the site's host cannot forbid framing:
+  // GitHub Pages sets no headers). Pips does not start there; it offers to
+  // open itself on its own.
+  if (window.top !== window.self) {
+    root.append(h('div', { class: 'empty' }, h('b', {}, t('framed.title')), ' ', h('a', { href: location.href, target: '_blank', rel: 'noopener noreferrer' }, t('framed.open'))));
+    return;
+  }
   let loaded;
   try {
     loaded = await loadCore();
