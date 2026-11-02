@@ -207,6 +207,13 @@ test('a picture comes onto the canvas: pixel art as it is, the rest through a sq
   await p.click('.overlay .btn.key');
   await p.click('.toast button'); // «Вернуть»
   assert.equal(await size(), '16', 'the cropped picture is back');
+  // Larger than any canvas: still said, under the square to crop.
+  const softBig = await png(env.dir, 'soft-big.png', 80, 80, (x, y) => [40, 90, 200, (x + y) % 7 === 0 ? 100 : 255]);
+  await picture(p, softBig);
+  assert.ok(await p.isVisible('.overlay .pic-stage'));
+  assert.match(await textMatching(p, '.overlay .import-status', /полупрозрачн/), /^\d+ полупрозрачн/);
+  await p.click('.overlay .btn.key');
+  assert.equal(await toast(p), 'Картинка на холсте');
   assert.equal(await cards(p), 0, 'nothing was signed on the way');
   await p.context().close();
 });
@@ -335,7 +342,8 @@ test('the collection: tags, search, archive and the bin, all without gestures', 
   await p.waitForTimeout(800);
   const sub = async () => (await p.textContent('.collection-bar .level-switch')).split(' · ')[0];
   const inPlace = (st) => p.evaluate(async (x) => [...(await import('/src/state.js')).app.cards.values()].filter((e) => e.rec.state === x).length, st);
-  const shown = () => p.$$eval('.on-stage', (els) => els.filter((e) => e.isConnected && Number(e.style.opacity) > 0.5).length);
+  // In the set: not fading out. A card past the screen's edge is not drawn at all (no opacity written yet).
+  const shown = () => p.$$eval('.on-stage', (els) => els.filter((e) => e.isConnected && (e.style.opacity === '' || Number(e.style.opacity) > 0.5)).length);
   /** Clicks the first card fully on screen below the bar. */
   const clickCard = async () => {
     const at = await p.$$eval('.on-stage', (els) => els.map((e) => e.getBoundingClientRect()).filter((r) => r.top > 70 && r.bottom < 700 && r.width > 20)[0]);

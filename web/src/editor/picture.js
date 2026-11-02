@@ -309,7 +309,9 @@ export async function openPicture(file, done) {
           ...(v.startsWith('fit:') ? { fit: Number(v.slice(4)) } : v === '' ? {} : { palette: Number(v) }),
         });
         status.classList.remove('bad');
-        status.textContent = report(made, { fit: v.startsWith('fit:') ? 1 : undefined }, false);
+        // Pixel art larger than the canvas was made solid when it was read, before the crop: said here.
+        const soft = pixel ? result?.solidified ?? 0 : 0;
+        status.textContent = report({ ...made, solidified: made.solidified || soft }, { fit: v.startsWith('fit:') ? 1 : undefined }, false);
       } catch (e) {
         // Exact colours that are too many: the nearest fitted palette instead.
         if (/** @type {any} */ (e)?.code === 'too_many_colors' && v === '') {
