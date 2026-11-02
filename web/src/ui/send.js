@@ -40,14 +40,43 @@ export async function sendFile(file, title) {
       if (aborted(e)) return;
     }
   }
-  // A download keeps to Latin letters: some browsers drop any other name
-  // for a plain «download», with no extension to open it by.
+  toast(t('share.file.saved', download(file)));
+}
+
+/**
+ * Saves a file as a download; returns the name it got. A download keeps to
+ * Latin letters: some browsers drop any other name for a plain «download»,
+ * with no extension to open it by. @param {File} file
+ */
+function download(file) {
   const a = /** @type {HTMLAnchorElement} */ (h('a', { href: URL.createObjectURL(file), download: latin(file.name) }));
   document.body.append(a);
   a.click();
   a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 10_000);
-  toast(t('share.file.saved', a.download));
+  return a.download;
+}
+
+/**
+ * Several files: the share sheet takes them together where it can; else
+ * each is downloaded in turn (a moment apart: browsers take a burst of
+ * downloads for an attack). @param {File[]} files @param {string} title
+ */
+export async function sendFiles(files, title) {
+  if (files.length === 1) return sendFile(files[0], title);
+  if (navigator.canShare?.({ files })) {
+    try {
+      await navigator.share({ files, title });
+      return;
+    } catch (e) {
+      if (aborted(e)) return;
+    }
+  }
+  for (const [k, f] of files.entries()) {
+    if (k) await new Promise((r) => setTimeout(r, 250));
+    download(f);
+  }
+  toast(t('share.files.saved', files.length));
 }
 
 /** A name a file system takes: the title without what paths forbid. @param {string} title @param {string} ext */

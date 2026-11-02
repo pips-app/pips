@@ -149,8 +149,10 @@
 .ed-layers li.hidden .ed-layer-art, .ed-layers li.hidden .ed-layer-pick b { opacity: .4; }
 .ed-layer-eye { flex: none; width: 48px; border: 0; border-radius: 12px; background: var(--void); color: var(--text2); display: grid; place-items: center; }
 .ed-layer-eye[aria-pressed="false"] { color: var(--text3); }
-.ed-layer-acts { display: flex; flex-wrap: wrap; gap: 6px; }
-.ed-layer-act { flex: 1 1 auto; min-height: 44px; padding: 8px 12px; display: flex; align-items: center; justify-content: center; gap: 6px; font-size: 13px; }
+.ed-layer-acts { display: flex; flex-direction: column; gap: 6px; }
+.ed-layer-acts > div { display: flex; gap: 6px; }
+.ed-layer-act { flex: 1 1 auto; min-height: 44px; padding: 8px 12px; display: flex; align-items: center; justify-content: center; gap: 6px; font-size: 13px; white-space: nowrap; }
+.ed-layer-act.bare { flex: none; width: 52px; padding: 0; }
 .ed-layer-act .i { width: 18px; height: 18px; }
 .ed-layer-act:disabled { opacity: .4; }
 

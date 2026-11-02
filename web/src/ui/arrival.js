@@ -51,3 +51,27 @@ export function peek(envelope) {
     return null;
   }
 }
+
+/**
+ * Several envelopes at once — a file of many cards, or several files: each
+ * checked and kept as one alone would be, and none refused for another's
+ * fault. One card opens as it always does; several are said in one line,
+ * and the collection shows them where they now lie.
+ * @param {Uint8Array[]} envelopes @param {number} [failed] files already found to hold no card, counted with the rest
+ */
+export async function arriveMany(envelopes, failed = 0) {
+  if (envelopes.length === 1 && !failed) return void (await arrive(envelopes[0]));
+  // Damaged or forged, a card not taken is counted the same: one line cannot say which was which.
+  let added = 0, had = 0, bad = failed;
+  for (const env of envelopes) {
+    try {
+      const r = await receive(app.core.openEnvelope(env));
+      if (r.status === 'added') added++; else had++;
+    } catch (e) {
+      bad++;
+      if (!(/** @type {any} */ (e)?.code)) caught(e, 'arrival'); // a code is an expected answer; anything else is worth the journal
+    }
+  }
+  go('collection');
+  toast(t('receive.many', added, had, bad));
+}

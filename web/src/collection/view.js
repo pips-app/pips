@@ -34,6 +34,7 @@ import { createStage } from './stage.js';
 import { createTurn } from './turn.js';
 import { cardBack } from './back.js';
 import { createShareSheet } from './share.js';
+import { shareManySheet } from './share-many.js';
 import { createMoves, PLACE_TITLE } from './moves.js';
 import { createSelection } from './selection.js';
 import { firstRun } from './first-run.js';
@@ -107,9 +108,10 @@ export function collectionView(o) {
   const sheet = createShareSheet({ busy, closed: () => { sync(); moves.settleStrip(); } });
   const feedBar = actionBar({ label: t('collection.card'), compact: true });
   const selectBar = actionBar({ label: t('collection.select-title') });
+  const many = shareManySheet();
 
   const el = h('section', { class: 'view collection-view' },
-    host, placeEmpty, first.el, searchPanel, bar, fly, strip.el, feedNav, feedBar.el, selectBar.el, coach, ...sheet.els);
+    host, placeEmpty, first.el, searchPanel, bar, fly, strip.el, feedNav, feedBar.el, selectBar.el, coach, ...sheet.els, ...many.els);
 
   // The room above and below the cards, safe-area insets included, in
   // pixels: the CSS keeps it (.safe-probe), measured once per size.
@@ -136,14 +138,17 @@ export function collectionView(o) {
       if (filter.by === 'author') return { title: c.author ? `@${c.author}` : '—', sub: level === 0 ? String(n) : t('collection.count', n) };
       return level === 0 ? { title: monthLabel(c.received), sub: String(n) } : { title: weekLabel(c.received), sub: t('collection.count', n) };
     },
-    skip: '.bar, .search-panel, .action-bar, .top-sheet, .scrim, .strip, .first-run, .coach, .feed-nav',
+    // Not the stage's: its bars, and anything over it — any sheet (a dialog) and its dimmed layer.
+    skip: '.bar, .search-panel, .action-bar, [role="dialog"], .scrim, .strip, .first-run, .coach, .feed-nav',
     control: '.turn button, .turn textarea, .turn input',
     blocked: () => busy.n > 0,
     tap, hold, pull, turn: () => (stage.level === 3 ? turn.drag() : null),
     drawn, levelChanged,
   });
   const turn = createTurn({ host });
-  const selection = createSelection({ el, cardEl: (id) => items.get(id)?.el, changed: () => paintChrome() });
+  // Choosing changes the bars at once — the tabs too: they step aside for a
+  // selection's actions, and come back as soon as it ends, not on the next move.
+  const selection = createSelection({ el, cardEl: (id) => items.get(id)?.el, changed: () => { paintChrome(); paintTabs(); } });
   const moves = createMoves({
     stage, strip, host, fly, busy, selection,
     place: () => filter.place, sync,
@@ -386,10 +391,12 @@ export function collectionView(o) {
   function paintActions() {
     const chosen = () => stage.list.filter((c) => selection.has(c.id));
     const ids = () => chosen().map((c) => c.id);
+    // Several cards at once go as files (share-many.js); the bin's cards are not handed on.
+    const shareChosen = { id: 'share', label: t('act.share'), run: () => { if (ids().length && !busy.n) many.show(ids()); } };
     selectBar.set(filter.place === 'collection'
-      ? [{ id: 'trash', label: t('act.to-trash'), run: () => moves.toTrash(ids()) }, { id: 'archive', label: t('act.archive'), kind: 'key', run: () => moves.send(chosen(), false) }]
+      ? [{ id: 'trash', label: t('act.to-trash'), run: () => moves.toTrash(ids()) }, shareChosen, { id: 'archive', label: t('act.archive'), kind: 'key', run: () => moves.send(chosen(), false) }]
       : filter.place === 'archive'
-        ? [{ id: 'trash', label: t('act.to-trash'), run: () => moves.toTrash(ids()) }, { id: 'collection', label: t('act.to-collection'), kind: 'key', run: () => moves.send(chosen(), false) }]
+        ? [{ id: 'trash', label: t('act.to-trash'), run: () => moves.toTrash(ids()) }, shareChosen, { id: 'collection', label: t('act.to-collection'), kind: 'key', run: () => moves.send(chosen(), false) }]
         : [{ id: 'purge', label: t('act.purge'), kind: 'warn', run: () => moves.purgeAll(ids()) }, { id: 'restore', label: t('act.restore'), kind: 'key', run: () => moves.restore(ids()) }]);
     selectBar.show(selection.active);
 
@@ -443,7 +450,7 @@ export function collectionView(o) {
     // Enter and Space press the screen's own buttons; one elsewhere (the
     // tab that brought the person here) leaves them to the collection.
     if (tg instanceof HTMLButtonElement && el.contains(tg) && (e.key === 'Enter' || e.key === ' ')) return;
-    if (e.ctrlKey || e.metaKey || e.altKey || document.querySelector('.overlay, .dialog')) return;
+    if (e.ctrlKey || e.metaKey || e.altKey || many.open || document.querySelector('.overlay, .dialog')) return;
     const lv = stage.level, page = stage.frame.H * 0.8;
     /** @type {Record<string, () => void>} */
     const keys = lv <= 1

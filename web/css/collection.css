@@ -182,3 +182,15 @@ input.tag.add::placeholder { color: var(--shade-dim); }
 .share-code .edition-panel .field input { text-align: right; }
 .share-code .edition-panel .issued { text-align: left; }
 .share-code .edition-panel p { max-width: none; }
+
+/* collection/share-many.js: the chosen cards, small, and the two ways out. */
+.many-minis { display: flex; align-items: center; gap: 8px; min-height: 52px; }
+.many-mini { flex: none; width: 52px; height: 52px; padding: 4px; border-radius: 3px; background: var(--shade); box-shadow: 0 6px 14px -8px #000; }
+.many-mini canvas { display: block; width: 100%; height: 100%; image-rendering: pixelated; }
+.many-more { font-size: 13px; font-weight: 600; color: var(--text2); }
+.many-way { display: flex; align-items: center; gap: 14px; min-height: 64px; padding: 12px 16px; border: 0; border-radius: 14px; background: var(--raise2); color: var(--text); text-align: left; }
+.many-way > .i { flex: none; width: 24px; height: 24px; color: var(--text2); }
+.many-way span { display: flex; flex-direction: column; gap: 2px; }
+.many-way b { font-weight: 500; font-size: 15px; }
+.many-way small { font-size: 12.5px; line-height: 1.35; color: var(--text3); }
+.many-way:disabled { opacity: .45; }

@@ -36,6 +36,7 @@ src/core.js                               loads the WASM core (or the dev stub)
 src/qrscan.js                             QR reading: BarcodeDetector or pkg/pips_scan, on demand
 src/store.js, src/schema.js               IndexedDB: meta + cards, and the steps that upgrade stored data
 src/png-card.js                           a card inside a PNG picture of it (its own chunk)
+src/bundle.js                             several cards in one .pips file
 src/state.js                              the one place that changes data
 src/i18n.js                               ru / en strings, core errors in words
 src/words.js                              the recovery words as typed: whole or four letters
@@ -79,7 +80,7 @@ thing, with one way of fitting together:
      the touch arbiter: one owner per touch, everything else waits; a second
      finger anywhere makes a pinch. Plain logic, no app knowledge.
   3. Pure logic, tested under node in `tests/unit/`: `collection/layout.js`,
-     `collection/query.js` (cards in, rectangles or lists out); in the editor
+     `collection/query.js` (cards in, rectangles or lists out); `bundle.js`; in the editor
      `color.js`, `raster.js` (where tools put pixels), `history.js` (the undo
      tree), `model.js` (the picture and its changes), `to-card.js`,
      and the input arbiters; for both ways of making a card, `budget.js`
@@ -88,7 +89,7 @@ thing, with one way of fitting together:
      top and bottom sheets (which hold the keyboard's focus while open,
      `focus.js`), strip, action bar, identicon.
   5. Screen parts — `collection/stage.js` (the zoom axis), `turn.js` (the card
-     that turns over), `back.js`, `share.js` (the share sheet), `moves.js`
+     that turns over), `back.js`, `share.js` (the share sheet), `share-many.js` (several cards at once), `moves.js`
      (sending cards between places, the strip, undo), `selection.js`,
      `first-run.js`; `editor/canvas.js`, `input.js` (a finger draws at once,
      so the editor has its own arbiter), `strokes.js` (what each tool does
