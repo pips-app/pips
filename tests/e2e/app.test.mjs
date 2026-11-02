@@ -1560,3 +1560,64 @@ test('the editor: many frames scroll in their strip, frames last longer, layers 
     await p.context().close();
   }
 });
+
+test('several cards at once: chosen in the collection, sent as one file or as pictures, all taken in on another phone', async () => {
+  const a = await env.phone('manyfox');
+  await tab(a, 'me');
+  await samples(a);
+  await tab(a, 'collection');
+  await a.waitForTimeout(800);
+  /** Chooses the first `n` cards in sight, from the `from`-th on. */
+  const choose3 = async (from, n) => {
+    await a.click('.collection-bar .pill'); // «Выбрать»
+    const spots = await a.$$eval('.on-stage', (els) => els.map((e) => e.getBoundingClientRect()).filter((r) => r.top > 70 && r.bottom < 700 && r.width > 20).map((r) => [r.x + r.width / 2, r.y + r.height / 2]));
+    for (const [x, y] of spots.slice(from, from + n)) await a.mouse.click(x, y);
+    await a.click('.action-bar.up [data-act="share"]');
+    await a.locator('.bottom-sheet.on .many-way').first().waitFor();
+  };
+  await choose3(0, 3);
+  assert.match(await a.textContent('.bottom-sheet.on h2'), /3 карточки/);
+  assert.equal(await a.locator('.bottom-sheet.on .many-mini').count(), 3, 'what goes, shown small');
+  const [dl] = await Promise.all([a.waitForEvent('download'), a.click('.bottom-sheet.on .many-way >> nth=0')]);
+  const bundle = join(env.dir, 'three.pips');
+  await dl.saveAs(bundle);
+  assert.match(dl.suggestedFilename(), /^Pips-3-kartochki\.pips$/, 'a Latin name with what it holds');
+  // The sheet goes once the file is out; the cards stay chosen until «Готово».
+  await a.waitForFunction(() => !document.querySelector('.bottom-sheet.on'));
+  assert.match(await a.textContent('.collection-bar .pill'), /Готово/);
+  await a.click('.collection-bar .pill');
+
+  // As pictures: one file each, two at a time.
+  await a.waitForTimeout(500);
+  await choose3(3, 2);
+  const pics = [];
+  a.on('download', (d) => pics.push(d));
+  await a.click('.bottom-sheet.on .many-way >> nth=1');
+  await a.waitForTimeout(3000);
+  assert.equal(pics.length, 2, 'a picture for each card');
+  const files = [];
+  for (const [k, d] of pics.entries()) { const f = join(env.dir, `pic-${k}.png`); await d.saveAs(f); files.push(f); }
+
+  // Another phone: the file of three, then both pictures at once.
+  const b = await env.phone('manyowl');
+  await tab(b, 'receive');
+  await choose(b, () => b.click('section.view:visible >> text=Файл .pips'), bundle);
+  assert.match(await textMatching(b, '.toast span', /Добавлено/), /Добавлено 3 карточки/);
+  assert.equal(await cards(b), 3);
+  await tab(b, 'receive');
+  await choose(b, () => b.click('section.view:visible >> text=Файл .pips'), files);
+  assert.match(await textMatching(b, '.toast span', /Добавлено 2/), /Добавлено 2 карточки/);
+  assert.equal(await cards(b), 5);
+  // The same file again: nothing new, and said so.
+  await tab(b, 'receive');
+  await choose(b, () => b.click('section.view:visible >> text=Файл .pips'), bundle);
+  assert.match(await textMatching(b, '.toast span', /Новых/), /Новых карточек нет · уже были: 3/);
+  // A file cut short is refused whole, in words.
+  const cut = join(env.dir, 'cut.pips');
+  await writeFile(cut, (await readFile(bundle)).subarray(0, 100));
+  await tab(b, 'receive');
+  await choose(b, () => b.click('section.view:visible >> text=Файл .pips'), cut);
+  assert.match(await textMatching(b, '.toast span', /повреждён/), /повреждён/);
+  assert.equal(await cards(b), 5);
+  for (const x of [a, b]) await x.context().close();
+});

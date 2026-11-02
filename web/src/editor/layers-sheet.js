@@ -4,12 +4,14 @@
 // and what can be done with the chosen one: a new layer above it, moving
 // it up or down, pressing it into the one below, deleting it. A tap on a
 // row chooses the layer the tools draw on. The sheet is low: the canvas
-// stays in view above it, so every change is seen as it is made.
+// stays in view above it, so every change is seen as it is made. However
+// many layers there are, the list scrolls and the actions stay where they
+// are, at the foot: a button never moves away from the finger.
 //
 // Layers are the editor's own: when the card is signed, its visible layers
 // become one picture; hidden ones are left out (said under the list).
 
-import { h, icon } from '../dom.js';
+import { h, icon, reveal } from '../dom.js';
 import { t } from '../i18n.js';
 import { bottomSheet } from '../kit/bottom-sheet.js';
 import { MAX_LAYERS } from './model.js';
@@ -25,15 +27,19 @@ export function layersSheet(o) {
   const { model } = o;
   const sheet = bottomSheet({ label: t('ed.layers'), low: true });
   const list = h('ol', { class: 'ed-layers', reversed: true });
-  /** @param {any} ic @param {string} label @param {() => void} run */
-  const act = (ic, label, run) => h('button', { type: 'button', class: 'btn ed-layer-act', onclick: run }, icon(ic), h('span', {}, label));
+  /** @param {any} ic @param {string} label @param {() => void} run @param {boolean} [bare] the arrow alone says it (the name stays, as a hint and for screen readers) */
+  const act = (ic, label, run, bare = false) => h('button', {
+    type: 'button', class: `btn ed-layer-act${bare ? ' bare' : ''}`, onclick: run, 'aria-label': bare ? label : null, title: bare ? label : null,
+  }, icon(ic), bare ? '' : h('span', {}, label));
   const add = act('plus', t('ed.layer.add'), () => { const l = model.addLayer(o.layer()); if (l >= 0) o.choose(l); });
-  const up = act('up', t('ed.layer.up'), () => { const l = o.layer(); if (model.moveLayer(l, l + 1)) o.choose(l + 1); });
-  const down = act('down', t('ed.layer.down'), () => { const l = o.layer(); if (model.moveLayer(l, l - 1)) o.choose(l - 1); });
+  const up = act('up', t('ed.layer.up'), () => { const l = o.layer(); if (model.moveLayer(l, l + 1)) o.choose(l + 1); }, true);
+  const down = act('down', t('ed.layer.down'), () => { const l = o.layer(); if (model.moveLayer(l, l - 1)) o.choose(l - 1); }, true);
   const merge = act('merge', t('ed.layer.merge'), () => { const l = o.layer(); if (model.mergeDown(l)) o.choose(l - 1); });
   const remove = act('trash', t('ed.layer.remove'), () => { const l = o.layer(); if (model.removeLayer(l)) o.choose(Math.max(0, l - 1)); });
-  const acts = h('div', { class: 'ed-layer-acts' }, add, up, down, merge, remove);
-  sheet.body.append(list, acts, h('p', { class: 'ed-note' }, t('ed.layer.note')));
+  // Two rows on any phone: what makes and moves layers, then what joins and deletes them.
+  const acts = h('div', { class: 'ed-layer-acts' }, h('div', {}, add, up, down), h('div', {}, merge, remove));
+  sheet.body.append(list, h('p', { class: 'ed-note' }, t('ed.layer.note')));
+  sheet.foot.append(acts);
 
   function paint() {
     if (!sheet.open) return;
@@ -53,6 +59,8 @@ export function layersSheet(o) {
     }).reverse(); // the top layer on top, as they lie
     list.replaceChildren(...rows);
     if (at) /** @type {HTMLElement|null} */ (list.querySelector(`${at.eye ? '.ed-layer-eye' : '.ed-layer-pick'}[data-n="${at.n}"]`))?.focus();
+    const here = list.querySelector('li.here');
+    if (here) reveal(sheet.body, here); // the chosen layer in view, as it moves up or down
     /** @type {HTMLButtonElement} */ (add).disabled = d.layers.length >= MAX_LAYERS;
     /** @type {HTMLButtonElement} */ (up).disabled = cur >= d.layers.length - 1;
     /** @type {HTMLButtonElement} */ (down).disabled = cur <= 0;

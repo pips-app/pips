@@ -21,6 +21,15 @@ import { topSheet } from '../kit/top-sheet.js';
 import { FRAME_SHADES, cardTitle } from '../ui/card.js';
 
 /**
+ * A copy of a card to hand on: one's own goes out signed by its author;
+ * someone else's, as a copy passed on by this person (their nick on it).
+ * @param {import('../state.js').Entry} entry
+ */
+export const copyEnvelope = (entry) => (entry.rec.mine
+  ? app.identity.sealAsAuthor(entry.rec.payload, undefined)
+  : app.identity.sealAsSender(entry.rec.payload, app.profile.nick || 'pips'));
+
+/**
  * Fills `body` and returns a function that stops what keeps running
  * (a QR carousel, the screen lock).
  * @param {HTMLElement} body @param {import('../state.js').Entry} entry
@@ -68,7 +77,7 @@ export function fillShare(body, entry, o = {}) {
       toast(t('err.generic'));
     }
   };
-  const copy = () => showCode(app.identity.sealAsAuthor(entry.rec.payload, undefined), o.hint ?? t('share.hint'));
+  const copy = () => showCode(copyEnvelope(entry), o.hint ?? t('share.hint'));
 
   const title = h('b', {}, name);
   if (entry.rec.mine) {
@@ -91,7 +100,7 @@ export function fillShare(body, entry, o = {}) {
     copy();
   } else {
     body.replaceChildren(title, code);
-    showCode(app.identity.sealAsSender(entry.rec.payload, app.profile.nick || 'pips'), t('give.copy-of', entry.card.author ? `@${entry.card.author}` : '—'));
+    showCode(copyEnvelope(entry), t('give.copy-of', entry.card.author ? `@${entry.card.author}` : '—'));
   }
   return () => { stopped = true; stop(); release(); };
 }

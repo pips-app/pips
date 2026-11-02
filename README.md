@@ -22,6 +22,8 @@ envelope.
 - New cards from pictures: PNG and Aseprite files as they are (layers,
   frames, upscaled exports), photos and larger pictures through a square
   crop; a picture of a Pips card opens as the card itself.
+- Several cards at once: as one `.pips` file or as a picture of each;
+  several files received at once.
 - Giving and receiving by QR — one code, or a fountain-coded carousel for
   large cards; every card and envelope signature is checked. QR codes are
   read by the browser where it can, by our own reader everywhere else.

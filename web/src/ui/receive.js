@@ -10,18 +10,21 @@ import { toast } from './shell.js';
 import { scanner } from './scan.js';
 import { caught } from '../diagnostics.js';
 import { showRecipientCode } from './edition.js';
-import { FORGED, arrived, arrive } from './arrival.js';
+import { FORGED, arrived, arrive, arriveMany } from './arrival.js';
 import { MAGIC } from '../links.js';
 import { isPng, envelopeIn } from '../png-card.js';
+import { isBundle, unpackBundle } from '../bundle.js';
 
 /** The first byte of an envelope (pips-wasm). */
 const ENVELOPE = 0x45; // 'E'
+/** Larger than any file of cards (a thousand of them at most, bundle.js). */
+const MAX_FILE = 16 * 1024 * 1024;
 
 export function receiveView() {
   const scan = scanner((text) => handle(text), undefined, { onEnvelope: (env) => { stopCamera(); arrive(env); } });
   const bar = h('i');
   const progress = h('div', { class: 'progress', hidden: true }, bar);
-  const fileInput = /** @type {HTMLInputElement} */ (h('input', { type: 'file', accept: '.pips,application/octet-stream,image/png', hidden: true, onchange: () => fromFile() }));
+  const fileInput = /** @type {HTMLInputElement} */ (h('input', { type: 'file', accept: '.pips,application/octet-stream,image/png', multiple: true, hidden: true, onchange: () => fromFile() }));
   const linkInput = /** @type {HTMLInputElement} */ (h('input', { type: 'url', placeholder: t('receive.paste.placeholder'), autocomplete: 'off' }));
   const progressText = h('small', {});
   const el = h('section', { class: 'view' },
@@ -67,34 +70,50 @@ export function receiveView() {
   let lastAt = 0;
   const stopCamera = () => scan.stop();
 
-  async function fromFile() {
-    const f = fileInput.files?.[0];
-    fileInput.value = '';
-    if (!f || f.size > 16 * 1024 * 1024) { toast(t('receive.not-pips')); return; }
+  /**
+   * What one file holds: envelopes (a card's picture, a .pips file of one
+   * card or of several), a bare card from before envelopes, or why nothing.
+   * @param {File} f @returns {Promise<{envelopes: Uint8Array[]} | {payload: Uint8Array} | {problem: string}>}
+   */
+  async function read(f) {
+    if (f.size > MAX_FILE) return { problem: 'receive.not-pips' };
     const bytes = new Uint8Array(await f.arrayBuffer());
     // A picture of a card from Pips holds the card itself.
     if (isPng(bytes)) {
       const env = envelopeIn(bytes);
-      if (!env) { toast(t('receive.no-card-in-picture')); return; }
-      stopCamera();
-      await arrive(env);
-      return;
+      return env ? { envelopes: [env] } : { problem: 'receive.no-card-in-picture' };
     }
-    if (bytes.length > 70 * 1024) { toast(t('receive.not-pips')); return; }
-    if (!MAGIC.every((b, i) => bytes[i] === b)) { toast(t('receive.not-pips')); return; }
+    if (isBundle(bytes)) {
+      const all = unpackBundle(bytes);
+      return all ? { envelopes: all } : { problem: 'receive.file-damaged' };
+    }
+    if (bytes.length > 70 * 1024 || !MAGIC.every((b, i) => bytes[i] === b)) return { problem: 'receive.not-pips' };
     const body = bytes.subarray(MAGIC.length);
     // A file holds what a code holds — an envelope, every signature in it
     // checked — or, from before envelopes, a bare signed card.
-    if (body[0] === ENVELOPE) {
-      stopCamera();
-      await arrive(body);
+    return body[0] === ENVELOPE ? { envelopes: [body] } : { payload: body };
+  }
+
+  /** One file or several, chosen at once: every card in them, each checked alone. */
+  async function fromFile() {
+    const files = [...(fileInput.files ?? [])];
+    fileInput.value = '';
+    if (!files.length) return;
+    // One at a time: a dozen large files read together would all sit in memory at once.
+    const got = [];
+    for (const f of files) got.push(await read(f));
+    const one = got.length === 1 ? got[0] : null;
+    if (one && 'problem' in one) return toast(t(one.problem));
+    if (one && 'payload' in one) {
+      try { done(await receivePayload(one.payload)); } catch { toast(t('receive.not-pips')); }
       return;
     }
-    try {
-      done(await receivePayload(body));
-    } catch {
-      toast(t('receive.not-pips'));
-    }
+    // Several files: a bare card from long ago, or a file with nothing in it, counts as not taken.
+    const envelopes = got.flatMap((g) => ('envelopes' in g ? g.envelopes : []));
+    const failed = got.filter((g) => !('envelopes' in g)).length;
+    if (!envelopes.length) return toast(t('receive.not-pips'));
+    stopCamera();
+    await arriveMany(envelopes, failed);
   }
 
   /** @param {string} text */
