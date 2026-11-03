@@ -1682,3 +1682,20 @@ test('a chosen card scrolled far off the screen flies to the archive from where 
   assert.ok(top < -first.height * 2, `it starts far above the screen, not where it was last seen: ${top}`);
   await p.context().close();
 });
+
+test('a card turned over goes to the archive face up, turning as it leaves', async () => {
+  const p = await env.phone('pixelfox');
+  await tab(p, 'me');
+  await samples(p);
+  await p.locator('.collection-view:visible').waitFor();
+  await p.waitForTimeout(800);
+  for (let i = 0; i < 3; i++) { await p.keyboard.press('+'); await p.waitForTimeout(700); }
+  await act(p, 'turn');
+  await p.waitForTimeout(900);
+  const side = () => p.$eval('.turn-flip', (e) => Math.round(Math.abs(Number(e.dataset.angle)) / 180) * 180 % 360);
+  assert.equal(await side(), 180, 'its back is up');
+  await act(p, 'down');
+  await p.waitForTimeout(450); // well before it lands
+  assert.equal(await side(), 0, 'face up again while it flies');
+  await p.context().close();
+});
