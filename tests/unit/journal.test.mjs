@@ -53,3 +53,11 @@ test('the report: facts, then entries newest first', () => {
   assert.match(text, /^Pips — error report\nversion: pips-abc\ncards: 4 \(own 1\)\n\n2 entries, newest first:\n2026-10-27 11:00:00 error ×3 \[editor\] new\n {4}at f \(\/src\/x\.js:1:2\)\n2026-10-27 10:00:00 warn \[storage\] old$/);
   assert.match(report([], []), /No entries\.$/);
 });
+
+test('a flood is told a few times, not every time', () => {
+  const told = [];
+  const j = createJournal({ told: (e) => told.push(e.count) });
+  for (let i = 0; i < 150; i++) j.error(new Error('every frame'));
+  j.error(new Error('something else'));
+  assert.deepEqual(told, [1, 10, 100, 1], 'once, at ×10, at ×100; a new error at once');
+});

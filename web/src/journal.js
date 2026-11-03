@@ -60,7 +60,10 @@ export function createJournal(o = {}) {
     } else {
       entries = [...entries, { at: now(), kind, where, text, stack, count: 1 }].slice(-MAX_ENTRIES);
     }
-    o.told?.(entries[entries.length - 1]);
+    // Told once, then again at ×10, ×100…: a loop that throws every frame
+    // must not flood whoever listens (the console) along with it.
+    const at = entries[entries.length - 1];
+    if (Number.isInteger(Math.log10(at.count))) o.told?.(at);
     changed();
   }
 

@@ -1741,3 +1741,54 @@ test('a wrong picture for the paper key is answered every time, in the frame', a
   assert.match(await textMatching(p, note, /повреждён/), /не картинка/, 'not a picture is not "no code"');
   await p.context().close();
 });
+
+// Seeded random use of the whole app — taps on whatever can be pressed,
+// keys, drags — as a hurried or curious person would. It looks for what no
+// scripted journey thought of: any page error, any fault written in the
+// journal (both reach the console, which the hook after the tests checks),
+// and anything left open that Escape does not close. Same seed, same steps.
+test('a monkey loose in the app finds nothing wrong', async () => {
+  const p = await env.phone('monkey');
+  await tab(p, 'me');
+  await samples(p);
+  p.on('filechooser', () => {}); // a picker opened by a tap is left unanswered
+  let seed = 4;
+  const rnd = (n) => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed % n; };
+  const KEYS = ['Escape', '+', '-', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Enter', ' ', 'Tab', 'z', 'Delete'];
+  // Not these: they end the session (a new key), or undo the setup (samples, developer mode).
+  const SPARE = /Сменить ключ|Удалить насовсем|Выключить|Очистить|Убрать образцы/;
+  const { width: W, height: H } = /** @type {{width: number, height: number}} */ (p.viewportSize());
+  for (let step = 0; step < 250; step++) {
+    const k = rnd(10);
+    try {
+      if (k < 6) {
+        const targets = await p.evaluate(() => [...document.querySelectorAll('button, [role="button"], summary, a[href], input[type="checkbox"], .on-stage, canvas, .ed-frame')]
+          .map((e) => {
+            const r = e.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2, top = document.elementFromPoint(x, y);
+            const ok = r.width > 4 && r.height > 4 && x > 0 && y > 0 && x < innerWidth && y < innerHeight && !(/** @type {any} */ (e).disabled) && top && (top === e || e.contains(top));
+            return ok ? { x, y, n: String(e.getAttribute('aria-label') || e.textContent || '').trim().slice(0, 40) } : null;
+          }).filter((v) => v !== null));
+        const fair = targets.filter((v) => !SPARE.test(v.n));
+        if (!fair.length) continue;
+        const tp = fair[rnd(fair.length)];
+        await p.mouse.click(tp.x, tp.y);
+      } else if (k < 8) {
+        await p.keyboard.press(KEYS[rnd(KEYS.length)]);
+      } else {
+        const x = 40 + rnd(W - 80), y = 120 + rnd(H - 260);
+        await p.mouse.move(x, y);
+        await p.mouse.down();
+        await p.mouse.move(x + rnd(240) - 120, y + rnd(400) - 200, { steps: 5 });
+        await p.mouse.up();
+      }
+      await p.waitForTimeout(60 + rnd(250));
+    } catch { /* a target gone before the tap: not a finding */ }
+  }
+  for (let i = 0; i < 6; i++) { await p.keyboard.press('Escape'); await p.waitForTimeout(400); }
+  const open = await p.evaluate(() => [...document.querySelectorAll('[role="dialog"], .overlay, .scrim')].filter((e) => {
+    const r = e.getBoundingClientRect(), cs = getComputedStyle(e);
+    return r.width > 0 && r.height > 0 && r.top < innerHeight - 2 && r.bottom > 2 && cs.visibility !== 'hidden' && Number(cs.opacity) > 0.05 && !e.closest('[hidden]');
+  }).map((e) => e.className));
+  assert.deepEqual(open, [], 'Escape closes whatever was left open');
+  await p.context().close();
+});

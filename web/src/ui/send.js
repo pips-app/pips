@@ -25,7 +25,8 @@ export async function sendLink(url, title, text) {
     await navigator.clipboard.writeText(url);
     toast(t('share.link.copied'));
   } catch (e) {
-    caught(e, 'share');
+    // Refused (the page has no permission, or no focus): an answer, told to the person, not a fault.
+    if (/** @type {any} */ (e)?.name !== 'NotAllowedError') caught(e, 'share');
     toast(t('share.link.failed'));
   }
 }

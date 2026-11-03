@@ -8,7 +8,7 @@
 // present one (a key made by mistake on a new phone, say); the cards on
 // the device stay.
 
-import { h, replace, byteLimit } from '../dom.js';
+import { h, replace, byteLimit, shake } from '../dom.js';
 import { t, reason } from '../i18n.js';
 import { app, setIdentity, setProfile, applyBackup, backupBytes } from '../state.js';
 import { segmented } from '../kit/segmented.js';
@@ -105,7 +105,7 @@ export function onboarding(root, done, opts = {}) {
       } catch (e) {
         file = null;
         fileError = reason('backup.err', e, /** @type {any} */ (e)?.message);
-        paintFile();
+        paintFile(true);
         paint();
       }
     }
@@ -119,15 +119,18 @@ export function onboarding(root, done, opts = {}) {
         file = null;
         fileError = reason('backup.err', e, /** @type {any} */ (e)?.message);
       }
-      paintFile();
+      paintFile(true);
       paint();
     }
-    function paintFile() {
+    /** @param {boolean} [chosen] a file was just chosen: a problem with it is seen to come, even the same one again */
+    function paintFile(chosen = false) {
+      const problem = fileError ? h('p', { class: 'onb-status wrong' }, fileError) : null;
       replace(fileBox,
         file
           ? idCard(file.owner, file.name, '', iconButton({ icon: 'close', label: t('onb.restore.file.drop'), onClick: () => { file = null; paintFile(); paint(); } }).el)
           : h('button', { type: 'button', class: 'btn wide', onclick: () => fileInput.click() }, t('onb.restore.file.pick')),
-        fileError ? h('p', { class: 'onb-status wrong' }, fileError) : h('p', { class: 'hint' }, t(file ? 'onb.restore.file.on' : 'onb.restore.file.off')));
+        problem ?? h('p', { class: 'hint' }, t(file ? 'onb.restore.file.on' : 'onb.restore.file.off')));
+      if (problem && chosen) shake(problem);
     }
     if (opts.switching?.file) take(opts.switching.file.bytes, opts.switching.file.name);
     else paintFile();

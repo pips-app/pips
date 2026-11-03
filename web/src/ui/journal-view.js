@@ -12,6 +12,19 @@ import { VERSION } from '../version.js';
 import { fullSheet } from '../kit/full-sheet.js';
 import { toast } from './shell.js';
 
+/**
+ * `fn` at most once per quarter second, however often it is asked for: the
+ * journal can change on every frame (a loop that throws), and redrawing on
+ * each change would slow the page that is already in trouble.
+ * @param {() => void} fn
+ */
+function calmly(fn) {
+  let due = 0;
+  return () => {
+    if (!due) due = window.setTimeout(() => { due = 0; fn(); }, 250);
+  };
+}
+
 /** @param {number} ms */
 const when = (ms) => date(ms, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', second: '2-digit' });
 
@@ -29,7 +42,7 @@ export function journalGroup() {
       h('p', { class: 'hint' }, t('journal.hint', VERSION)));
   };
   paint();
-  const stop = journal.listen(() => { if (box.isConnected) paint(); else stop(); });
+  const stop = journal.listen(calmly(() => { if (box.isConnected) paint(); else stop(); }));
   return box;
 }
 
@@ -58,7 +71,7 @@ export function openJournal() {
       : h('p', { class: 'hint' }, t('journal.empty')));
   };
   paint();
-  stop = journal.listen(paint);
+  stop = journal.listen(calmly(paint));
   replace(s.foot,
     h('button', { class: 'btn key wide', onclick: () => send() }, t('journal.send')),
     h('button', { class: 'btn wide', onclick: () => { journal.clear(); toast(t('journal.cleared')); } }, t('journal.clear')));

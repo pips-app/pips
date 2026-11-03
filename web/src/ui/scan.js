@@ -5,11 +5,10 @@
 // Hands every text it reads to `onText`; deciding what it means is the
 // caller's job. Repeats of the same text are left for the caller too.
 
-import { h, icon } from '../dom.js';
+import { h, icon, shake } from '../dom.js';
 import { t } from '../i18n.js';
 import { qrReader } from '../qrscan.js';
 import { envelopeIn } from '../png-card.js';
-import { REDUCED } from '../kit/motion.js';
 
 /** Pictures larger than this are only looked at for a code. */
 const MAX_PICTURE = 16 * 1024 * 1024;
@@ -50,7 +49,7 @@ export function scanner(onText, hint = t('receive.point'), o = {}) {
     const fresh = at.textContent !== text || !at.classList.contains('bad');
     at.textContent = text;
     at.classList.toggle('bad', bad);
-    if (bad && (fresh || again) && !REDUCED) at.animate([{ transform: 'translateX(0)' }, { transform: 'translateX(-5px)' }, { transform: 'translateX(5px)' }, { transform: 'translateX(0)' }], { duration: 260, easing: 'ease-out' });
+    if (bad && (fresh || again)) shake(at);
   };
   /** @param {boolean} on */
   const live = (on) => {
@@ -104,6 +103,9 @@ export function scanner(onText, hint = t('receive.point'), o = {}) {
       }
       if (mine !== turn) { s.getTracks().forEach((tr) => tr.stop()); return; }
       stream = s;
+      // The camera taken away while it films (another app, a revoked
+      // permission, a cable): stopped and said, not a frozen picture read on.
+      for (const tr of s.getVideoTracks()) tr.addEventListener('ended', () => { if (stream === s) { stop(); say(t('scan.camera-lost'), true); } });
       label.textContent = t('receive.start');
       video.srcObject = stream;
       live(true);

@@ -21,11 +21,17 @@ export const journal = createJournal({
   // Also on the console, as it happens: where developer tools are open, and
   // for the browser tests, which fail on any error a page reports — so a
   // fault the app catches and writes down does not pass a test unseen.
-  told: (e) => console[e.kind === 'warn' ? 'warn' : 'error'](`pips ${e.kind}${e.where ? ` [${e.where}]` : ''}: ${e.text}`),
-  save: (entries) => {
+  told: (e) => console[e.kind === 'warn' ? 'warn' : 'error'](`pips ${e.kind}${e.where ? ` [${e.where}]` : ''}: ${e.text}${e.count > 1 ? ` (×${e.count})` : ''}`),
+  save: () => {
     if (!ready) return; // before storage opens: kept in memory, saved once it does
-    clearTimeout(timer);
-    timer = window.setTimeout(() => store.setMeta(KEY, entries).catch(() => {}), SAVE_MS);
+    // At most one write per SAVE_MS, of the entries as they are then: a
+    // flood of errors neither writes on every one nor puts the write off
+    // for as long as it lasts.
+    if (timer) return;
+    timer = window.setTimeout(() => {
+      timer = 0;
+      store.setMeta(KEY, journal.entries).catch(() => {});
+    }, SAVE_MS);
   },
 });
 
