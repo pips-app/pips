@@ -100,6 +100,19 @@ export function createStage(o) {
     return feedRect(fidx.get(c) ?? list.indexOf(c), feed.v, level === 3, fr);
   }
 
+  /** How far past the screen's edges cards are still drawn: their shadows reach in. */
+  const CULL = 40;
+  /** The styles last written to each card's element. @type {WeakMap<object, Map<string, string>>} */
+  const written = new WeakMap();
+  /** @param {{el: HTMLElement}} c @param {string} prop @param {string} v */
+  function put(c, prop, v) {
+    let m = written.get(c.el);
+    if (!m) written.set(c.el, (m = new Map()));
+    if (m.get(prop) === v) return;
+    m.set(prop, v);
+    c.el.style.setProperty(prop, v);
+  }
+
   function render() {
     const z = Z.v, a = clamp(Math.floor(z), 0, 2), t = ease(clamp(z - a, 0, 1)), now = performance.now();
     // Feed positions: a card leaving the feed gives up its place gradually.
@@ -109,6 +122,11 @@ export function createStage(o) {
       fidx.set(c, acc);
       acc += 1 - ease(c.collapse ? clamp((now - c.collapse.t0) / c.collapse.dur, 0, 1) : 0);
     }
+    // The level being reached: each card is laid out at its width there, and
+    // on the way only scaled (a transform, no layout). Resized every frame,
+    // a few hundred cards — each a container that sizes its own insides —
+    // were laid out again and again, and the zoom dropped to a few frames.
+    const rest = clamp(Math.round(Z.to), 0, 3);
     const centre = list[Math.round(feed.v)] ?? null;
     if (centre !== centred) {
       centred?.el.classList.remove('centre');
@@ -154,13 +172,22 @@ export function createStage(o) {
       }
       const hgt = r.w + (r.w * cap.share + cap.add) * r.cap;
       c.rr = { x: r.x, y: r.y, w: r.w, h: hgt, cap: r.cap, o: r.o, z: r.z };
-      const s = c.el.style;
-      s.width = `${r.w}px`;
-      s.transform = `translate3d(${r.x}px,${r.y}px,0)`;
-      s.opacity = String(r.o);
-      s.zIndex = String(r.z);
-      s.setProperty('--cap', String(r.cap));
-      s.visibility = r.w < 1 ? 'hidden' : '';
+      // Off the screen: hidden and left as it is — nothing to lay out or paint
+      // for the hundreds of cards a grid holds beyond its edges.
+      // A card in flight is always drawn: it is on its way onto the screen.
+      if (!c.flying && (r.y > fr.H + CULL || r.y + hgt < -CULL || r.x > fr.W + CULL || r.x + r.w < -CULL)) {
+        c.el.style.visibility = 'hidden';
+        continue;
+      }
+      const lw = c.flying || ghost ? r.w : rectAt(rest, c).w, bw = lw >= 1 ? lw : r.w;
+      // Only what changed is written: any write to a card's style has the
+      // browser look at it again, and most cards hold still most frames.
+      put(c, 'width', `${bw}px`);
+      put(c, 'transform', bw === r.w ? `translate3d(${r.x}px,${r.y}px,0)` : `translate3d(${r.x}px,${r.y}px,0) scale(${r.w / bw})`);
+      put(c, 'opacity', String(r.o));
+      put(c, 'z-index', String(r.z));
+      put(c, '--cap', String(r.cap));
+      c.el.style.visibility = r.w < 1 ? 'hidden' : ''; // written by the turned card too (turn.js): not cached
     }
     drawLabels(z);
     o.drawn(z);

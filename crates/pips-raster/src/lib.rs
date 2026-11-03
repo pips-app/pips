@@ -14,7 +14,10 @@
 //! the reason — never silently "fixed":
 //!
 //! - semi-transparent pixels ([`Error::PartialAlpha`]): a card pixel is either
-//!   a colour or transparent;
+//!   a colour or transparent. On request ([`Options::solid_alpha`]) they are
+//!   made solid instead, and counted ([`Report::solidified`]), so the app can
+//!   say so: half or more opaque becomes the colour, less becomes
+//!   transparent ([`solidify`]);
 //! - more colours than a card holds, unless a target palette was chosen
 //!   ([`Error::TooManyColors`]);
 //! - Aseprite features whose result would differ from what the artist sees:
@@ -116,11 +119,13 @@ pub struct Options {
     pub first_frame_only: bool,
     /// Which colours to use.
     pub target: Target,
+    /// Make semi-transparent pixels solid instead of refusing them ([`solidify`]).
+    pub solid_alpha: bool,
 }
 
 impl Default for Options {
     fn default() -> Self {
-        Self { unscale: true, first_frame_only: false, target: Target::Auto }
+        Self { unscale: true, first_frame_only: false, target: Target::Auto, solid_alpha: false }
     }
 }
 
@@ -139,6 +144,34 @@ pub struct Report {
     pub colors: usize,
     /// Pixels whose colour changed to reach the palette; 0 for an exact match.
     pub changed_pixels: usize,
+    /// Semi-transparent pixels made solid or transparent ([`Options::solid_alpha`]).
+    pub solidified: usize,
+}
+
+/// Alpha at or above this: the pixel was meant to be seen, and becomes its
+/// colour; below it, transparent. Half way, as Aseprite's alpha threshold.
+pub const SOLID_FROM: u8 = 128;
+
+/// Makes every semi-transparent pixel solid: its own colour, fully opaque,
+/// from [`SOLID_FROM`] up; transparent below. Returns how many there were.
+pub fn solidify(r: &mut Raster) -> usize {
+    let mut n = 0;
+    for f in &mut r.frames {
+        for p in &mut f.pixels {
+            match p[3] {
+                0 | 255 => {}
+                a if a >= SOLID_FROM => {
+                    p[3] = 255;
+                    n += 1;
+                }
+                _ => {
+                    *p = [0; 4];
+                    n += 1;
+                }
+            }
+        }
+    }
+    n
 }
 
 /// Decodes a PNG or Aseprite file.
@@ -172,10 +205,11 @@ pub fn import(bytes: &[u8], options: &Options) -> Result<(Picture, Report), Erro
         raster.frames.truncate(1);
         raster.frames[0].delay_ms = 0;
     }
+    let solidified = if options.solid_alpha { solidify(&mut raster) } else { 0 };
     let scale = if options.unscale { detect_scale(&raster) } else { 1 };
     let raster = unscale(&raster, scale);
     let (picture, colors, changed_pixels) = to_palette(&raster, &options.target)?;
-    Ok((picture, Report { source_width, source_height, source_frames, scale, colors, changed_pixels }))
+    Ok((picture, Report { source_width, source_height, source_frames, scale, colors, changed_pixels, solidified }))
 }
 
 /// Insertion sort. The lists sorted here are short (colours, cels), and

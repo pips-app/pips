@@ -188,12 +188,32 @@ test('a picture comes onto the canvas: pixel art as it is, the rest through a sq
   await p.click('.overlay .btn.key');
   assert.equal(await size(), '16');
 
+  // Soft edges (alpha between 0 and 255): taken, made solid or clear, and said so.
+  const soft = await png(env.dir, 'soft.png', 12, 12, (x, y) => {
+    const d = Math.hypot(x - 5.5, y - 5.5);
+    return [200, 60, 40, d < 4 ? 255 : d < 5 ? 160 : d < 6 ? 60 : 0];
+  });
+  await picture(p, soft);
+  const said = await textMatching(p, '.overlay .import-status', /полупрозрачн/);
+  assert.match(said, /^\d+ полупрозрачн.*заметные стали сплошными/);
+  assert.match(said, /12×12/);
+  await p.click('.overlay .btn.key');
+  assert.equal(await toast(p), 'Картинка на холсте');
+  assert.equal(await size(), '16');
+
   // The heart: unscaled, and one tap brings the previous picture back.
   await picture(p, await heart(env.dir));
   assert.match(await textMatching(p, '.overlay .import-status', /60×48 → 10×8 \(снято увеличение ×6\)/), /60×48 → 10×8 \(снято увеличение ×6\)/);
   await p.click('.overlay .btn.key');
   await p.click('.toast button'); // «Вернуть»
   assert.equal(await size(), '16', 'the cropped picture is back');
+  // Larger than any canvas: still said, under the square to crop.
+  const softBig = await png(env.dir, 'soft-big.png', 80, 80, (x, y) => [40, 90, 200, (x + y) % 7 === 0 ? 100 : 255]);
+  await picture(p, softBig);
+  assert.ok(await p.isVisible('.overlay .pic-stage'));
+  assert.match(await textMatching(p, '.overlay .import-status', /полупрозрачн/), /^\d+ полупрозрачн/);
+  await p.click('.overlay .btn.key');
+  assert.equal(await toast(p), 'Картинка на холсте');
   assert.equal(await cards(p), 0, 'nothing was signed on the way');
   await p.context().close();
 });
@@ -322,7 +342,8 @@ test('the collection: tags, search, archive and the bin, all without gestures', 
   await p.waitForTimeout(800);
   const sub = async () => (await p.textContent('.collection-bar .level-switch')).split(' · ')[0];
   const inPlace = (st) => p.evaluate(async (x) => [...(await import('/src/state.js')).app.cards.values()].filter((e) => e.rec.state === x).length, st);
-  const shown = () => p.$$eval('.on-stage', (els) => els.filter((e) => e.isConnected && Number(e.style.opacity) > 0.5).length);
+  // In the set: not fading out. A card past the screen's edge is not drawn at all (no opacity written yet).
+  const shown = () => p.$$eval('.on-stage', (els) => els.filter((e) => e.isConnected && (e.style.opacity === '' || Number(e.style.opacity) > 0.5)).length);
   /** Clicks the first card fully on screen below the bar. */
   const clickCard = async () => {
     const at = await p.$$eval('.on-stage', (els) => els.map((e) => e.getBoundingClientRect()).filter((r) => r.top > 70 && r.bottom < 700 && r.width > 20)[0]);
@@ -1514,7 +1535,26 @@ test('the editor: many frames scroll in their strip, frames last longer, layers 
       return { scrolls: s.scrollWidth > s.clientWidth, add: r('.ed-frame.add').right <= w, layers: r('.ed-layers-btn').right <= w, page: document.documentElement.scrollWidth <= w, aside: !document.querySelector('.ed-aside').offsetParent || r('.ed-aside').right <= w };
     });
     assert.deepEqual(fit, { scrolls: true, add: true, layers: true, page: true, aside: true }, desk ? 'computer' : 'phone');
-    if (desk) { await p.context().close(); continue; }
+    if (desk) {
+      // A mouse drags the strip as a finger would; letting go over a frame does not choose it.
+      const strip = await p.locator('.ed-frame-scroll').boundingBox();
+      const chosen = () => p.evaluate(() => [...document.querySelectorAll('.ed-frame-list .ed-frame')].findIndex((b) => b.getAttribute('aria-pressed') === 'true'));
+      const at = () => p.evaluate(() => document.querySelector('.ed-frame-scroll').scrollLeft);
+      await p.evaluate(() => { document.querySelector('.ed-frame-scroll').scrollLeft = 0; });
+      const before = await chosen();
+      const y = strip.y + strip.height / 2;
+      await p.mouse.move(strip.x + strip.width - 30, y);
+      await p.mouse.down();
+      await p.mouse.move(strip.x + strip.width - 130, y, { steps: 8 });
+      await p.waitForTimeout(120); // held still: no throw
+      await p.mouse.up();
+      assert.ok(Math.abs(await at() - 100) <= 2, 'the strip moved with the mouse, no further');
+      assert.equal(await chosen(), before, 'a drag chooses nothing');
+      await p.click('.ed-frame-list .ed-frame >> nth=3');
+      assert.equal(await chosen(), 3, 'a click still chooses');
+      await p.context().close();
+      continue;
+    }
 
     // Back to two frames; the first lasts three ticks.
     while (await p.locator('.ed-frame-list .ed-frame').count() > 2) {
@@ -1620,4 +1660,25 @@ test('several cards at once: chosen in the collection, sent as one file or as pi
   assert.match(await textMatching(b, '.toast span', /повреждён/), /повреждён/);
   assert.equal(await cards(b), 5);
   for (const x of [a, b]) await x.context().close();
+});
+
+test('a chosen card scrolled far off the screen flies to the archive from where it really is', async () => {
+  const p = await env.phone('pixelfox');
+  await tab(p, 'me');
+  await samples(p);
+  await p.locator('.collection-view:visible').waitFor();
+  await p.waitForTimeout(800);
+  await p.click('section.view:visible >> text=Выбрать');
+  const first = await p.$$eval('.on-stage', (els) => els.map((e) => e.getBoundingClientRect()).filter((r) => r.width > 20 && r.top > 60).sort((a, b) => a.top - b.top || a.left - b.left)[0]);
+  await p.mouse.click(first.x + first.width / 2, first.y + first.height / 2);
+  // Off the top in two goes: hidden once past the edge (not drawn there), then much further.
+  await p.mouse.move(200, 500);
+  for (let i = 0; i < 2; i++) { await p.mouse.wheel(0, 1200); await p.waitForTimeout(900); }
+  assert.equal(await p.$eval('.on-stage.chosen', (e) => e.style.visibility), 'hidden', 'past the edge, not shown where it was');
+  await p.click('.action-bar.up [data-act="archive"]');
+  await p.locator('.fly-layer .on-stage').waitFor({ state: 'attached' });
+  // Where its flight starts: the first frame drawn after the press.
+  const top = await p.$eval('.fly-layer .on-stage', (e) => new Promise((ok) => requestAnimationFrame(() => ok(e.getBoundingClientRect().top))));
+  assert.ok(top < -first.height * 2, `it starts far above the screen, not where it was last seen: ${top}`);
+  await p.context().close();
 });

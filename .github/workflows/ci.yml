@@ -35,12 +35,25 @@ jobs:
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo test --workspace
 
-  msrv:
-    name: Rust 1.85 (declared minimum)
+  # Known vulnerabilities and unsoundness in the dependencies (RustSec).
+  # Not needed by the deploy: an advisory published tomorrow should show
+  # here, not stop a release of code that did not change.
+  audit:
+    name: Dependencies — RustSec advisories
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@1.85
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-audit
+      - run: cargo audit --deny warnings
+
+  msrv:
+    name: Rust 1.85.1 (declared minimum)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.85.1
       - uses: Swatinem/rust-cache@v2
       - run: cargo check --workspace --lib --bins
 

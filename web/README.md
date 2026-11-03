@@ -87,7 +87,8 @@ thing, with one way of fitting together:
      (what a card may be to be signed, how long it takes to pass on).
   4. `kit/*` controls — icon button, segmented switch, chips, search field,
      top and bottom sheets (which hold the keyboard's focus while open,
-     `focus.js`), strip, action bar, identicon.
+     `focus.js`), strip, action bar, identicon, `drag-scroll.js` (a row a
+     mouse drags sideways, as a finger does).
   5. Screen parts — `collection/stage.js` (the zoom axis), `turn.js` (the card
      that turns over), `back.js`, `share.js` (the share sheet), `share-many.js` (several cards at once), `moves.js`
      (sending cards between places, the strip, undo), `selection.js`,

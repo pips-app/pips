@@ -6,6 +6,7 @@
    own file beside this one. */
 @import url(kit/icon-button.css);
 @import url(kit/chips.css);
+@import url(kit/drag-scroll.css);
 @import url(kit/search-field.css);
 @import url(kit/top-sheet.css);
 @import url(kit/strip.css);

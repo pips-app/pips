@@ -7,7 +7,7 @@ members = ["crates/*"]
 [workspace.package]
 edition = "2021"
 # Edition 2024 in our dependencies (zeroize) sets the floor; checked in CI.
-rust-version = "1.85"
+rust-version = "1.85.1"
 license = "Apache-2.0"
 
 [workspace.lints.rust]

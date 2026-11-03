@@ -25,8 +25,9 @@ bytes ─► decode ─► Raster (RGBA frames) ─► unscale ─► to_palette
   with each colour mapped to the nearest (redmean, integer). Transparency
   keeps colours off index 0.
 
-Refused with the reason, never "fixed": semi-transparent pixels (with their
-place), more than 32 colours with exact colours asked for, frames of unequal
+Refused with the reason, never "fixed" unless asked: semi-transparent
+pixels (with their place; `solid_alpha` / `--solid-alpha` makes them solid
+from half opaque up, clear below, and counts them), more than 32 colours with exact colours asked for, frames of unequal
 duration, anything over 128×128 after unscaling. Input limits — 16 MiB,
 2048 px a side, 8 Mi pixels over all frames — are checked before anything
 is allocated from a header.
@@ -37,6 +38,7 @@ is allocated from a header.
 pips-raster art.aseprite                       # what the conversion would do
 pips-raster -p pico-8 -t "Сова" owl.png -o owl.pips && pips-card inspect owl.pips
 pips-raster --fit 32 painting.png -o painting.pips    # its own 32 colours
+pips-raster --solid-alpha soft-edges.png              # semi-transparent pixels made solid
 ```
 
 ## Testing

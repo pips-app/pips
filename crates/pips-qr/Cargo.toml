@@ -25,11 +25,11 @@ cli = ["matrix"]
 [dependencies]
 pips-base45 = { path = "../pips-base45", default-features = false }
 qrcodegen = { version = "1.8", optional = true }
-rqrr = { version = "0.9", optional = true, default-features = false }
+rqrr = { version = "0.11", optional = true, default-features = false }
 
 [dev-dependencies]
 # An independent decoder, to prove the symbols we draw actually scan.
-rqrr = { version = "0.9", default-features = false }
+rqrr = { version = "0.11", default-features = false }
 
 [lints]
 workspace = true

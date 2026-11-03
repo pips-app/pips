@@ -63,10 +63,10 @@ export function createTurn(o) {
       if (!wantTurn && z < 2.95 && Math.round(rotY.to) % 360 !== 0) { rotY.to = frontOf(rotY.v); rotX.to = 0; loop.kick(); }
       const on = !!(c && c.rr && (z > 2.6 || (z > 1.6 && turned())));
       el.hidden = !on;
-      if (!on || !c || !c.rr) {
-        if (c) c.el.style.visibility = '';
-        return;
-      }
+      // The stage shows its card again on its next frame (stage.js writes
+      // every drawn card's visibility); shown from here, a card the stage
+      // left off the screen would appear where it was drawn last.
+      if (!on || !c || !c.rr) return;
       c.el.style.visibility = 'hidden';
       if (of !== c.id) {
         of = c.id;

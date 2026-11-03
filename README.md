@@ -20,8 +20,10 @@ envelope.
   animation; 33 built-in palettes; a pixel editor with layers, frames
   that last as long as they need, and an undo tree.
 - New cards from pictures: PNG and Aseprite files as they are (layers,
-  frames, upscaled exports), photos and larger pictures through a square
-  crop; a picture of a Pips card opens as the card itself.
+  frames, upscaled exports), photos and larger pictures (JPEG, WebP —
+  whatever the browser opens) through a square crop; semi-transparent
+  pixels are made solid, and the app says how many; a picture of a Pips
+  card opens as the card itself.
 - Several cards at once: as one `.pips` file or as a picture of each;
   several files received at once.
 - Giving and receiving by QR — one code, or a fountain-coded carousel for

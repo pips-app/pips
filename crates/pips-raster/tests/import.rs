@@ -103,6 +103,22 @@ fn semi_transparent_pixels_are_refused_with_their_place() {
 }
 
 #[test]
+fn semi_transparent_pixels_are_made_solid_on_request_and_counted() {
+    // Half opaque and more: the colour; less: transparent.
+    let file = art(4, 1, 1, |x, _| [[9, 9, 9, 128], [200, 10, 10, 127], [5, 5, 5, 255], [0, 0, 0, 0]][x as usize]);
+    let opts = Options { solid_alpha: true, unscale: false, ..Options::default() };
+    let (p, report) = import(&file, &opts).unwrap();
+    assert_eq!(report.solidified, 2);
+    assert_eq!(report.colors, 2, "the faint red is gone, not a colour");
+    assert_ne!(p.pixels[0], 0, "a solid pixel");
+    assert_eq!(p.pixels[1], 0, "a transparent one");
+    assert_eq!(p.pixels[3], 0);
+    // Nothing semi-transparent: nothing to count.
+    let solid = art(2, 1, 1, |x, _| if x == 0 { rgba(0x10_20_30) } else { [0; 4] });
+    assert_eq!(import(&solid, &opts).unwrap().1.solidified, 0);
+}
+
+#[test]
 fn too_many_colours_ask_for_a_palette_and_nearest_maps_them() {
     let file = art(40, 1, 1, |x, _| rgba(x * 0x06_05_04));
     assert_eq!(import(&file, &Options::default()).unwrap_err(), Error::TooManyColors(40));
