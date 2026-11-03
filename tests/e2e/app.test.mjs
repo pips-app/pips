@@ -1702,7 +1702,7 @@ test('the opened card goes to the archive over the strip, face up — turned ove
   await p.waitForTimeout(1500);
   await act(p, 'down');
   const over = [];
-  for (let i = 0; i < 6; i++) { await p.waitForTimeout(90); over.push(await p.$eval('.turn', (e) => e.hidden || !!e.closest('.fly-layer'))); }
+  for (let i = 0; i < 6; i++) { await p.waitForTimeout(90); over.push(await p.$eval('.turn', (e) => e.hidden || !!e.closest('.fly-layer') || !document.querySelector('.fly-layer .on-stage'))); } // landed: the next card, back in the stage
   assert.deepEqual(over, over.map(() => true), 'never under the strip while it flies');
   await p.context().close();
 });
