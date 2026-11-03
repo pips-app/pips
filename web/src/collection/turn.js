@@ -10,7 +10,10 @@ import { Spring, SPRINGS, loop, clamp } from '../kit/motion.js';
 /** The nearest angle with the front up. @param {number} a */
 const frontOf = (a) => Math.round(a / 360) * 360;
 
-/** @param {{host: HTMLElement}} o */
+/**
+ * @param {{host: HTMLElement, fly: HTMLElement}} o host: the stage; fly: the
+ * layer over the archive strip, where cards fly (the same box as the host)
+ */
 export function createTurn(o) {
   const rotY = new Spring(0, SPRINGS.turn), rotX = new Spring(0, SPRINGS.tilt);
   const front = h('div', { class: 'face front-face' });
@@ -52,7 +55,7 @@ export function createTurn(o) {
     /**
      * Places the twin over the card drawn at `rr`, or hides it.
      * @param {number} z
-     * @param {null | {id: string, el: HTMLElement, rr: {x: number, y: number, w: number, h: number, cap: number} | null}} c
+     * @param {null | {id: string, el: HTMLElement, flying?: object | null, rr: {x: number, y: number, w: number, h: number, cap: number} | null}} c
      * @param {(id: string) => {front: HTMLElement, back: HTMLElement}} build faces for a card
      * @param {boolean} interactive
      */
@@ -68,6 +71,10 @@ export function createTurn(o) {
       // left off the screen would appear where it was drawn last.
       if (!on || !c || !c.rr) return;
       c.el.style.visibility = 'hidden';
+      // Its card flying to the archive: the turned card goes with it, over
+      // the strip it lands on — in the stage it would pass under it.
+      const layer = c.flying ? o.fly : o.host;
+      if (el.parentElement !== layer) layer.append(el);
       if (of !== c.id) {
         of = c.id;
         const f = build(c.id);

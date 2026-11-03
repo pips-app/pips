@@ -145,7 +145,7 @@ export function collectionView(o) {
     tap, hold, pull, turn: () => (stage.level === 3 ? turn.drag() : null),
     drawn, levelChanged,
   });
-  const turn = createTurn({ host });
+  const turn = createTurn({ host, fly });
   // Choosing changes the bars at once — the tabs too: they step aside for a
   // selection's actions, and come back as soon as it ends, not on the next move.
   const selection = createSelection({ el, cardEl: (id) => items.get(id)?.el, changed: () => { paintChrome(); paintTabs(); } });

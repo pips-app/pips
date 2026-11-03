@@ -1697,5 +1697,6 @@ test('a card turned over goes to the archive face up, turning as it leaves', asy
   await act(p, 'down');
   await p.waitForTimeout(450); // well before it lands
   assert.equal(await side(), 0, 'face up again while it flies');
+  assert.ok(await p.$eval('.turn', (e) => !!e.closest('.fly-layer')), 'over the archive strip it lands on, not under it');
   await p.context().close();
 });
