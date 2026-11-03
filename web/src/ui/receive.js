@@ -21,7 +21,7 @@ const ENVELOPE = 0x45; // 'E'
 const MAX_FILE = 16 * 1024 * 1024;
 
 export function receiveView() {
-  const scan = scanner((text) => handle(text), undefined, { onEnvelope: (env) => { stopCamera(); arrive(env); } });
+  const scan = scanner((text, from) => handle(text, from.picture), undefined, { onEnvelope: (env) => { stopCamera(); arrive(env); } });
   const bar = h('i');
   const progress = h('div', { class: 'progress', hidden: true }, bar);
   const fileInput = /** @type {HTMLInputElement} */ (h('input', { type: 'file', accept: '.pips,application/octet-stream,image/png', multiple: true, hidden: true, onchange: () => fromFile() }));
@@ -45,7 +45,7 @@ export function receiveView() {
   const submit = () => {
     const v = linkInput.value.trim();
     linkInput.value = '';
-    if (v) handle(v);
+    if (v) handle(v, true);
   };
   // A paste is read once it is in the field.
   linkInput.addEventListener('input', (e) => { if (/** @type {InputEvent} */ (e).inputType === 'insertFromPaste') submit(); });
@@ -57,7 +57,7 @@ export function receiveView() {
     try {
       const text = (await navigator.clipboard.readText()).trim();
       if (!text) return toast(t('receive.clipboard-empty'));
-      handle(text);
+      handle(text, true);
     } catch {
       linkInput.focus();
       toast(t('receive.paste-here'));
@@ -117,10 +117,12 @@ export function receiveView() {
   }
 
   /** @param {string} text */
-  async function handle(text) {
-    // A camera sees the same code many times a second.
+  /** @param {string} text @param {boolean} [picked] chosen by the person now (a picture, a paste): never a repeat */
+  async function handle(text, picked = false) {
+    // A camera sees the same code many times a second; a picture chosen
+    // again is chosen on purpose, and answered again.
     const now = Date.now();
-    if (text === lastText && now - lastAt < 2500) return;
+    if (!picked && text === lastText && now - lastAt < 2500) return;
     lastText = text;
     lastAt = now;
 

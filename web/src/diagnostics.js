@@ -18,6 +18,10 @@ let whereNow = () => '';
 export const journal = createJournal({
   where: () => whereNow(),
   origin: location.origin,
+  // Also on the console, as it happens: where developer tools are open, and
+  // for the browser tests, which fail on any error a page reports — so a
+  // fault the app catches and writes down does not pass a test unseen.
+  told: (e) => console[e.kind === 'warn' ? 'warn' : 'error'](`pips ${e.kind}${e.where ? ` [${e.where}]` : ''}: ${e.text}`),
   save: (entries) => {
     if (!ready) return; // before storage opens: kept in memory, saved once it does
     clearTimeout(timer);

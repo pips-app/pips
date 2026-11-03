@@ -37,7 +37,7 @@
 .feed-nav .ib { pointer-events: auto; width: 44px; height: 44px; background: var(--raise2); box-shadow: 0 6px 16px -8px #000; }
 .frame.on-stage { position: absolute; left: 0; top: 0; transform-origin: 0 0; will-change: transform; }
 /* --cap: how much of the caption shows, 0 (a bare tile) … 1 (the full frame). */
-.on-stage .front, .turn .front { padding-bottom: calc(3.6cqw * (1 - var(--cap, 1))); }
+.on-stage .front, .turn .front { padding-bottom: calc(var(--edge) * (1 - var(--cap, 1))); }
 .on-stage .cap, .turn .cap { height: calc((var(--cap-share) * 100cqw + var(--cap-add)) * var(--cap, 1)); min-height: 0; opacity: calc(var(--cap, 1) * 1.4 - .4); }
 .collection-view.selecting .on-stage::before { content: ""; position: absolute; z-index: 2; right: 6%; top: 6%; width: 22px; height: 22px; border-radius: 50%;
   background: #0007; box-shadow: inset 0 0 0 1.5px #fffc; }
@@ -133,7 +133,10 @@ input.tag.add::placeholder { color: var(--shade-dim); }
 
 /* --------------------------------------------------------- the rest -- */
 .fly-layer { position: absolute; inset: 0; z-index: 47; pointer-events: none; }
-.mini-paper { width: 56px; height: 56px; border-radius: 3px; background: var(--shade); padding: 4px; box-shadow: 0 6px 14px -8px #000; }
+/* A card on the archive strip: the card itself, small — the same paper edge and shadow as the card
+   that flies there (.face), so on landing nothing changes size or look. Its slot (.strip .mini) is the container. */
+.mini-paper { width: 100%; aspect-ratio: 1; border-radius: 3px; background: var(--shade); padding: var(--edge);
+  box-shadow: 0 12px 24px -12px rgba(0, 0, 0, .75), 0 0 0 1px rgba(0, 0, 0, .35); }
 .mini-paper canvas { display: block; width: 100%; height: 100%; image-rendering: pixelated; }
 .place-empty { position: absolute; z-index: 4; left: 32px; right: 32px; top: 44%; margin: 0; text-align: center; color: var(--text3);
   font-size: 14px; line-height: 1.45; pointer-events: none; }

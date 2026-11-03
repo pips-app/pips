@@ -37,7 +37,8 @@ export function describe(e, origin = '') {
 
 /**
  * @param {{now?: () => number, where?: () => string, origin?: string,
- *   save?: (entries: Entry[]) => void}} [o] save: called after each change
+ *   save?: (entries: Entry[]) => void, told?: (entry: Entry) => void}} [o]
+ * save: called after each change; told: with each thing written down, as it happens
  */
 export function createJournal(o = {}) {
   const now = o.now ?? Date.now;
@@ -59,6 +60,7 @@ export function createJournal(o = {}) {
     } else {
       entries = [...entries, { at: now(), kind, where, text, stack, count: 1 }].slice(-MAX_ENTRIES);
     }
+    o.told?.(entries[entries.length - 1]);
     changed();
   }
 

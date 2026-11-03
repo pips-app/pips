@@ -61,7 +61,7 @@ export function editionPanel(digest) {
  * @param {string} digest @param {number} of */
 function scanRecipient(digest, of) {
   let done = false;
-  const s = scanner(async (text) => {
+  const s = scanner(async (text, from) => {
     if (done) return;
     let r;
     try {
@@ -69,7 +69,8 @@ function scanRecipient(digest, of) {
     } catch {
       return;
     }
-    if (r.kind !== 'recipient') return toast(t('edition.not-recipient'));
+    // Said in the frame, where the eyes are: a toast would be put up again for every camera frame.
+    if (r.kind !== 'recipient') return s.say(t('edition.not-recipient'), true, from.picture);
     done = true;
     s.stop();
     const log = editionLog(digest);

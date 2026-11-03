@@ -1706,3 +1706,38 @@ test('the opened card goes to the archive over the strip, face up — turned ove
   assert.deepEqual(over, over.map(() => true), 'never under the strip while it flies');
   await p.context().close();
 });
+
+test('storage closed by the browser underneath the app: opened again, nothing fails', { skip: process.env.BROWSER === 'firefox' && 'needs Chromium’s DevTools protocol' }, async () => {
+  const p = await env.phone('pixelfox');
+  await tab(p, 'me');
+  // As a browser does when it lets go of a page's storage (Firefox on
+  // Android, after a while in the background): every connection is closed.
+  const cdp = await p.context().newCDPSession(p);
+  await cdp.send('Storage.clearDataForOrigin', { origin: new URL(env.url).origin, storageTypes: 'indexeddb' });
+  await tab(p, 'collection');
+  await tab(p, 'me'); // the profile reads storage as it draws: the error in a real report
+  await p.locator('section.view:visible .group').first().waitFor();
+  assert.deepEqual(await p.evaluate(async () => (await import('/src/diagnostics.js')).journal.entries.map((e) => e.text)), [], 'nothing went wrong');
+  await p.context().close();
+});
+
+test('a wrong picture for the paper key is answered every time, in the frame', async () => {
+  const p = await env.blank('pixelfox');
+  await p.click('text=У меня уже есть ключ');
+  await p.click('.onb .seg >> text=Бумажный ключ');
+  const plain = await png(env.dir, 'plain.png', 40, 40, () => [90, 120, 200, 255]);
+  const broken = join(env.dir, 'broken.png');
+  await writeFile(broken, 'not a picture');
+  const note = '.onb .scanner-start small';
+  const shakes = () => p.$eval(note, (e) => e.getAnimations().length);
+  await choose(p, () => p.click('.onb >> text=Из картинки'), plain);
+  assert.match(await textMatching(p, note, /не нашлось QR-кода/), /не нашлось/);
+  assert.ok(await p.$eval(note, (e) => e.classList.contains('bad')), 'said as a problem');
+  await p.waitForTimeout(400); // the first answer has finished moving
+  await choose(p, () => p.click('.onb >> text=Из картинки'), plain);
+  await p.waitForFunction((s) => document.querySelector(s)?.getAnimations().length, note);
+  assert.ok((await shakes()) > 0, 'the same picture again: answered again, visibly');
+  await choose(p, () => p.click('.onb >> text=Из картинки'), broken);
+  assert.match(await textMatching(p, note, /повреждён/), /не картинка/, 'not a picture is not "no code"');
+  await p.context().close();
+});

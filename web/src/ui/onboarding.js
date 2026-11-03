@@ -146,15 +146,15 @@ export function onboarding(root, done, opts = {}) {
         setKey(null, { text: t('onb.key.sum'), wrong: true });
       }
     });
-    const scan = scanner((text) => {
+    const scan = scanner((text, from) => {
       if (key) return; // read already; the camera keeps reading until stopped
-      if (app.core.classify(text).kind !== 'paper_key') return scan.say(t('onb.key.not-paper'));
+      if (app.core.classify(text).kind !== 'paper_key') return scan.say(t('onb.key.not-paper'), true, from.picture);
       try {
         key = app.core.Identity.fromPaper(text);
         scan.stop();
         setKey(key, { text: '', wrong: false });
       } catch {
-        scan.say(t('onb.key.bad-paper'));
+        scan.say(t('onb.key.bad-paper'), true, from.picture);
       }
     }, t('onb.restore.paper.point'));
     const keyBox = h('div', {});
