@@ -66,6 +66,15 @@ test('the feed: the centre card is the largest and on top', () => {
   assert.ok(Math.abs(mid.x + mid.w / 2 - 195) < 1, 'centred');
 });
 
+test('the opened card rises from the feed only a little, on any screen', () => {
+  for (const f of [{ W: 390, H: 844, top: 76, bottom: 84, lead: 0 }, { W: 412, H: 915, top: 76, bottom: 84, lead: 0 }, { W: 320, H: 568, top: 76, bottom: 84, lead: 0 }, { W: 1280, H: 800, top: 76, bottom: 84, lead: 0 }]) {
+    const feed = feedRect(3, 3, false, f), card = feedRect(3, 3, true, f);
+    const mid = (r) => r.y + (r.w * 1.29) / 2;
+    assert.ok(card.y >= f.top + 8, `below the bar: ${f.W}×${f.H}`);
+    assert.ok(mid(feed) - mid(card) <= 0.1 * (f.H - f.top - f.bottom), `a little above the feed's card, not at the top: ${f.W}×${f.H}`);
+  }
+});
+
 test('springs settle; a flight ends where it was sent', () => {
   const s = new Spring(0);
   s.to = 1;

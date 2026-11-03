@@ -152,7 +152,9 @@ export function collectionView(o) {
   const moves = createMoves({
     stage, strip, host, fly, busy, selection,
     place: () => filter.place, sync,
-    beforeFlight: () => { sheet.follow(0, true); sheet.drop(); },
+    // A card turned over goes face up as it leaves: it lands in the strip as
+    // its front, and turning on the way looks like a card let fall, not a jump at the end.
+    beforeFlight: () => { sheet.follow(0, true); sheet.drop(); turn.flipOver(false); },
     pulling: () => pulling,
     stripMoved: (up) => { stripUp = up; paintTabs(); },
   });

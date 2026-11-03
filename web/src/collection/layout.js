@@ -104,6 +104,8 @@ export function feedTarget(at, speed, from) {
 /** Cards a second: below, the nearest card; to FEED_FLICK, one card; past it, a throw. */
 const FEED_SLOW = 1, FEED_FLICK = 5, FEED_MAX = 10;
 
+/** Where in its free height the opened card sits: 0 the top, 0.5 the middle (the feed's card). */
+const LIFT = 0.42;
 /** The single card's width. @param {Frame} f */
 export const cardWidth = (f) => Math.min(f.W * 0.84, (f.H - f.top - f.bottom - 24) / 1.29, 560);
 
@@ -117,8 +119,11 @@ export const cardWidth = (f) => Math.min(f.W * 0.84, (f.H - f.top - f.bottom - 2
 export function feedRect(i, pos, single, f) {
   const d = i - pos, a = Math.abs(d);
   if (single) {
-    const w = cardWidth(f);
-    return { x: (f.W - w) / 2 + d * f.W * 1.05, y: f.top + 8, w, cap: 1, o: a < 0.5 ? 1 : 0, z: 100 };
+    // A little above the middle of the room it has, as the eye takes the
+    // middle to be: on a tall screen it no longer climbs to the top from
+    // the feed, where it sat in the middle.
+    const w = cardWidth(f), h = w * 1.29, room = f.H - f.top - f.bottom - h;
+    return { x: (f.W - w) / 2 + d * f.W * 1.05, y: f.top + Math.max(8, room * LIFT), w, cap: 1, o: a < 0.5 ? 1 : 0, z: 100 };
   }
   const w = feedWidth(f);
   // A neighbour moves out fast at first and settles: halfway (when the
