@@ -448,7 +448,7 @@ export function editorView() {
   function keep() {
     clearTimeout(saving);
     saving = window.setTimeout(() => {
-      setMeta(DRAFT, { v: 2, doc: { ...model.doc }, history: model.history.save(), frame: state.frame, layer: state.layer, color: state.color }).catch(() => {});
+      setMeta(DRAFT, { v: 2, doc: { ...model.doc }, history: model.history.save(), frame: state.frame, layer: state.layer, color: state.color }).catch((e) => caught(e, 'draft')); // a draft not kept is worth the journal: storage full, most likely
     }, 600);
   }
   model.listen((c) => {

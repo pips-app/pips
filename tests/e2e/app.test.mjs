@@ -1661,3 +1661,24 @@ test('several cards at once: chosen in the collection, sent as one file or as pi
   assert.equal(await cards(b), 5);
   for (const x of [a, b]) await x.context().close();
 });
+
+test('a chosen card scrolled far off the screen flies to the archive from where it really is', async () => {
+  const p = await env.phone('pixelfox');
+  await tab(p, 'me');
+  await samples(p);
+  await p.locator('.collection-view:visible').waitFor();
+  await p.waitForTimeout(800);
+  await p.click('section.view:visible >> text=Выбрать');
+  const first = await p.$$eval('.on-stage', (els) => els.map((e) => e.getBoundingClientRect()).filter((r) => r.width > 20 && r.top > 60).sort((a, b) => a.top - b.top || a.left - b.left)[0]);
+  await p.mouse.click(first.x + first.width / 2, first.y + first.height / 2);
+  // Off the top in two goes: hidden once past the edge (not drawn there), then much further.
+  await p.mouse.move(200, 500);
+  for (let i = 0; i < 2; i++) { await p.mouse.wheel(0, 1200); await p.waitForTimeout(900); }
+  assert.equal(await p.$eval('.on-stage.chosen', (e) => e.style.visibility), 'hidden', 'past the edge, not shown where it was');
+  await p.click('.action-bar.up [data-act="archive"]');
+  await p.locator('.fly-layer .on-stage').waitFor({ state: 'attached' });
+  // Where its flight starts: the first frame drawn after the press.
+  const top = await p.$eval('.fly-layer .on-stage', (e) => new Promise((ok) => requestAnimationFrame(() => ok(e.getBoundingClientRect().top))));
+  assert.ok(top < -first.height * 2, `it starts far above the screen, not where it was last seen: ${top}`);
+  await p.context().close();
+});

@@ -84,7 +84,7 @@ export function dragScroll(el) {
   el.addEventListener('pointercancel', end);
   // The click a drag ends in: not a press of what lies under it.
   el.addEventListener('click', (e) => {
-    if (!swallow) return;
+    if (!swallow || e.detail === 0) return; // detail 0: a click from the keys, never the end of a drag
     swallow = false;
     e.stopPropagation();
     e.preventDefault();

@@ -174,7 +174,8 @@ export function createStage(o) {
       c.rr = { x: r.x, y: r.y, w: r.w, h: hgt, cap: r.cap, o: r.o, z: r.z };
       // Off the screen: hidden and left as it is — nothing to lay out or paint
       // for the hundreds of cards a grid holds beyond its edges.
-      if (r.y > fr.H + CULL || r.y + hgt < -CULL || r.x > fr.W + CULL || r.x + r.w < -CULL) {
+      // A card in flight is always drawn: it is on its way onto the screen.
+      if (!c.flying && (r.y > fr.H + CULL || r.y + hgt < -CULL || r.x > fr.W + CULL || r.x + r.w < -CULL)) {
         c.el.style.visibility = 'hidden';
         continue;
       }

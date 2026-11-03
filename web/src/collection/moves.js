@@ -101,9 +101,12 @@ export function createMoves(o) {
     // With less motion asked for, the cards are simply there: no lift, no arc, no queue.
     const now = performance.now(), start = now + (pulled || REDUCED ? 0 : 160);
     const dur = REDUCED ? 1 : 620, gap = REDUCED ? 0 : list.length <= 6 ? 190 : Math.max(60, 1100 / list.length);
+    // Each flies from where it was drawn last — read from the stage, not the
+    // page: a card past the screen's edge is not drawn there at all.
+    const hr = o.host.getBoundingClientRect();
     list.forEach((c, k) => {
-      const r0 = c.el.getBoundingClientRect(), t0 = start + k * gap;
-      const path = flight({ x: r0.left, y: r0.top, w: r0.width }, () => strip.slot(0), { start: t0, dur });
+      const r0 = c.rr ?? { x: 0, y: 0, w: 0 }, t0 = start + k * gap;
+      const path = flight({ x: hr.left + r0.x, y: hr.top + r0.y, w: r0.w }, () => strip.slot(0), { start: t0, dur });
       o.fly.append(c.el); // above the strip: the card lands on it, not under it
       if (inFeed) {
         // The neighbours close the gap while it flies, so nothing jumps at the end.
