@@ -1683,7 +1683,7 @@ test('a chosen card scrolled far off the screen flies to the archive from where 
   await p.context().close();
 });
 
-test('a card turned over goes to the archive face up, turning as it leaves', async () => {
+test('the opened card goes to the archive over the strip, face up — turned over or not', async () => {
   const p = await env.phone('pixelfox');
   await tab(p, 'me');
   await samples(p);
@@ -1697,5 +1697,12 @@ test('a card turned over goes to the archive face up, turning as it leaves', asy
   await act(p, 'down');
   await p.waitForTimeout(450); // well before it lands
   assert.equal(await side(), 0, 'face up again while it flies');
+  assert.ok(await p.$eval('.turn', (e) => !!e.closest('.fly-layer')), 'over the archive strip it lands on, not under it');
+  // Face up from the start, the next one too: over the strip all the way down.
+  await p.waitForTimeout(1500);
+  await act(p, 'down');
+  const over = [];
+  for (let i = 0; i < 6; i++) { await p.waitForTimeout(90); over.push(await p.$eval('.turn', (e) => e.hidden || !!e.closest('.fly-layer') || !document.querySelector('.fly-layer .on-stage'))); } // landed: the next card, back in the stage
+  assert.deepEqual(over, over.map(() => true), 'never under the strip while it flies');
   await p.context().close();
 });

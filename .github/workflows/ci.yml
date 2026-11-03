@@ -24,7 +24,7 @@ jobs:
     name: Rust — format, lints, tests
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       # Pinned: every Rust release adds lints, and CI should not turn red
       # without a change in this repository. Raise it on purpose.
       - uses: dtolnay/rust-toolchain@1.99.0
@@ -42,7 +42,7 @@ jobs:
     name: Dependencies — RustSec advisories
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: taiki-e/install-action@v2
         with:
           tool: cargo-audit
@@ -52,7 +52,7 @@ jobs:
     name: Rust 1.85.1 (declared minimum)
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@1.85.1
       - uses: Swatinem/rust-cache@v2
       - run: cargo check --workspace --lib --bins
@@ -61,7 +61,7 @@ jobs:
     name: Web — WebAssembly core, type check, site
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32-unknown-unknown
@@ -81,9 +81,9 @@ jobs:
         run: node --test --test-reporter=spec --test-reporter-destination=stdout --test-reporter=./tests/gh-annotate.mjs --test-reporter-destination=stdout tests/unit/*.test.mjs
       # The app's journeys in a real browser, with the core just built:
       # import, exchange by QR, refusals, numbered copies, backups.
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
-          node-version: 22
+          node-version: 24
           cache: npm
           cache-dependency-path: tests/e2e/package-lock.json
       - name: Browser tests
@@ -103,7 +103,7 @@ jobs:
           ANNOTATE: --test-reporter=spec --test-reporter-destination=stdout --test-reporter=../gh-annotate.mjs --test-reporter-destination=stdout
         run: BROWSER=firefox npm test -- $ANNOTATE
       - run: scripts/build-site.sh
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@v5
         with:
           path: _site
 
@@ -120,4 +120,4 @@ jobs:
       url: ${{ steps.deploy.outputs.page_url }}
     steps:
       - id: deploy
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
