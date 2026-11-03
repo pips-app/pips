@@ -98,7 +98,8 @@ every target on each push and for longer once a week.
 Start with [docs/GUIDE.md](docs/GUIDE.md) (Russian): how the project is
 put together, where things live, how to fix a bug properly and what not to
 touch. First project ever? [docs/FIRST-STEPS.md](docs/FIRST-STEPS.md).
-AI assistants: [AGENTS.md](AGENTS.md).
+AI assistants: [AGENTS.md](AGENTS.md). Plans for an Android app:
+[docs/ANDROID.md](docs/ANDROID.md) (Russian).
 
 ## Licence
 
