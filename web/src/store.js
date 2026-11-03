@@ -17,8 +17,15 @@
 
 import { SCHEMA, stepsFrom } from './schema.js';
 
-/** @type {IDBDatabase} */
-let db;
+/** The open connection; null when the browser closed it (it may, on its own). @type {IDBDatabase | null} */
+let db = null;
+let dbName = '';
+/** Handed over to a newer app in another tab: never opened again here. */
+let gone = false;
+/** A reopening under way, shared by everyone who needs the data meanwhile. @type {Promise<void> | null} */
+let reopening = null;
+/** Connections the browser closed: what was under way on them failed for that reason alone. @type {WeakSet<IDBDatabase>} */
+const closed = new WeakSet();
 /** When IndexedDB is unavailable (some private modes, blocked site data),
  * everything lives in memory for this session; `memoryOnly` says so. */
 export let memoryOnly = false;
@@ -40,6 +47,7 @@ export function onBlocked(fn) { blocked = fn; }
  * @param {string} name
  */
 export async function open(name) {
+  dbName = name;
   try {
     await openDb(name);
   } catch (e) {
@@ -65,10 +73,18 @@ function openDb(name) {
     // the person is, and the upgrade goes on by itself once they have.
     req.onblocked = () => blocked();
     req.onsuccess = () => {
-      db = req.result;
-      db.onversionchange = () => {
-        db.close();
+      const d = (db = req.result);
+      d.onversionchange = () => {
+        gone = true;
+        d.close();
+        db = null;
         replaced();
+      };
+      // The browser can close a connection by itself (Firefox does, on
+      // Android, after a while in the background): the next use reopens it.
+      d.onclose = () => {
+        closed.add(d);
+        if (db === d) db = null;
       };
       resolve(undefined);
     };
@@ -116,10 +132,51 @@ function done(req) {
   });
 }
 
-/** @param {string} store @param {IDBTransactionMode} mode */
-function tx(store, mode) {
-  return db.transaction(store, mode).objectStore(store);
+/**
+ * A transaction on the open connection, opened again first if the browser
+ * closed it. A connection can be closed without its close event having come
+ * yet: then the attempt fails with InvalidStateError and is made once more.
+ * @param {string} store @param {IDBTransactionMode} mode @returns {Promise<IDBTransaction>}
+ */
+async function begin(store, mode) {
+  for (let attempt = 0; ; attempt++) {
+    if (gone) throw Object.assign(new Error('the data is now used by a newer version of the app'), { code: 'store_replaced' });
+    if (!db) await (reopening ??= openDb(dbName).finally(() => { reopening = null; }));
+    try {
+      return /** @type {IDBDatabase} */ (db).transaction(store, mode);
+    } catch (e) {
+      if (attempt || /** @type {any} */ (e)?.name !== 'InvalidStateError') throw e;
+      db?.close();
+      db = null;
+    }
+  }
 }
+
+/**
+ * Runs `run` on a transaction, once more if the browser closed the
+ * connection under it (its requests fail then, through no fault of theirs).
+ * Reads are safe to repeat, and so are these writes: each puts or deletes
+ * one whole record.
+ * @template T @param {string} store @param {IDBTransactionMode} mode @param {(t: IDBTransaction) => Promise<T>} run @returns {Promise<T>}
+ */
+async function retried(store, mode, run) {
+  const t = await begin(store, mode);
+  try {
+    return await run(t);
+  } catch (e) {
+    // The close event comes after the aborts it causes, so an abort with no
+    // error of its own (this code never aborts) counts as one too.
+    if (!closed.has(t.db) && /** @type {any} */ (e)?.name !== 'AbortError') throw e;
+    if (db === t.db) {
+      db = null;
+      t.db.close(); // if it was still open: one connection at a time, never two
+    }
+    return run(await begin(store, mode));
+  }
+}
+
+/** @param {string} store @param {(s: IDBObjectStore) => IDBRequest} op */
+const read = (store, op) => retried(store, 'readonly', (t) => done(op(t.objectStore(store))));
 
 /**
  * A write, done once it is on disk: a request succeeds before its
@@ -128,24 +185,23 @@ function tx(store, mode) {
  * @param {string} store @param {(s: IDBObjectStore) => IDBRequest} op
  */
 function write(store, op) {
-  return new Promise((resolve, reject) => {
-    const t = db.transaction(store, 'readwrite');
+  return retried(store, 'readwrite', (t) => new Promise((resolve, reject) => {
     op(t.objectStore(store));
     t.oncomplete = () => resolve(undefined);
     t.onerror = () => reject(t.error);
     t.onabort = () => reject(t.error ?? new DOMException('transaction aborted', 'AbortError'));
-  });
+  }));
 }
 
 /** @param {string} key */
-export const getMeta = async (key) => (memoryOnly ? mem.meta.get(key) : done(tx('meta', 'readonly').get(key)));
+export const getMeta = async (key) => (memoryOnly ? mem.meta.get(key) : read('meta', (m) => m.get(key)));
 /** @param {string} key @param {any} value */
 export const setMeta = async (key, value) => (memoryOnly ? void mem.meta.set(key, value) : write('meta', (m) => m.put(value, key)));
 
 /** @returns {Promise<CardRecord[]>} */
-export const allCards = async () => (memoryOnly ? [...mem.cards.values()] : done(tx('cards', 'readonly').getAll()));
+export const allCards = async () => (memoryOnly ? [...mem.cards.values()] : read('cards', (c) => c.getAll()));
 /** @param {string} digest @returns {Promise<CardRecord|undefined>} */
-export const getCard = async (digest) => (memoryOnly ? mem.cards.get(digest) : done(tx('cards', 'readonly').get(digest)));
+export const getCard = async (digest) => (memoryOnly ? mem.cards.get(digest) : read('cards', (c) => c.get(digest)));
 /** @param {CardRecord} rec */
 export const putCard = async (rec) => (memoryOnly ? void mem.cards.set(rec.digest, rec) : write('cards', (c) => c.put(rec)));
 /** @param {string} digest */

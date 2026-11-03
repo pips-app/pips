@@ -42,6 +42,7 @@
   --serif: "Literata", Georgia, serif; --sans: "IBM Plex Sans", system-ui, sans-serif;
   /* A card's caption: this share of the frame's width plus this much (read by stage.js too). */
   --cap-share: .19; --cap-add: 10px;
+  --edge: 3.6cqw; /* the paper round a card's picture, as a share of the card's width: wherever a card is drawn, at any size */
   --tabs: 66px; --safe-b: env(safe-area-inset-bottom, 0px); --safe-t: env(safe-area-inset-top, 0px);
   color-scheme: dark;
 }
@@ -144,7 +145,7 @@ svg.i { width: 22px; height: 22px; stroke: currentColor; fill: none; stroke-widt
 .flip { position: relative; }
 .face { backface-visibility: hidden; background: var(--shade); border-radius: 3px;
   box-shadow: 0 12px 24px -12px rgba(0, 0, 0, .75), 0 0 0 1px rgba(0, 0, 0, .35); }
-.front { padding: 3.6cqw 3.6cqw 0; }
+.front { padding: var(--edge) var(--edge) 0; }
 .art { aspect-ratio: 1; background: color-mix(in srgb, var(--shade) 88%, #000); overflow: hidden; }
 .art canvas { display: block; width: 100%; height: 100%; object-fit: contain; image-rendering: pixelated; }
 /* An animated card, held still: a small "play" in its corner. */
@@ -158,7 +159,7 @@ svg.i { width: 22px; height: 22px; stroke: currentColor; fill: none; stroke-widt
 .cap b { font: 600 max(11px, 6.2cqw)/1.3 var(--serif); color: var(--shade-ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .cap i { font-style: normal; font-size: max(10px, 4.6cqw); line-height: 1.35; color: var(--shade-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .frame.bare .cap { display: none; }
-.frame.bare .front { padding-bottom: 3.6cqw; }
+.frame.bare .front { padding-bottom: var(--edge); }
 
 /* --------------------------------------------------------------- overlay -- */
 .overlay { position: fixed; inset: 0; z-index: 500; background: var(--void); display: flex; flex-direction: column;
@@ -184,6 +185,7 @@ svg.i { width: 22px; height: 22px; stroke: currentColor; fill: none; stroke-widt
   align-items: center; justify-content: center; gap: 10px; color: var(--cobalt-hi); font-size: 15px;
   padding: 0 calc(18% + 14px); } /* the words stay inside the corners */
 .scanner-start small { color: var(--text3); font-size: 12.5px; line-height: 1.4; text-align: center; }
+.scanner .bad { color: var(--warn); } /* scan.js: what went wrong, said in the frame */
 .scanner.live .scanner-start { display: none; }
 .scanner-start svg { width: 36px; height: 36px; }
 .scanner-start:active { background: #ffffff08; }

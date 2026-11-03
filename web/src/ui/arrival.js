@@ -32,7 +32,9 @@ export async function arrive(envelope, via = 'code') {
   } catch (e) {
     caught(e, 'arrival');
     const code = /** @type {any} */ (e)?.code;
-    toast(t(FORGED.has(code) ? 'receive.forged' : via === 'link' ? 'link.bad' : 'receive.damaged'));
+    // A card that checked out but could not be kept: the device is full, not the code damaged.
+    if (/** @type {any} */ (e)?.name === 'QuotaExceededError') toast(t('err.storage-full'));
+    else toast(t(FORGED.has(code) ? 'receive.forged' : via === 'link' ? 'link.bad' : 'receive.damaged'));
     return false;
   }
 }

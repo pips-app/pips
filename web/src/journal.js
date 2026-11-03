@@ -37,7 +37,8 @@ export function describe(e, origin = '') {
 
 /**
  * @param {{now?: () => number, where?: () => string, origin?: string,
- *   save?: (entries: Entry[]) => void}} [o] save: called after each change
+ *   save?: (entries: Entry[]) => void, told?: (entry: Entry) => void}} [o]
+ * save: called after each change; told: with each thing written down, as it happens
  */
 export function createJournal(o = {}) {
   const now = o.now ?? Date.now;
@@ -59,6 +60,10 @@ export function createJournal(o = {}) {
     } else {
       entries = [...entries, { at: now(), kind, where, text, stack, count: 1 }].slice(-MAX_ENTRIES);
     }
+    // Told once, then again at ×10, ×100…: a loop that throws every frame
+    // must not flood whoever listens (the console) along with it.
+    const at = entries[entries.length - 1];
+    if (Number.isInteger(Math.log10(at.count))) o.told?.(at);
     changed();
   }
 

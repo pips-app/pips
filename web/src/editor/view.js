@@ -438,7 +438,8 @@ export function editorView() {
       toast(t('import.saved'));
     } catch (e) {
       caught(e, 'editor');
-      toast(`${t('err.generic')}: ${/** @type {any} */ (e)?.message ?? e}`);
+      // The device full: said as such; the drawing stays, nothing is lost.
+      toast(/** @type {any} */ (e)?.name === 'QuotaExceededError' ? t('err.storage-full') : `${t('err.generic')}: ${/** @type {any} */ (e)?.message ?? e}`);
     }
   }
 

@@ -1706,3 +1706,103 @@ test('the opened card goes to the archive over the strip, face up — turned ove
   assert.deepEqual(over, over.map(() => true), 'never under the strip while it flies');
   await p.context().close();
 });
+
+test('storage closed by the browser underneath the app: opened again, nothing fails', { skip: process.env.BROWSER === 'firefox' && 'needs Chromium’s DevTools protocol' }, async () => {
+  const p = await env.phone('pixelfox');
+  await tab(p, 'me');
+  // As a browser does when it lets go of a page's storage (Firefox on
+  // Android, after a while in the background): every connection is closed.
+  const cdp = await p.context().newCDPSession(p);
+  await cdp.send('Storage.clearDataForOrigin', { origin: new URL(env.url).origin, storageTypes: 'indexeddb' });
+  await tab(p, 'collection');
+  await tab(p, 'me'); // the profile reads storage as it draws: the error in a real report
+  await p.locator('section.view:visible .group').first().waitFor();
+  assert.deepEqual(await p.evaluate(async () => (await import('/src/diagnostics.js')).journal.entries.map((e) => e.text)), [], 'nothing went wrong');
+  await p.context().close();
+});
+
+test('a wrong picture for the paper key is answered every time, in the frame', async () => {
+  const p = await env.blank('pixelfox');
+  await p.click('text=У меня уже есть ключ');
+  await p.click('.onb .seg >> text=Бумажный ключ');
+  const plain = await png(env.dir, 'plain.png', 40, 40, () => [90, 120, 200, 255]);
+  const broken = join(env.dir, 'broken.png');
+  await writeFile(broken, 'not a picture');
+  const note = '.onb .scanner-start small';
+  const shakes = () => p.$eval(note, (e) => e.getAnimations().length);
+  await choose(p, () => p.click('.onb >> text=Из картинки'), plain);
+  assert.match(await textMatching(p, note, /не нашлось QR-кода/), /не нашлось/);
+  assert.ok(await p.$eval(note, (e) => e.classList.contains('bad')), 'said as a problem');
+  await p.waitForTimeout(400); // the first answer has finished moving
+  await choose(p, () => p.click('.onb >> text=Из картинки'), plain);
+  await p.waitForFunction((s) => document.querySelector(s)?.getAnimations().length, note);
+  assert.ok((await shakes()) > 0, 'the same picture again: answered again, visibly');
+  await choose(p, () => p.click('.onb >> text=Из картинки'), broken);
+  assert.match(await textMatching(p, note, /повреждён/), /не картинка/, 'not a picture is not "no code"');
+  await p.context().close();
+});
+
+// Seeded random use of the whole app — taps on whatever can be pressed,
+// keys, drags — as a hurried or curious person would. It looks for what no
+// scripted journey thought of: any page error, any fault written in the
+// journal (both reach the console, which the hook after the tests checks),
+// and anything left open that Escape does not close. Same seed, same steps.
+test('a monkey loose in the app finds nothing wrong', { timeout: 300_000 }, async () => {
+  const p = await env.phone('monkey');
+  await tab(p, 'me');
+  await samples(p);
+  p.on('filechooser', () => {}); // a picker opened by a tap is left unanswered
+  let seed = 4;
+  const rnd = (n) => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed % n; };
+  const KEYS = ['Escape', '+', '-', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Enter', ' ', 'Tab', 'z', 'Delete'];
+  // Not these: they end the session (a new key), undo the setup (samples,
+  // developer mode), or open the browser's own window (reading the
+  // clipboard: Firefox asks with a menu of its own, outside the page).
+  const SPARE = /Сменить ключ|Удалить насовсем|Выключить|Очистить|Убрать образцы|Вставить ссылку из буфера/;
+  // What it did last: said if a step never comes back, instead of a silent hang.
+  const done = [];
+  const within = (/** @type {Promise<unknown>} */ step) => Promise.race([step, new Promise((_, no) => setTimeout(() => no(new Error(`a step hung; the last ones: ${done.slice(-6).join(' · ')}`)), 15_000))]);
+  const { width: W, height: H } = /** @type {{width: number, height: number}} */ (p.viewportSize());
+  for (let step = 0; step < 250; step++) {
+    const k = rnd(10);
+    try {
+      if (k < 6) {
+        const targets = await within(p.evaluate(() => [...document.querySelectorAll('button, [role="button"], summary, a[href], input[type="checkbox"], .on-stage, canvas, .ed-frame')]
+          .map((e) => {
+            const r = e.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2, top = document.elementFromPoint(x, y);
+            const ok = r.width > 4 && r.height > 4 && x > 0 && y > 0 && x < innerWidth && y < innerHeight && !(/** @type {any} */ (e).disabled) && top && (top === e || e.contains(top));
+            return ok ? { x, y, n: String(e.getAttribute('aria-label') || e.textContent || '').trim().slice(0, 40) } : null;
+          }).filter((v) => v !== null)));
+        const fair = /** @type {{x: number, y: number, n: string}[]} */ (targets).filter((v) => !SPARE.test(v.n));
+        if (!fair.length) continue;
+        const tp = fair[rnd(fair.length)];
+        done.push(`tap «${tp.n}»`);
+        await within(p.mouse.click(tp.x, tp.y));
+      } else if (k < 8) {
+        const key = KEYS[rnd(KEYS.length)];
+        done.push(`key ${key}`);
+        await within(p.keyboard.press(key));
+      } else {
+        const x = 40 + rnd(W - 80), y = 120 + rnd(H - 260);
+        done.push(`drag at ${x},${y}`);
+        await within((async () => {
+          await p.mouse.move(x, y);
+          await p.mouse.down();
+          await p.mouse.move(x + rnd(240) - 120, y + rnd(400) - 200, { steps: 5 });
+          await p.mouse.up();
+        })());
+      }
+      await p.waitForTimeout(60 + rnd(250));
+    } catch (e) {
+      if (/a step hung/.test(String(/** @type {any} */ (e)?.message))) throw e;
+      /* a target gone before the tap: not a finding */
+    }
+  }
+  for (let i = 0; i < 6; i++) { await p.keyboard.press('Escape'); await p.waitForTimeout(400); }
+  const open = await p.evaluate(() => [...document.querySelectorAll('[role="dialog"], .overlay, .scrim')].filter((e) => {
+    const r = e.getBoundingClientRect(), cs = getComputedStyle(e);
+    return r.width > 0 && r.height > 0 && r.top < innerHeight - 2 && r.bottom > 2 && cs.visibility !== 'hidden' && Number(cs.opacity) > 0.05 && !e.closest('[hidden]');
+  }).map((e) => e.className));
+  assert.deepEqual(open, [], 'Escape closes whatever was left open');
+  await p.context().close();
+});

@@ -179,7 +179,8 @@ export function cardBack(entry, o) {
 function links(card) {
   const copy = (/** @type {string} */ text) => h('button', {
     type: 'button', class: 'mini-btn',
-    onclick: () => navigator.clipboard?.writeText(text).then(() => toast(t('toast.copied')), () => {}),
+    // Copying can be refused (no clipboard off https, a denied permission): said, not swallowed.
+    onclick: () => (navigator.clipboard?.writeText(text) ?? Promise.reject(new Error('no clipboard'))).then(() => toast(t('toast.copied')), () => toast(t('toast.copy-failed'))),
   }, t('back.copy'));
   const out = [];
   if (card.handle) out.push({ k: card.handle.network, v: [card.handle.text, ' ', copy(card.handle.text)] });
