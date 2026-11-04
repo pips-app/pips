@@ -148,13 +148,35 @@ export function pile(state) {
 /** Days left before a binned card goes for good. @param {CardRecord} rec */
 export const daysLeft = (rec) => Math.max(1, TRASH_DAYS - Math.floor((Date.now() - (rec.trashedAt ?? Date.now())) / DAY));
 
-/** @param {Omit<CardRecord, 'digest'>} partial @returns {Promise<{status: 'added'|'duplicate', digest: string}>} */
+/**
+ * Whether `got` is this person's numbered copy of a card kept as `have`
+ * without one: the same picture (the same digest), but with a certificate
+ * made out to this key. Someone else's numbered copy passed on is not.
+ * @param {{cert?: Uint8Array|null}} have @param {{cert?: Uint8Array|null, edition?: {holder: string}|null}} got
+ */
+const ownCopyOf = (have, got) => !have.cert && !!got.cert && got.edition?.holder === app.identity?.publicKey().hex;
+
+/**
+ * Keeps a card. One already here stays as it is — unless what came is
+ * this person's numbered copy of it: then that takes its place, payload
+ * and certificate together (the certificate holds for the signature it
+ * came with), and the note, tags and place stay.
+ * @param {Omit<CardRecord, 'digest'>} partial
+ * @returns {Promise<{status: 'added'|'numbered'|'duplicate', digest: string}>}
+ */
 async function add(partial) {
   const i = app.core.inspectCard(partial.payload);
   const existing = app.cards.get(i.digest);
   if (existing) {
     if (existing.rec.state !== 'collection') await move(i.digest, 'collection');
-    return { status: 'duplicate', digest: i.digest };
+    if (!ownCopyOf(existing.rec, partial)) return { status: 'duplicate', digest: i.digest };
+    existing.rec = { ...existing.rec, payload: partial.payload, cert: partial.cert, edition: partial.edition, from: partial.from, mine: partial.mine };
+    existing.card = i.card;
+    existing.author = i.author ?? null;
+    await store.putCard(existing.rec);
+    await touch({ card: i.digest });
+    changed();
+    return { status: 'numbered', digest: i.digest };
   }
   const rec = { ...partial, digest: i.digest };
   await store.putCard(rec);
@@ -317,12 +339,19 @@ export async function applyBackup(b) {
     const here = app.cards.get(i.digest);
     if (here) {
       known++;
+      // This person's numbered copy in the backup, a plain one here: the numbered one is kept.
+      const numbered = ownCopyOf(here.rec, c);
+      if (numbered) {
+        here.rec = { ...here.rec, payload: c.payload, cert: c.cert, edition: c.edition, mine: isMine(i.author ?? null) };
+        here.card = i.card;
+        here.author = i.author ?? null;
+      }
       const r = here.rec;
       const note = r.note || c.note || '';
       const tags = r.tags?.length ? r.tags : c.tags ?? [];
       const editions = r.editions || c.editions ? joinLogs(r.editions, c.editions) : undefined;
       const more = (editions?.issued.length ?? 0) > (r.editions?.issued.length ?? 0);
-      if (note !== r.note || tags !== r.tags || more) {
+      if (numbered || note !== r.note || tags !== r.tags || more) {
         here.rec = { ...r, note, tags, ...(editions ? { editions } : {}) };
         await store.putCard(here.rec);
         await touch({ card: i.digest });

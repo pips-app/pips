@@ -10,10 +10,10 @@ import { toast } from './shell.js';
 import { scanner } from './scan.js';
 import { caught } from '../diagnostics.js';
 import { showRecipientCode } from './edition.js';
-import { FORGED, arrived, arrive, arriveMany } from './arrival.js';
+import { arrived, arrive, arriveMany, refusal } from './arrival.js';
 import { MAGIC } from '../links.js';
 import { isPng, envelopeIn } from '../png-card.js';
-import { isBundle, unpackBundle } from '../bundle.js';
+import { isBundle, bundleIsNewer, unpackBundle } from '../bundle.js';
 
 /** The first byte of an envelope (pips-wasm). */
 const ENVELOPE = 0x45; // 'E'
@@ -84,6 +84,7 @@ export function receiveView() {
       return env ? { envelopes: [env] } : { problem: 'receive.no-card-in-picture' };
     }
     if (isBundle(bytes)) {
+      if (bundleIsNewer(bytes)) return { problem: 'receive.newer' };
       const all = unpackBundle(bytes);
       return all ? { envelopes: all } : { problem: 'receive.file-damaged' };
     }
@@ -111,8 +112,7 @@ export function receiveView() {
         done(await receivePayload(one.payload));
       } catch (e) {
         caught(e, 'receive');
-        const code = /** @type {any} */ (e)?.code;
-        toast(t(/** @type {any} */ (e)?.name === 'QuotaExceededError' ? 'err.storage-full' : FORGED.has(code) ? 'receive.forged' : 'receive.file-damaged'));
+        toast(refusal(e, 'receive.file-damaged'));
       }
       return;
     }
@@ -165,8 +165,7 @@ export function receiveView() {
     } catch (e) {
       // A damaged or forged code lands here: openEnvelope checks every signature.
       caught(e, 'receive');
-      const code = /** @type {any} */ (e)?.code;
-      toast(t(FORGED.has(code) ? 'receive.forged' : looksPips ? 'receive.damaged' : 'receive.not-pips'));
+      toast(refusal(e, looksPips ? 'receive.damaged' : 'receive.not-pips'));
     }
   }
 

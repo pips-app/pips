@@ -82,6 +82,41 @@ test('a .pips file from before envelopes — a bare signed card — still opens,
   await b.context().close();
 });
 
+test('a card from a newer version of Pips is said to be so — as a file, a link, a bundle — not called damaged', async () => {
+  const a = await env.phone('futurefox');
+  await ownCard(a, 'Из будущего', env.dir);
+  // The card's own envelope, then the same with a version this app does not know.
+  const { magic, envelope } = await a.evaluate(async () => {
+    const { MAGIC } = await import('/src/links.js');
+    const s = await import('/src/state.js');
+    const [e] = [...s.app.cards.values()];
+    return { magic: MAGIC, envelope: [...s.app.identity.sealAsAuthor(e.rec.payload, undefined)] };
+  });
+  const newer = Uint8Array.from(envelope);
+  newer[1] = 2; // 'E', then the envelope's version
+  const NEWER = 'Это сделала более новая версия Pips — обновите приложение и откройте снова';
+
+  const b = await env.phone('pastowl');
+  await tab(b, 'receive');
+  const open = async (/** @type {Uint8Array} */ bytes, /** @type {string} */ name) => {
+    const f = join(env.dir, name);
+    await writeFile(f, bytes);
+    return toastAfter(b, () => choose(b, () => b.click('section.view:visible >> text=Файл .pips'), f));
+  };
+  assert.equal(await open(Uint8Array.from([...magic, ...newer]), 'newer.pips'), NEWER, 'a file');
+  // A bundle laid out anew: B, then its layout.
+  const bundle = await b.evaluate(async (e) => [...(await import('/src/bundle.js')).packBundle([Uint8Array.from(e)])], envelope);
+  bundle[magic.length + 1] = 2;
+  assert.equal(await open(Uint8Array.from(bundle), 'newer-bundle.pips'), NEWER, 'a bundle');
+  // A link: the envelope after the #.
+  await b.goto('about:blank');
+  await b.goto(`${env.url}#${Buffer.from(newer).toString('base64url')}`);
+  assert.equal(await toast(b), NEWER, 'a link');
+  assert.equal(await cards(b), 0, 'and nothing taken');
+  await a.context().close();
+  await b.context().close();
+});
+
 test('damaged and forged codes are refused with their reason', async () => {
   const a = await env.phone('pixelfox');
   await ownCard(a, 'Сердце', env.dir);
@@ -147,6 +182,39 @@ test('numbered copies: issued once each, until the run is complete', async () =>
   // (Profile draws itself anew when shown: wait for it.)
   assert.match(await textMatching(a, '.group:has(h2:text("Резервная копия"))', /После копии/), /изменений после неё: 1.*После копии выданы 2 номерных экземпляра/s);
   assert.ok(await a.locator('.group:has(h2:text("Резервная копия")) .btn.key').isVisible(), 'saving is the main action now');
+  await a.context().close();
+  await b.context().close();
+});
+
+test('a numbered copy made out to someone who already has the card takes the plain one\'s place, and says so', async () => {
+  const a = await env.phone('pixelfox');
+  const b = await env.phone('mossfern');
+  await ownCard(a, 'Сердце', env.dir);
+  await act(a, 'share');
+  // First a plain copy, as a friend would pass it on.
+  const plain = await photo(a, '.top-sheet .qr-box', env.dir, 'plain');
+  await tab(b, 'receive');
+  assert.equal(await toastAfter(b, () => fromPicture(b, 'section.view:visible', plain)), 'Карточка в коллекции');
+  await tab(b, 'receive');
+  await b.click('text=Код получателя');
+  const rc = await photo(b, '.overlay .qr-box', env.dir, 'recipient-later');
+  await b.click('.overlay .icon-btn');
+  // Then the author issues №1 to the same person.
+  await a.click('.top-sheet button:text("Экземпляр №")');
+  await a.fill('.edition-panel input', '3');
+  await a.click('text=Выдать №1');
+  await fromPicture(a, '.overlay', rc);
+  await a.click('.dialog button:text-is("Выдать")');
+  const numbered = await photo(a, '.overlay .qr-box', env.dir, 'numbered-later');
+  await a.click('.overlay >> text=Готово');
+  // It used to say «Такая карточка уже есть» and throw the certificate away.
+  assert.equal(await toastAfter(b, () => fromPicture(b, 'section.view:visible', numbered)), 'Теперь у вас экземпляр 1 из 3 — он заменил прежнюю копию');
+  await b.locator('.turn:not([hidden])').waitFor();
+  assert.match(await backText(b), /экземпляр 1 из 3 — ваш/);
+  assert.equal(await cards(b), 1, 'still one card');
+  // And once more: nothing new now.
+  await tab(b, 'receive');
+  assert.equal(await toastAfter(b, () => fromPicture(b, 'section.view:visible', numbered)), 'Такая карточка уже есть');
   await a.context().close();
   await b.context().close();
 });

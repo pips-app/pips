@@ -116,6 +116,49 @@ fn large_card_over_carousel() {
     assert_eq!(open_envelope(&joined).unwrap().card, card);
 }
 
+/// The code a refusal comes with.
+fn code<T>(r: Result<T, pips_wasm::api::ApiError>) -> &'static str {
+    r.map(drop).unwrap_err().code
+}
+
+/// What a newer app made is said as such — not as damage — so the person
+/// knows to update, not to ask for the card again. Version 0 is damage.
+#[test]
+fn a_newer_version_is_told_apart_from_damage() {
+    let me = id(1);
+    let payload = me.sign_card(&editor_card()).unwrap();
+    let env = me.seal_as_author(&payload, None).unwrap();
+    let with = |b: &[u8], at: usize, v: u8| {
+        let mut b = b.to_vec();
+        b[at] = v;
+        b
+    };
+    // A card: its version byte, a flag not to be skipped, a palette not built in yet.
+    assert_eq!(code(inspect_card(&with(&payload, 0, 2))), "newer_version");
+    assert_eq!(code(inspect_card(&with(&payload, 0, 0))), "invalid_card");
+    // The fifth byte is the palette: version, flags, width, height, palette.
+    assert_eq!(code(inspect_card(&with(&payload, 4, 200))), "newer_version");
+    // An envelope: its version byte, then a flag this core does not know.
+    assert_eq!(env[0], b'E');
+    assert_eq!(code(open_envelope(&with(&env, 1, 2))), "newer_version");
+    assert_eq!(code(open_envelope(&with(&env, 1, 0))), "invalid_code");
+    assert_eq!(code(open_envelope(&with(&env, 2, env[2] | 0x80))), "newer_version");
+    // A carousel frame of a newer carousel.
+    let mut card = editor_card();
+    (card.width, card.height) = (64, 64);
+    let mut s = 1u32;
+    card.pixels = (0..64 * 64)
+        .map(|_| {
+            s = s.wrapping_mul(1_103_515_245).wrapping_add(12_345);
+            u8::try_from(s >> 27).unwrap()
+        })
+        .collect();
+    let big = me.seal_as_author(&me.sign_card(&card).unwrap(), None).unwrap();
+    let Scanned::Frame { bytes } = classify(&Carousel::new(&big).unwrap().frame_text(0)) else { panic!() };
+    assert_eq!(Joiner::new().push(&with(&bytes, 1, 2)).unwrap_err().code, "newer_version");
+    assert_eq!(Joiner::new().push(&with(&bytes, 1, 0)).unwrap_err().code, "bad_frame");
+}
+
 #[test]
 fn links_round_trip_and_refuse_tampering() {
     let me = id(1);

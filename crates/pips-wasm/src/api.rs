@@ -416,9 +416,26 @@ impl ApiError {
     }
 }
 
+/// Every structure the core reads is at version 1 today — card, envelope,
+/// certificate, recipient code, carousel frame. So a higher version, a flag
+/// or extension marked as not to be skipped that this core does not know,
+/// or a built-in palette it does not have yet, were made by a newer app:
+/// said as such (`newer_version`), not as damage. Version 0 is no version
+/// at all, so damage.
+const fn newer(version: u8) -> bool {
+    version > 1
+}
+const _: () = assert!(pips_format::VERSION == 1, "newer() assumes every structure is at version 1");
+
 impl From<pips_format::Error> for ApiError {
     fn from(e: pips_format::Error) -> Self {
-        err("invalid_card", e)
+        use pips_format::Error as E;
+        let code = match e {
+            E::UnsupportedVersion(v) if newer(v) => "newer_version",
+            E::UnknownCriticalFlag(_) | E::UnknownCriticalExtension | E::UnknownPalette(_) => "newer_version",
+            _ => "invalid_card",
+        };
+        err(code, e)
     }
 }
 
@@ -433,6 +450,8 @@ impl From<pips_sign::Error> for ApiError {
             E::NotAuthor => "not_author",
             E::BadEdition => "bad_edition",
             E::BadNick => "bad_nick",
+            E::UnsupportedVersion(v) if newer(v) => "newer_version",
+            E::UnknownFlag(_) => "newer_version",
             _ => "invalid_code",
         };
         err(code, e)
@@ -1152,9 +1171,14 @@ impl Joiner {
     /// # Errors
     ///
     /// `bad_frame`; for a frame from another carousel the app may start a
-    /// new joiner.
+    /// new joiner. `newer_version` for a frame of a carousel version this
+    /// core does not read.
     pub fn push(&mut self, frame: &[u8]) -> Result<JoinProgress> {
-        match self.0.push(frame).map_err(|e| err("bad_frame", e))? {
+        let refused = |e: pips_qr::carousel::FrameError| {
+            let newer = matches!(e, pips_qr::carousel::FrameError::UnsupportedVersion(v) if newer(v));
+            err(if newer { "newer_version" } else { "bad_frame" }, e)
+        };
+        match self.0.push(frame).map_err(refused)? {
             Progress::Partial { have, need } => Ok(JoinProgress::Partial { have, need }),
             Progress::Done(bytes) => Ok(JoinProgress::Done { bytes }),
         }

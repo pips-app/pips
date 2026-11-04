@@ -46,6 +46,9 @@ export function packBundle(envelopes) {
 /** Whether the bytes are a bundle (by its first bytes; whole or not). @param {Uint8Array} b */
 export const isBundle = (b) => b.length > MAGIC.length && MAGIC.every((v, i) => b[i] === v) && b[MAGIC.length] === BUNDLE;
 
+/** Whether a bundle was laid out by a newer app than this one: to be said, not called damaged. @param {Uint8Array} b */
+export const bundleIsNewer = (b) => isBundle(b) && b.length > MAGIC.length + 1 && b[MAGIC.length + 1] > LAYOUT;
+
 /**
  * The envelopes in a bundle, or null if it is not one, or does not hold
  * together. @param {Uint8Array} b @returns {Uint8Array[] | null}

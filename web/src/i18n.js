@@ -79,6 +79,8 @@ const ru = {
   'receive.paste.placeholder': 'Ссылка или текст кода',
   'receive.parts': (/** @type {number} */ a, /** @type {number} */ b) => `Собрано ${a} из ${b}`,
   'receive.got': 'Карточка в коллекции', 'receive.dup': 'Такая карточка уже есть',
+  'receive.numbered': (/** @type {string} */ copy) => `Теперь у вас ${copy} — он заменил прежнюю копию`,
+  'receive.newer': 'Это сделала более новая версия Pips — обновите приложение и откройте снова',
   'receive.many': (/** @type {number} */ a, /** @type {number} */ had, /** @type {number} */ bad) => [
     a ? `Добавлено ${a} ${plural(a, 'карточка', 'карточки', 'карточек')}` : 'Новых карточек нет',
     had ? `уже были: ${had}` : '', bad ? `не приняты: ${bad}` : ''].filter(Boolean).join(' · '),
@@ -384,6 +386,8 @@ const en = {
   'receive.paste.placeholder': 'Link or code text',
   'receive.parts': (/** @type {number} */ a, /** @type {number} */ b) => `${a} of ${b} parts`,
   'receive.got': 'Card added to the collection', 'receive.dup': 'You already have this card',
+  'receive.numbered': (/** @type {string} */ copy) => `Now yours: ${copy} — it took the place of the plain one`,
+  'receive.newer': 'A newer version of Pips made this — update the app and open it again',
   'receive.many': (/** @type {number} */ a, /** @type {number} */ had, /** @type {number} */ bad) => [
     a ? `${a} card${a === 1 ? '' : 's'} added` : 'No new cards',
     had ? `${had} already here` : '', bad ? `${bad} not taken` : ''].filter(Boolean).join(' · '),
