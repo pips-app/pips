@@ -185,7 +185,18 @@ export function editorView() {
 
   // ------------------------------------------------------------ drawing --
   const cursorCell = () => ({ x: Math.floor(cursor.x), y: Math.floor(cursor.y) });
-  const selection = createSelection({ model, frame: () => state.frame, layer: () => state.layer, changed: () => paintSelection() });
+  /**
+   * Whether the chosen layer can be drawn on; if not (it is hidden: what is
+   * done there could not be seen), it is said, and nothing is done. Every
+   * way of changing the layer's cells asks: tools, the selection's buttons
+   * and keys, clearing the frame.
+   */
+  function mayDraw() {
+    if (!model.doc.layers[state.layer]?.hidden) return true;
+    toast(t('ed.layer.hidden'));
+    return false;
+  }
+  const selection = createSelection({ model, frame: () => state.frame, layer: () => state.layer, may: mayDraw, changed: () => paintSelection() });
   const strokes = createStrokes({
     model, selection, pick: (c) => pickAt(c),
     now: () => ({ frame: state.frame, layer: state.layer, color: state.color, shape: state.shape, pen: state.pen, mirror: state.mirror, axes: state.axes }),
@@ -217,10 +228,8 @@ export function editorView() {
    * @param {Cell} c @param {Tool} tool
    */
   function begin(c, tool) {
-    if (tool !== 'pick' && model.doc.layers[state.layer]?.hidden) {
-      toast(t('ed.layer.hidden'));
-      return null;
-    }
+    // Drawing a new box changes no cells; moving what is in one does (the selection asks itself).
+    if (tool !== 'pick' && tool !== 'select' && !mayDraw()) return null;
     return strokes.start(c, tool);
   }
   /** Another frame: the selection stays with the one it was on. @param {number} f */
@@ -346,7 +355,7 @@ export function editorView() {
       item('back', t('ed.frame.left'), () => model.moveFrame(f, f - 1), f === 0),
       item('next', t('ed.frame.right'), () => model.moveFrame(f, f + 1), f === n - 1),
       // With layers, a frame is cleared one layer at a time: the chosen one.
-      item('eraser', t(d.layers.length > 1 ? 'ed.frame.clear-layer' : 'ed.frame.clear', t('ed.layer.n', d.layers[state.layer]?.n ?? 1)), () => model.clearFrame(f, state.layer)),
+      item('eraser', t(d.layers.length > 1 ? 'ed.frame.clear-layer' : 'ed.frame.clear', t('ed.layer.n', d.layers[state.layer]?.n ?? 1)), () => { if (mayDraw()) model.clearFrame(f, state.layer); }),
       item('trash', t('ed.frame.remove'), () => model.removeFrame(f), n < 2));
     frameSheet.show();
   }

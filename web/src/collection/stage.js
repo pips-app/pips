@@ -24,13 +24,14 @@ import { grid, feedRect, feedWidth, feedTarget, runs, groupKey } from './layout.
  *   ghost: null | {x: number, y: number, w: number, cap: number},
  *   collapse: null | {t0: number, dur: number},
  *   flying: null | {at: (now: number) => {x: number, y: number, w: number, cap: number}},
+ *   lifted?: boolean,
  *   rr: null | {x: number, y: number, w: number, h: number, cap: number, o: number, z: number},
  * }} Item
  */
 
 /**
  * @param {{
- *   host: HTMLElement, surface: HTMLElement,
+ *   host: HTMLElement, surface: HTMLElement, fly: HTMLElement,
  *   frame: () => import('./layout.js').Frame,
  *   by: () => 'date'|'author',
  *   label: (level: 0|1, group: {key: string, cards: Item[]}) => {title: string, sub: string},
@@ -169,6 +170,14 @@ export function createStage(o) {
           r.x = cx - r.w / 2;
           r.y += dragY.v;
         }
+      }
+      // The feed card pulled down towards the archive lies over its strip,
+      // as it will once let go and flying: in the layer cards fly in.
+      // (A card in flight is where moves.js put it: left alone.)
+      const lifted = z > 1.5 && c === centre && dragY.v > 0;
+      if (!c.flying && lifted !== !!c.lifted) {
+        c.lifted = lifted;
+        (lifted ? o.fly : o.host).append(c.el);
       }
       const hgt = r.w + (r.w * cap.share + cap.add) * r.cap;
       c.rr = { x: r.x, y: r.y, w: r.w, h: hgt, cap: r.cap, o: r.o, z: r.z };

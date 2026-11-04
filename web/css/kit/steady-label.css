@@ -1,0 +1,4 @@
+/* kit/steady-label.js: every word in one cell; the widest sets the width, only the current one shows. */
+.steady { display: inline-grid; }
+.steady > span { grid-area: 1 / 1; }
+.steady > span:not(.on) { visibility: hidden; }

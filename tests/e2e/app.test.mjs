@@ -315,7 +315,7 @@ test('numbered copies: issued once each, until the run is complete', async () =>
     assert.match(await a.locator('.dialog').textContent(), new RegExp(`Выдать №${n} из 2 для @mossfern`));
     await a.click('.dialog button:text-is("Выдать")');
     const env1 = await photo(a, '.overlay .qr-box', env.dir, `copy${n}`);
-    await a.click('text=Готово');
+    await a.click('.overlay >> text=Готово');
     if (n === 1) {
       await fromPicture(b, 'section.view:visible', env1);
       await b.locator('.turn:not([hidden])').waitFor();
@@ -1624,7 +1624,7 @@ test('several cards at once: chosen in the collection, sent as one file or as pi
   assert.match(dl.suggestedFilename(), /^Pips-3-kartochki\.pips$/, 'a Latin name with what it holds');
   // The sheet goes once the file is out; the cards stay chosen until «Готово».
   await a.waitForFunction(() => !document.querySelector('.bottom-sheet.on'));
-  assert.match(await a.textContent('.collection-bar .pill'), /Готово/);
+  assert.match(await a.textContent('.collection-bar .pill .on'), /Готово/);
   await a.click('.collection-bar .pill');
 
   // As pictures: one file each, two at a time.
@@ -1804,5 +1804,69 @@ test('a monkey loose in the app finds nothing wrong', { timeout: 300_000 }, asyn
     return r.width > 0 && r.height > 0 && r.top < innerHeight - 2 && r.bottom > 2 && cs.visibility !== 'hidden' && Number(cs.opacity) > 0.05 && !e.closest('[hidden]');
   }).map((e) => e.className));
   assert.deepEqual(open, [], 'Escape closes whatever was left open');
+  await p.context().close();
+});
+
+test('a feed card pulled down by a finger lies over the archive strip, before and after it is let go', async () => {
+  const p = await env.phone('pullfox');
+  await tab(p, 'me');
+  await samples(p);
+  await tab(p, 'collection');
+  await p.waitForTimeout(800);
+  await p.keyboard.press('+');
+  await p.waitForTimeout(900);
+  // Down, and held there: the strip has risen under the card.
+  await p.evaluate(async () => {
+    const host = document.querySelector('.stage-host');
+    const fire = (type, y) => host.dispatchEvent(new PointerEvent(type, { bubbles: true, pointerId: 7, pointerType: 'touch', isPrimary: true, clientX: 195, clientY: y }));
+    fire('pointerdown', 380);
+    for (let i = 1; i <= 12; i++) { await new Promise((r) => setTimeout(r, 25)); fire('pointermove', 380 + i * 30); }
+  });
+  await p.waitForTimeout(300);
+  const held = await p.evaluate(() => {
+    const c = document.querySelector('.on-stage.centre');
+    return { over: !!c?.closest('.fly-layer'), strip: !/101%/.test(/** @type {HTMLElement} */ (document.querySelector('.strip')).style.transform) };
+  });
+  assert.deepEqual(held, { over: true, strip: true }, 'while held: the card over the strip that rose for it');
+  // Let go a little up the way: it goes back into the feed, and back into the stage.
+  await p.evaluate(() => document.querySelector('.stage-host').dispatchEvent(new PointerEvent('pointercancel', { bubbles: true, pointerId: 7, pointerType: 'touch', isPrimary: true })));
+  await p.waitForTimeout(1500);
+  assert.ok(await p.$eval('.on-stage.centre', (e) => !!e.closest('.stage-host')), 'back in its place in the feed');
+  await p.context().close();
+});
+
+test('the selection works on the chosen layer only, and never on a hidden one', { skip: false }, async () => {
+  const p = await env.phone('selfox', undefined, true); // a computer: keys for select-all and Delete
+  await tab(p, 'draw');
+  await p.locator('.ed-art').waitFor();
+  const art = await p.locator('.ed-art').boundingBox();
+  const cell = (x, y) => [art.x + art.width * (x + 0.5) / 32, art.y + art.height * (y + 0.5) / 32];
+  await p.mouse.click(...cell(3, 3)); // a dot on the bottom layer
+  await p.click('.ed-layers-btn');
+  await p.click('.bottom-sheet.on .ed-layer-act:has-text("Новый слой")');
+  await p.click('.bottom-sheet.on .ed-layers li.here .ed-layer-eye'); // the new top layer, hidden
+  await p.keyboard.press('Escape');
+  // Everything selected on the hidden layer: Delete and the arrows are refused, and said so.
+  await p.keyboard.press('Control+a');
+  await p.keyboard.press('Delete');
+  assert.match(await toast(p), /скрыт/);
+  await p.click('.ed-sel-bar button[aria-label="Снять выделение"]'); // the strip comes back for the layers button
+  // Shown again: Delete empties the top layer's box — the dot below stays.
+  await p.click('.ed-layers-btn');
+  await p.click('.bottom-sheet.on .ed-layers li.here .ed-layer-eye');
+  await p.keyboard.press('Escape');
+  await p.keyboard.press('Control+a');
+  await p.keyboard.press('Delete');
+  await p.keyboard.press('Escape');
+  await p.fill('.ed-title', 'Под выделением');
+  await p.click('.ed-sign');
+  await p.locator('.turn:not([hidden])').waitFor();
+  const dot = await p.evaluate(async () => {
+    const all = [...(await import('/src/state.js')).app.cards.values()];
+    const c = all.find((e) => e.card.title === 'Под выделением')?.card;
+    return c ? c.pixels[3 * 32 + 3] : all.map((e) => e.card.title).join('|');
+  });
+  assert.equal(typeof dot, 'number', `the card was signed (cards: ${dot})`);
+  assert.notEqual(dot, 0, 'the bottom layer kept its dot');
   await p.context().close();
 });

@@ -20,8 +20,9 @@ import { span, within, lift, flip, turn, place } from './raster.js';
  * @param {{
  *   model: ReturnType<typeof import('./model.js').createModel>,
  *   frame: () => number, layer: () => number,
- *   changed: () => void,
- * }} o changed: the box or its bar changed (to be drawn again)
+ *   may: () => boolean, changed: () => void,
+ * }} o may: whether the layer's cells may change now (it says why not);
+ * changed: the box or its bar changed (to be drawn again)
  */
 export function createSelection(o) {
   const { model } = o;
@@ -63,7 +64,7 @@ export function createSelection(o) {
 
   /** Mirrors or turns what is in the box, about its middle. @param {(p: import('./raster.js').Piece) => import('./raster.js').Piece} fn @param {string} label */
   function transform(fn, label) {
-    if (!box) return;
+    if (!box || !o.may()) return;
     const size = model.doc.size, p = lift(cells(), size, box), q = fn(p);
     const x = box.x0 + Math.floor((p.w - q.w) / 2), y = box.y0 + Math.floor((p.h - q.h) / 2);
     const r = box;
@@ -73,7 +74,7 @@ export function createSelection(o) {
     paint();
   }
   function erase() {
-    if (!box) return;
+    if (!box || !o.may()) return;
     const r = box;
     box = null;
     rewrite(fresh(), r, [], false).commit('ed.h.erase-sel');
@@ -82,7 +83,7 @@ export function createSelection(o) {
   }
   /** Moves the cells by (dx, dy), as one step. @param {number} dx @param {number} dy */
   function nudge(dx, dy) {
-    if (!box) return;
+    if (!box || !o.may()) return;
     const size = model.doc.size, p = lift(cells(), size, box), r = box;
     box = null;
     rewrite(fresh(), r, place(p, r.x0 + dx, r.y0 + dy, size, T), copy).commit(copy ? 'ed.h.copy' : 'ed.h.move');
@@ -109,6 +110,7 @@ export function createSelection(o) {
     start(c) {
       const size = model.doc.size;
       if (box && within(box, c)) {
+        if (!o.may()) return null;
         const r = box, p = lift(cells(), size, r), dup = copy;
         const st = fresh();
         let dx = 0, dy = 0;

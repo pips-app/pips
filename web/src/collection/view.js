@@ -36,6 +36,7 @@ import { cardBack } from './back.js';
 import { createShareSheet } from './share.js';
 import { shareManySheet } from './share-many.js';
 import { createMoves, PLACE_TITLE } from './moves.js';
+import { steadyLabel } from '../kit/steady-label.js';
 import { createSelection } from './selection.js';
 import { firstRun } from './first-run.js';
 import { select, tagCounts, toggleTag, words } from './query.js';
@@ -62,7 +63,8 @@ export function collectionView(o) {
   const backBtn = iconButton({ icon: 'back', label: t('collection.back'), plain: true, onClick: () => back() });
   const archBtn = iconButton({ icon: 'archive', label: t('archive.title'), onClick: () => setPlace('archive') });
   const binBtn = iconButton({ icon: 'trash', label: t('archive.trash'), onClick: () => setPlace('trash') });
-  const selBtn = h('button', { type: 'button', class: 'pill', onclick: () => (selection.active ? selection.stop() : selection.start()) });
+  const selLabel = steadyLabel([t('collection.select'), t('collection.done')]);
+  const selBtn = h('button', { type: 'button', class: 'pill', onclick: () => (selection.active ? selection.stop() : selection.start()) }, selLabel.el);
   const title = h('h1');
   // The level's name doubles as a switch between weeks and months, so
   // the months are a tap away too, not only a pinch.
@@ -94,7 +96,9 @@ export function collectionView(o) {
     options: [{ value: 'all', label: t('owner.all') }, { value: 'mine', label: t('owner.mine') }, { value: 'got', label: t('owner.got') }],
     onChange: (v) => refilter(() => { filter.owner = v; }),
   });
-  const groupBtn = h('button', { type: 'button', class: 'group-btn', onclick: () => regroup() });
+  // Its two words take the same room: the filters beside it do not move when it is pressed.
+  const groupLabel = steadyLabel([t('group.date'), t('group.author')]);
+  const groupBtn = h('button', { type: 'button', class: 'group-btn', onclick: () => regroup() }, groupLabel.el);
   const tagChips = chips({ label: t('tags.label'), onToggle: (tag) => setQuery(toggleTag(filter.query, tag)) });
   const none = h('p', { class: 'search-none' }, t('search.none'));
   const searchPanel = h('div', { class: 'search-panel' }, search.el, h('div', { class: 'search-opts' }, owner.el, groupBtn), tagChips.el, none);
@@ -131,7 +135,7 @@ export function collectionView(o) {
   /** Whether the card in front is one's own (it has one more action). */
   let frontIsMine = false;
   const stage = createStage({
-    host, surface: el, frame: frameOf,
+    host, surface: el, fly, frame: frameOf,
     by: () => filter.by,
     label: (level, g) => {
       const c = g.cards[0], n = g.cards.length;
@@ -368,8 +372,8 @@ export function collectionView(o) {
     zoomBox.hidden = !MOUSE || selecting || firstRun || !stage.list.length;
     zoomOut.el.disabled = lv <= 0;
     zoomIn.el.disabled = lv >= 3;
-    selBtn.textContent = t(selecting ? 'collection.done' : 'collection.select');
-    groupBtn.textContent = t(filter.by === 'author' ? 'group.author' : 'group.date');
+    selLabel.show(selecting ? 1 : 0, [t('collection.select'), t('collection.done')]);
+    groupLabel.show(filter.by === 'author' ? 1 : 0, [t('group.date'), t('group.author')]);
     tagChips.update(tagCounts(inPlace(filter.place).map(asItem)).map(([tag, n]) => ({ value: tag, text: `#${tag}`, count: n, on: words(filter.query).includes(`#${tag}`) })));
     none.hidden = !filtered || count > 0;
     first.el.hidden = !firstRun;
