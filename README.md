@@ -89,8 +89,9 @@ cd fuzz && cargo +nightly fuzz run card corpus/card seeds/card
 ```
 
 `scripts/build-site.sh` assembles what GitHub Pages publishes. CI runs
-formatting, clippy, tests, the minimum Rust version, a type check of the
-app and the browser tests, and deploys `main`; a second workflow fuzzes
+formatting, clippy, tests, the minimum Rust version, a RustSec check of the
+dependencies, a type check of the app and the browser tests (Chromium and
+Firefox, a seeded "monkey" among them), and deploys `main`; a second workflow fuzzes
 every target on each push and for longer once a week.
 
 ## Contributing
