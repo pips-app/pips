@@ -4,7 +4,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { suite, tab, toast, textMatching, samples, words, cards, ownCard, act, still, overlaps, until, visible } from './helpers.mjs';
+import { suite, tab, toast, textMatching, samples, words, cards, ownCard, act, still, overlaps, until, visible, toastAfter } from './helpers.mjs';
 
 const env = suite();
 
@@ -91,10 +91,11 @@ test('the collection: tags, search, archive and the bin, all without gestures', 
   await act(p, 'down');
   await still(p);
   assert.equal(await toast(p), 'Карточка в архиве');
-  assert.equal(await inPlace('collection'), 17);
+  // Where a card is, is a write: waited for as such, not as movement on screen.
+  await until(async () => (await inPlace('collection')) === 17, 'one card fewer in the collection');
   await p.click('.toast button');
+  await until(async () => (await inPlace('collection')) === 18, 'undone: all back');
   await still(p);
-  assert.equal(await inPlace('collection'), 18, 'undone');
   await act(p, 'down');
   await still(p);
   // Beside one card, the places stay out of the bar: a bin there would read as «delete this».
@@ -121,8 +122,7 @@ test('the collection: tags, search, archive and the bin, all without gestures', 
   await p.click('.collection-bar .pill');
   await clickCard();
   await p.click('.action-bar.up [data-act="purge"]');
-  await p.click('.dialog button:text-is("Удалить")');
-  await still(p);
+  assert.equal(await toastAfter(p, () => p.click('.dialog button:text-is("Удалить")')), 'Карточка удалена'); // said once it is gone from storage
   assert.equal(await cards(p), 17);
   await p.context().close();
 });
