@@ -8,7 +8,10 @@ import { suite, photo, choose, tab, heart, gradient, wide, png, textMatching, ca
 
 const env = suite();
 
-test('a picture comes onto the canvas: pixel art as it is, the rest through a square', async () => {
+/** The size of the canvas now, in cells. @param {import('playwright').Page} p */
+const canvasSize = (p) => p.$eval('.ed-layer', (c) => String(c.width));
+
+test('pixel art comes onto the canvas as it is: its own palette or a chosen one, a square when wider, unscaled, undone in a tap', async () => {
   const p = await env.phone('pixelfox');
   // 512 colours: an own palette is fitted by itself, and said so.
   await picture(p, await gradient(env.dir));
@@ -18,23 +21,32 @@ test('a picture comes onto the canvas: pixel art as it is, the rest through a sq
   assert.match(await textMatching(p, '.overlay .import-status', /палитра PICO-8 · 512 пикселей сменили цвет/), /палитра PICO-8 · 512 пикселей сменили цвет/);
   assert.equal(await p.locator('.overlay .pic-stage').count(), 0, 'no crop: 64×8 fits the canvas as it is');
   assert.equal(await toastAfter(p, () => p.click('.overlay .btn.key')), 'Картинка на холсте');
-  const size = () => p.$eval('.ed-layer', (c) => String(c.width));
-  assert.equal(await size(), '64', 'the canvas that holds it');
+  assert.equal(await canvasSize(p), '64', 'the canvas that holds it');
 
   // Wider than any canvas: a square of its own pixels, never more than fits.
   await picture(p, await wide(env.dir));
   assert.ok(await p.isVisible('.overlay .pic-stage'));
   assert.match(await textMatching(p, '.overlay .import-status', /^8×8/), /^8×8/);
   await p.click('.overlay .btn.key');
-  assert.equal(await size(), '16');
+  assert.equal(await canvasSize(p), '16');
 
-  // A large picture with soft colours: cropped and scaled to the size chosen.
+  // The heart: unscaled, and one tap brings the previous picture back.
+  await picture(p, await heart(env.dir));
+  assert.match(await textMatching(p, '.overlay .import-status', /60×48 → 10×8 \(снято увеличение ×6\)/), /60×48 → 10×8 \(снято увеличение ×6\)/);
+  await p.click('.overlay .btn.key');
+  await p.click('.toast button'); // «Вернуть»
+  assert.equal(await canvasSize(p), '16', 'the picture before is back');
+  assert.equal(await cards(p), 0, 'nothing was signed on the way');
+  await p.context().close();
+});
+
+test('a photo comes through a square: at the size chosen, the square following a finger on its corner', async () => {
+  const p = await env.phone('photofox');
   const big = await png(env.dir, 'dusk.png', 300, 200, (x, y) => [(x * 0.8) | 0, (y * 1.2) | 0, (x + y) % 256, 255]); // no pixel grid in it: a photo
   await picture(p, big);
   assert.match(await textMatching(p, '.overlay .import-status', /^32×32/), /^32×32/, 'a square at 32 to begin with');
   await p.click('.overlay .seg button:text-is("16")');
   assert.match(await textMatching(p, '.overlay .import-status', /^16×16/), /^16×16/);
-  // The square follows a finger on its corner, and the result with it.
   const box = await p.locator('.pic-crop').boundingBox();
   await p.evaluate(async ([x0, y0]) => {
     const st = document.querySelector('.pic-stage');
@@ -46,10 +58,14 @@ test('a picture comes onto the canvas: pixel art as it is, the rest through a sq
   await still(p);
   const after = await p.locator('.pic-crop').boundingBox();
   assert.ok(Math.abs(after.width - (box.width - 90)) < 3 && Math.abs(after.x - box.x) < 1, 'smaller, from the corner held still');
-  await p.click('.overlay .btn.key');
-  assert.equal(await size(), '16');
+  assert.equal(await toastAfter(p, () => p.click('.overlay .btn.key')), 'Картинка на холсте');
+  assert.equal(await canvasSize(p), '16');
+  await p.context().close();
+});
 
-  // Soft edges (alpha between 0 and 255): taken, made solid or clear, and said so.
+test('soft edges come solid or clear, and are said so — whether the picture fits the canvas or is cropped', async () => {
+  const p = await env.phone('softfox');
+  // Alpha between 0 and 255: a card's pixel is either coloured or clear.
   const soft = await png(env.dir, 'soft.png', 12, 12, (x, y) => {
     const d = Math.hypot(x - 5.5, y - 5.5);
     return [200, 60, 40, d < 4 ? 255 : d < 5 ? 160 : d < 6 ? 60 : 0];
@@ -59,21 +75,13 @@ test('a picture comes onto the canvas: pixel art as it is, the rest through a sq
   assert.match(said, /^\d+ полупрозрачн.*заметные стали сплошными/);
   assert.match(said, /12×12/);
   assert.equal(await toastAfter(p, () => p.click('.overlay .btn.key')), 'Картинка на холсте');
-  assert.equal(await size(), '16');
-
-  // The heart: unscaled, and one tap brings the previous picture back.
-  await picture(p, await heart(env.dir));
-  assert.match(await textMatching(p, '.overlay .import-status', /60×48 → 10×8 \(снято увеличение ×6\)/), /60×48 → 10×8 \(снято увеличение ×6\)/);
-  await p.click('.overlay .btn.key');
-  await p.click('.toast button'); // «Вернуть»
-  assert.equal(await size(), '16', 'the cropped picture is back');
+  assert.equal(await canvasSize(p), '16');
   // Larger than any canvas: still said, under the square to crop.
   const softBig = await png(env.dir, 'soft-big.png', 80, 80, (x, y) => [40, 90, 200, (x + y) % 7 === 0 ? 100 : 255]);
   await picture(p, softBig);
   assert.ok(await p.isVisible('.overlay .pic-stage'));
   assert.match(await textMatching(p, '.overlay .import-status', /полупрозрачн/), /^\d+ полупрозрачн/);
   assert.equal(await toastAfter(p, () => p.click('.overlay .btn.key')), 'Картинка на холсте');
-  assert.equal(await cards(p), 0, 'nothing was signed on the way');
   await p.context().close();
 });
 
@@ -401,83 +409,140 @@ test('the editor holds still: a pinch keeps its zoom as the fingers lift, a sele
   await p.context().close();
 });
 
-test('the editor: many frames scroll in their strip, frames last longer, layers draw apart and sign as one', async () => {
+test('twenty frames: their strip scrolls, and nothing is pushed off the screen — on a phone and a computer', async () => {
   for (const desk of [false, true]) {
-    const p = await env.phone('layerfox', undefined, desk);
+    const p = await env.phone('framefox', undefined, desk);
     await tab(p, 'draw');
     await p.locator('.ed-art').waitFor();
-    // Twenty frames: the strip scrolls, nothing is pushed off the screen.
-    await p.click('.ed-frame.add');
-    for (let i = 0; i < 19; i++) await p.click('.ed-frame.add');
+    for (let i = 0; i < 20; i++) await p.click('.ed-frame.add');
     const fit = await p.evaluate(() => {
       const w = document.documentElement.clientWidth, r = (s) => document.querySelector(s).getBoundingClientRect();
       const s = document.querySelector('.ed-frame-scroll');
       return { scrolls: s.scrollWidth > s.clientWidth, add: r('.ed-frame.add').right <= w, layers: r('.ed-layers-btn').right <= w, page: document.documentElement.scrollWidth <= w, aside: !document.querySelector('.ed-aside').offsetParent || r('.ed-aside').right <= w };
     });
     assert.deepEqual(fit, { scrolls: true, add: true, layers: true, page: true, aside: true }, desk ? 'computer' : 'phone');
-    if (desk) {
-      // A mouse drags the strip as a finger would; letting go over a frame does not choose it.
-      const strip = await p.locator('.ed-frame-scroll').boundingBox();
-      const chosen = () => p.evaluate(() => [...document.querySelectorAll('.ed-frame-list .ed-frame')].findIndex((b) => b.getAttribute('aria-pressed') === 'true'));
-      const at = () => p.evaluate(() => document.querySelector('.ed-frame-scroll').scrollLeft);
-      await p.evaluate(() => { document.querySelector('.ed-frame-scroll').scrollLeft = 0; });
-      const before = await chosen();
-      const y = strip.y + strip.height / 2;
-      await p.mouse.move(strip.x + strip.width - 30, y);
-      await p.mouse.down();
-      await p.mouse.move(strip.x + strip.width - 130, y, { steps: 8 });
-      await p.waitForTimeout(120); // held still: no throw
-      await p.mouse.up();
-      assert.ok(Math.abs(await at() - 100) <= 2, 'the strip moved with the mouse, no further');
-      assert.equal(await chosen(), before, 'a drag chooses nothing');
-      await p.click('.ed-frame-list .ed-frame >> nth=3');
-      assert.equal(await chosen(), 3, 'a click still chooses');
-      await p.context().close();
-      continue;
-    }
-
-    // Back to two frames; the first lasts three ticks.
-    while (await p.locator('.ed-frame-list .ed-frame').count() > 2) {
-      await p.click('.ed-frame[aria-pressed="true"]');
-      await p.click('.bottom-sheet.on .ed-menu-item:has-text("Удалить кадр")');
-      await still(p);
-    }
-    await p.click('.ed-frame-list .ed-frame >> nth=0');
-    await p.click('.ed-frame[aria-pressed="true"]');
-    await p.click('.bottom-sheet.on .ed-hold button[aria-label="Дольше"]');
-    await p.click('.bottom-sheet.on .ed-hold button[aria-label="Дольше"]');
-    assert.equal(await p.textContent('.bottom-sheet.on .ed-hold-n'), '×3');
-    await p.keyboard.press('Escape');
-    assert.equal(await p.textContent('.ed-frame-list .ed-frame >> nth=0 >> .ed-frame-hold'), '×3', 'the tile says how long');
-
-    // A dot on the first layer; a new layer above, hidden: nothing is drawn on it.
-    const art = await p.locator('.ed-art').boundingBox();
-    const cell = (x, y) => [art.x + art.width * (x + 0.5) / 32, art.y + art.height * (y + 0.5) / 32];
-    await p.mouse.click(...cell(1, 1));
-    await p.click('.ed-layers-btn');
-    await p.click('.bottom-sheet.on .ed-layer-act:has-text("Новый слой")');
-    assert.equal(await p.textContent('.ed-layers-btn'), '2/2');
-    await p.click('.bottom-sheet.on .ed-layers li.here .ed-layer-eye');
-    await p.keyboard.press('Escape');
-    assert.match(await toastAfter(p, () => p.mouse.click(...cell(2, 1))), /скрыт/);
-    // Shown again: the dot goes on the second layer, over nothing.
-    await p.click('.ed-layers-btn');
-    await p.click('.bottom-sheet.on .ed-layers li.here .ed-layer-eye');
-    await p.keyboard.press('Escape');
-    await p.mouse.click(...cell(2, 1));
-    const cels = await p.evaluate(() => [...document.querySelectorAll('.ed-frame-list .ed-frame')].length);
-    assert.equal(cels, 2);
-    await p.fill('.ed-title', 'Слоёный');
-    await p.click('.ed-sign');
-    await p.locator('.turn:not([hidden])').waitFor();
-    const card = await p.evaluate(async () => {
-      const c = [...(await import('/src/state.js')).app.cards.values()].find((e) => e.card.title === 'Слоёный').card;
-      return { frames: c.frames, a: c.pixels[1 * 32 + 1], b: c.pixels[1 * 32 + 2] };
-    });
-    assert.equal(card.frames, 4, 'the first frame three times, then the second');
-    assert.ok(card.a !== 0 && card.b !== 0, 'both layers in the picture');
     await p.context().close();
   }
+});
+
+test('on a computer the frames strip is dragged by the mouse, and letting go over a frame does not choose it', async () => {
+  const p = await env.phone('stripfox', undefined, true);
+  await tab(p, 'draw');
+  await p.locator('.ed-art').waitFor();
+  for (let i = 0; i < 20; i++) await p.click('.ed-frame.add');
+  const strip = await p.locator('.ed-frame-scroll').boundingBox();
+  const chosen = () => p.evaluate(() => [...document.querySelectorAll('.ed-frame-list .ed-frame')].findIndex((b) => b.getAttribute('aria-pressed') === 'true'));
+  const at = () => p.evaluate(() => document.querySelector('.ed-frame-scroll').scrollLeft);
+  await p.evaluate(() => { document.querySelector('.ed-frame-scroll').scrollLeft = 0; });
+  const before = await chosen();
+  const y = strip.y + strip.height / 2;
+  await p.mouse.move(strip.x + strip.width - 30, y);
+  await p.mouse.down();
+  await p.mouse.move(strip.x + strip.width - 130, y, { steps: 8 });
+  await p.waitForTimeout(120); // time itself: held still before letting go, so no throw
+  await p.mouse.up();
+  assert.ok(Math.abs(await at() - 100) <= 2, 'the strip moved with the mouse, no further');
+  assert.equal(await chosen(), before, 'a drag chooses nothing');
+  await p.click('.ed-frame-list .ed-frame >> nth=3');
+  assert.equal(await chosen(), 3, 'a click still chooses');
+  await p.context().close();
+});
+
+test('a frame lasts longer, layers draw apart (a hidden one refuses, and says so), and all sign as one card', async () => {
+  const p = await env.phone('layerfox');
+  await tab(p, 'draw');
+  await p.locator('.ed-art').waitFor();
+  // Two frames; the first lasts three ticks.
+  await p.click('.ed-frame.add');
+  await p.click('.ed-frame-list .ed-frame >> nth=0');
+  await p.click('.ed-frame[aria-pressed="true"]');
+  await p.click('.bottom-sheet.on .ed-hold button[aria-label="Дольше"]');
+  await p.click('.bottom-sheet.on .ed-hold button[aria-label="Дольше"]');
+  assert.equal(await p.textContent('.bottom-sheet.on .ed-hold-n'), '×3');
+  await p.keyboard.press('Escape');
+  assert.equal(await p.textContent('.ed-frame-list .ed-frame >> nth=0 >> .ed-frame-hold'), '×3', 'the tile says how long');
+
+  // A dot on the first layer; a new layer above, hidden: nothing is drawn on it.
+  const art = await p.locator('.ed-art').boundingBox();
+  const cell = (x, y) => [art.x + art.width * (x + 0.5) / 32, art.y + art.height * (y + 0.5) / 32];
+  await p.mouse.click(...cell(1, 1));
+  await p.click('.ed-layers-btn');
+  await p.click('.bottom-sheet.on .ed-layer-act:has-text("Новый слой")');
+  assert.equal(await p.textContent('.ed-layers-btn'), '2/2');
+  await p.click('.bottom-sheet.on .ed-layers li.here .ed-layer-eye');
+  await p.keyboard.press('Escape');
+  assert.match(await toastAfter(p, () => p.mouse.click(...cell(2, 1))), /скрыт/);
+  // Shown again: the dot goes on the second layer, over nothing.
+  await p.click('.ed-layers-btn');
+  await p.click('.bottom-sheet.on .ed-layers li.here .ed-layer-eye');
+  await p.keyboard.press('Escape');
+  await p.mouse.click(...cell(2, 1));
+  assert.equal(await p.locator('.ed-frame-list .ed-frame').count(), 2);
+  await p.fill('.ed-title', 'Слоёный');
+  await p.click('.ed-sign');
+  await p.locator('.turn:not([hidden])').waitFor();
+  const card = await p.evaluate(async () => {
+    const c = [...(await import('/src/state.js')).app.cards.values()].find((e) => e.card.title === 'Слоёный').card;
+    return { frames: c.frames, a: c.pixels[1 * 32 + 1], b: c.pixels[1 * 32 + 2] };
+  });
+  assert.equal(card.frames, 4, 'the first frame three times, then the second');
+  assert.ok(card.a !== 0 && card.b !== 0, 'both layers in the picture');
+  await p.context().close();
+});
+
+test('frames are cleared and deleted, the animation plays and takes its speed, a colour is added — and the card is signed so', async () => {
+  const p = await env.phone('blinkfox');
+  await tab(p, 'draw');
+  await p.locator('.ed-art').waitFor();
+  await still(p);
+  const art = await p.locator('.ed-art').boundingBox();
+  const cell = (x, y) => [art.x + art.width * (x + 0.5) / 32, art.y + art.height * (y + 0.5) / 32];
+  const frames = () => p.locator('.ed-frame-list .ed-frame').count();
+  /** A frame's menu, for the frame open now. @param {string} item */
+  const frameMenu = async (item) => {
+    await p.click('.ed-frame[aria-pressed="true"]');
+    await p.click(`.bottom-sheet.on .ed-menu-item:has-text("${item}")`);
+    await still(p);
+  };
+  await p.mouse.click(...cell(1, 1));
+  await p.click('.ed-frame.add'); // a copy: the dot too
+  assert.equal(await frames(), 2);
+  await frameMenu('Очистить кадр'); // the second frame: empty again
+  await p.click('.ed-frame.add');
+  assert.equal(await frames(), 3);
+  await frameMenu('Удалить кадр');
+  assert.equal(await frames(), 2, 'deleted');
+
+  // It plays, and stops.
+  await p.click('[aria-label="Проиграть"]');
+  await p.locator('[aria-label="Остановить"]').waitFor();
+  await p.click('[aria-label="Остановить"]');
+  await p.locator('[aria-label="Проиграть"]').waitFor();
+  // Faster: 80 ms a frame.
+  await p.click('[aria-label="Ещё"]');
+  await p.click('.bottom-sheet.on .ed-set-row:has(h3:text-is("Кадр, мс")) button:text-is("80")');
+  await p.keyboard.press('Escape');
+  await still(p);
+  // A colour of its own, at the end of the palette.
+  const colours = () => p.locator('.ed-pal-grid button.ed-swatch').count(); // the page shown: sixteen to a page
+  const before = await colours();
+  await p.click('.ed-pal-add');
+  await p.click('.bottom-sheet.on .btn.key:text-is("Добавить")');
+  await still(p);
+  assert.equal(before, 16, 'a full first page');
+  assert.equal(await p.getAttribute('.ed-pal-page[aria-label="Цвета 17–32"]', 'aria-pressed'), 'true', 'the seventeenth colour: its page is shown');
+  assert.equal(await colours(), 1, 'and it is there, alone on it');
+
+  await p.fill('.ed-title', 'Мигалка');
+  await p.click('.ed-sign');
+  await p.locator('.turn:not([hidden])').waitFor();
+  const card = await p.evaluate(async () => {
+    const c = [...(await import('/src/state.js')).app.cards.values()].find((e) => e.card.title === 'Мигалка').card;
+    const n = c.width * c.height;
+    return { frames: c.frames, delay: c.delay_ms, first: c.pixels[1 * c.width + 1] !== 0, second: c.pixels[n + 1 * c.width + 1] !== 0 };
+  });
+  assert.deepEqual(card, { frames: 2, delay: 80, first: true, second: false }, 'two frames, the dot only in the first, at 80 ms');
+  await p.context().close();
 });
 
 test('the selection works on the chosen layer only, and never on a hidden one', async () => {

@@ -158,6 +158,36 @@ test('the archive and the bin are places like the collection: a card opens there
   await p.context().close();
 });
 
+test('a card in the bin comes back to the collection whole, with a word, and the bin is empty again', async () => {
+  const { p, inPlace, clickCard } = await inCollection('backfox');
+  await clickCard();
+  const title = await p.$eval('.stage-host .on-stage.centre .cap b', (e) => e.textContent);
+  assert.equal(await toastAfter(p, () => act(p, 'down')), 'Карточка в архиве');
+  await p.keyboard.press('Escape');
+  await still(p);
+  await p.click('.collection-bar .ib[aria-label="Архив"]');
+  await still(p);
+  await clickCard();
+  assert.equal(await toastAfter(p, () => act(p, 'trash')), 'Карточка в корзине');
+  await still(p);
+  await p.click('.collection-bar .ib[aria-label="Назад"]');
+  await still(p);
+  await p.click('.collection-bar .ib[aria-label="Корзина"]');
+  await still(p);
+
+  // Chosen in the bin, and brought back.
+  await p.click('.collection-bar .pill');
+  await clickCard();
+  assert.equal(await toastAfter(p, () => p.click('.action-bar.up [data-act="restore"]')), 'Карточка снова в коллекции');
+  await until(async () => (await inPlace('collection')) === 18, 'all eighteen in the collection again');
+  assert.equal(await inPlace('trash'), 0);
+  await still(p);
+  assert.match(await p.textContent('.place-empty'), /пуст/, 'the bin says it is empty');
+  const back = await p.evaluate(async (t) => [...(await import('/src/state.js')).app.cards.values()].find((e) => e.card.title === t)?.rec.state, title);
+  assert.equal(back, 'collection', `«${title}» is where it was`);
+  await p.context().close();
+});
+
 test('on a computer, a mouse and the keys reach every level', async () => {
   const p = await env.phone('deskfox', undefined, true);
   await tab(p, 'me');
@@ -224,6 +254,26 @@ test('on a computer, a mouse and the keys reach every level', async () => {
   await still(p);
   const ys = await p.evaluate(() => window.__ys);
   assert.ok(Math.max(...ys) <= ys[0] + 1, `the neighbour never drops below where it was (${ys[0]} → max ${Math.max(...ys)})`);
+  await p.context().close();
+});
+
+test('the keys scroll the grids: a step with the arrows, a screen with Page Up and Down, the ends with Home and End', async () => {
+  const { p } = await inCollection('keyfox');
+  /** How far the grid is scrolled: the first card's top, from where it began. */
+  const top = () => p.$$eval('.stage-host .on-stage', (els) => Math.min(...els.filter((e) => e.style.visibility !== 'hidden').map((e) => e.getBoundingClientRect().top)));
+  const at = async (/** @type {string} */ key) => { await p.keyboard.press(key); await still(p); return top(); };
+  const start = await top();
+  const end = await at('End');
+  const all = start - end; // as far as the grid goes
+  assert.ok(all > 0, 'End: down to the last cards');
+  assert.equal(await at('End'), end, 'and no further');
+  assert.equal(await at('Home'), start, 'Home: the first again');
+  const step = start - (await at('ArrowDown'));
+  assert.ok(step > 60 && step < all, `ArrowDown: a step down (${step} of ${all} px)`);
+  assert.equal(await at('ArrowUp'), start, 'ArrowUp: back');
+  const page = start - (await at('PageDown'));
+  assert.ok(page > step || Math.abs(page - all) < 1, `PageDown: more than a step, or the rest if less is left (${page} of ${all} px)`);
+  assert.equal(await at('PageUp'), start, 'PageUp: back');
   await p.context().close();
 });
 
