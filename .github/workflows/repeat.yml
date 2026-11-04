@@ -48,6 +48,8 @@ jobs:
           MACHINE: ${{ matrix.machine }}
           ROUNDS: ${{ inputs.rounds || '10' }}
           ONLY: ${{ inputs.only || '' }}
+          # Where a test may leave what it found (the monkey: its steps, when one hangs).
+          PIPS_TEST_OUT: ${{ github.workspace }}/tests/e2e/results-${{ matrix.browser }}-${{ matrix.machine }}
         run: |
           mine=$(( ROUNDS >= MACHINE ? (ROUNDS - MACHINE) / 5 + 1 : 0 ))
           only=(); [ -n "$ONLY" ] && only=(--test-name-pattern="$ONLY")

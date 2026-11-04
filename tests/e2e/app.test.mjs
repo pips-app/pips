@@ -5,6 +5,8 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import { suite, tab, toast, textMatching, samples, words, cards, ownCard, still, until, toastAfter } from './helpers.mjs';
 
 const env = suite();
@@ -256,10 +258,15 @@ test('a monkey loose in the app finds nothing wrong', { timeout: 300_000 }, asyn
   // developer mode), or open the browser's own window (reading the
   // clipboard: Firefox asks with a menu of its own, outside the page).
   const SPARE = /Сменить ключ|Удалить насовсем|Выключить|Очистить|Убрать образцы|Вставить ссылку из буфера/;
-  // What it did last: said if a step never comes back, instead of a silent
-  // hang — and what the page was like then, for a hang is either the app's
-  // (the page does not answer at all) or the browser's (it does).
+  // What it did, step by step: said if a step never comes back, instead of
+  // a silent hang — with what the page was like then, whether a fresh page
+  // of the same browser answers (the app's hang, or the browser's), and
+  // whether letting go of the mouse brings it back. With PIPS_TEST_OUT set
+  // (the repeated rounds set it), every step goes to a file there too, to
+  // replay the same day: the samples' places follow the date.
   const done = [];
+  /** @type {object[]} */
+  const steps = [];
   let at = { x: 0, y: 0 };
   const state = () => p.evaluate(({ x, y }) => {
     const e = document.elementFromPoint(x, y), path = [];
@@ -267,10 +274,17 @@ test('a monkey loose in the app finds nothing wrong', { timeout: 300_000 }, asyn
     return `under ${x},${y}: ${path.join(' < ')}; selected: «${String(getSelection()).slice(0, 40)}»; screen: ${document.querySelector('section.view:not([hidden])')?.className}`;
   }, at);
   const late = (ms, what) => new Promise((_, no) => setTimeout(() => no(new Error(what)), ms));
+  const fresh = async () => {
+    const q = await p.context().newPage();
+    try { return (await q.evaluate(() => 1 + 1)) === 2 ? 'a fresh page answers' : 'a fresh page answers wrong'; } finally { q.close().catch(() => {}); }
+  };
   const within = (/** @type {Promise<unknown>} */ step) => Promise.race([step, late(15_000, 'hung')]).catch(async (e) => {
     if (e?.message !== 'hung') throw e;
     const page = await Promise.race([state(), late(3000, 'the page does not answer')]).catch((x) => x.message);
-    throw new Error(`a step hung; the last ones: ${done.slice(-6).join(' · ')}. Then: ${page}`);
+    const other = await Promise.race([fresh(), late(5000, 'a fresh page does not answer either')]).catch((x) => x.message);
+    const after = await Promise.race([p.mouse.up().then(state), late(3000, 'still nothing')]).catch((x) => x.message);
+    if (process.env.PIPS_TEST_OUT) await writeFile(join(process.env.PIPS_TEST_OUT, `monkey-${process.env.BROWSER ?? 'chromium'}-${Date.now()}.json`), JSON.stringify({ steps, page, other, after }, null, 1));
+    throw new Error(`a step hung; the last ones: ${done.slice(-6).join(' · ')}. Then: ${page}; ${other}; after letting go of the mouse: ${after}`);
   });
   const { width: W, height: H } = /** @type {{width: number, height: number}} */ (p.viewportSize());
   for (let step = 0; step < 250; step++) {
@@ -287,20 +301,23 @@ test('a monkey loose in the app finds nothing wrong', { timeout: 300_000 }, asyn
         if (!fair.length) continue;
         const tp = fair[rnd(fair.length)];
         done.push(`tap «${tp.n}»`);
+        steps.push({ tap: tp });
         at = tp;
         await within(p.mouse.click(tp.x, tp.y));
       } else if (k < 8) {
         const key = KEYS[rnd(KEYS.length)];
         done.push(`key ${key}`);
+        steps.push({ key });
         await within(p.keyboard.press(key));
       } else {
-        const x = 40 + rnd(W - 80), y = 120 + rnd(H - 260);
+        const x = 40 + rnd(W - 80), y = 120 + rnd(H - 260), to = { x: x + rnd(240) - 120, y: y + rnd(400) - 200 };
         done.push(`drag at ${x},${y}`);
+        steps.push({ drag: { x, y }, to });
         at = { x, y };
         await within((async () => {
           await p.mouse.move(x, y);
           await p.mouse.down();
-          await p.mouse.move(x + rnd(240) - 120, y + rnd(400) - 200, { steps: 5 });
+          await p.mouse.move(to.x, to.y, { steps: 5 });
           await p.mouse.up();
         })());
       }
