@@ -443,10 +443,11 @@ export function createModel(doc, opts = {}) {
     // -------------------------------------------------------------- undo --
     undo: () => moved(history.undo()),
     redo: () => moved(history.redo()),
-    /** @param {any} n a step of history.line() */
+    /** @param {any} n a step of history.line() @returns {boolean} whether it was still there to go to */
     goTo(n) {
-      history.goTo(n);
+      if (!history.goTo(n)) return false;
       changed({ frame: n.frame, whole: true });
+      return true;
     },
   };
   return api;

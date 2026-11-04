@@ -31,6 +31,9 @@ test('colours: hex both ways, hsv round trip, nearest, ramp', () => {
 test('tools: lines, boxes, ellipses, fill, mirror, corners', () => {
   assert.deepEqual(line({ x: 0, y: 0 }, { x: 3, y: 1 }).length, 4);
   assert.deepEqual(line({ x: 2, y: 2 }, { x: 2, y: 2 }), [{ x: 2, y: 2 }]);
+  // A fraction or NaN would never be reached: refused, not walked forever.
+  assert.throws(() => line({ x: 1, y: 1 }, { x: 3.5, y: 2 }), RangeError);
+  assert.throws(() => line({ x: 1, y: 1 }, { x: NaN, y: 2 }), RangeError);
   assert.equal(rect({ x: 0, y: 0 }, { x: 3, y: 3 }, false).length, 12);
   assert.equal(rect({ x: 3, y: 3 }, { x: 0, y: 0 }, true).length, 16);
   // An ellipse is symmetric both ways, filled or not.
@@ -104,6 +107,22 @@ test('undo tree: merging, the limit, saving', () => {
   copy.load(JSON.parse(JSON.stringify(h.save())));
   assert.deepEqual(copy.line().map((n) => n.label), h.line().map((n) => n.label));
   assert.equal(copy.current.label, 'z');
+});
+
+test('undo tree: a step forgotten to keep within the limit cannot be gone to, and nothing moves', () => {
+  const log = [];
+  const h = createHistory({ apply: (e, dir) => log.push(dir * e), sizeOf: () => 10, limit: 30 });
+  h.push(1, { label: 'a' });
+  const old = h.current;
+  for (let i = 2; i <= 6; i++) h.push(i, { label: 'b' });
+  const here = h.current;
+  log.length = 0;
+  assert.equal(h.goTo(old), false, 'forgotten: said so (it used to undo towards it forever)');
+  assert.equal(h.current, here);
+  assert.deepEqual(log, [], 'nothing undone or redone');
+  const kept = h.line().at(-2);
+  assert.equal(h.goTo(kept), true, 'a step still kept is reached as before');
+  assert.equal(h.current, kept);
 });
 
 test('the picture: strokes, frames, palette and size are all undoable', () => {

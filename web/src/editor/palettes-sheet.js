@@ -41,9 +41,13 @@ export function palettesSheet(o) {
     tried = o.model.history.current;
     paint();
   }
-  /** Leaves as it was when opened (the tries stay in the history's branches). */
+  /**
+   * Leaves as it was when opened (the tries stay in the history's branches).
+   * A history grown past its limit meanwhile may have forgotten that step:
+   * then the palette tried is taken back, which is what "Cancel" means.
+   */
   function cancel() {
-    if (start && o.model.history.current !== start) o.model.goTo(start);
+    if (start && o.model.history.current !== start && !o.model.goTo(start) && tried && o.model.history.current === tried) o.model.undo();
     start = tried = null;
   }
 

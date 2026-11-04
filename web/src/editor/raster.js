@@ -6,8 +6,14 @@
 
 /** @typedef {{x: number, y: number}} Cell */
 
-/** Every cell of a line, end points included (Bresenham). @param {Cell} a @param {Cell} b @returns {Cell[]} */
+/**
+ * Every cell of a line, end points included (Bresenham). Cells are whole
+ * numbers: the walk stops only on reaching `b` exactly, so a fraction or a
+ * NaN would never end it — refused aloud instead of a frozen page.
+ * @param {Cell} a @param {Cell} b @returns {Cell[]}
+ */
 export function line(a, b) {
+  if (![a.x, a.y, b.x, b.y].every(Number.isInteger)) throw new RangeError(`line: not whole cells (${a.x},${a.y} → ${b.x},${b.y})`);
   const out = [];
   let { x, y } = a;
   const dx = Math.abs(b.x - x), dy = -Math.abs(b.y - y), sx = x < b.x ? 1 : -1, sy = y < b.y ? 1 : -1;

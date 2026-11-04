@@ -115,8 +115,14 @@ export function createHistory(o) {
       cur = n;
       return n;
     },
-    /** Goes to any step of the tree, undoing and redoing on the way. @param {Node<E>} target */
+    /**
+     * Goes to any step of the tree, undoing and redoing on the way. A step
+     * no longer in it (forgotten to keep within the limit) cannot be reached:
+     * then nothing changes, and false says so — undoing towards it would
+     * never arrive. @param {Node<E>} target @returns {boolean}
+     */
     goTo(target) {
+      if (!above(root, target)) return false;
       while (!above(cur, target)) api.undo();
       /** @type {Node<E>[]} */
       const down = [];
@@ -126,6 +132,7 @@ export function createHistory(o) {
         p.next = p.kids.indexOf(n);
         api.redo();
       }
+      return true;
     },
     get current() { return cur; },
     get root() { return root; },
