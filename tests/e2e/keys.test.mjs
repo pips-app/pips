@@ -254,14 +254,15 @@ test('a backup is saved with a copy number given out on two phones, and after th
   assert.deepEqual(log, [1, 1], 'number 1, given out twice, to two people');
   await save(a); // it used to fail here, and every time after
 
-  // A new key: the card is a former self's now, its log still with it.
+  // Another key (another phone's, by its words): the card is a former
+  // self's now, its log still with it.
+  const other = await words(await env.phone('otherkey'));
   await tab(a, 'me');
   await a.click('.btn.wide:text-is("Сменить ключ")');
   await a.click('.dialog button:text-is("Сменить ключ")');
-  await a.locator('.onb').waitFor();
-  await a.click('text=Создать ключ');
-  await a.check('.check input');
-  await a.click('text=Дальше');
+  assert.equal(await a.textContent('.onb h1'), 'Другой ключ');
+  await a.fill('.words-entry input >> nth=0', other);
+  assert.equal(await toastAfter(a, () => a.click('.onb-go')), 'Ключ сменён');
   await a.locator('.onb').waitFor({ state: 'detached' });
   const kept = await a.evaluate(async () => {
     const e = [...(await import('/src/state.js')).app.cards.values()].find((x) => x.card.title === 'Дважды');
