@@ -1872,9 +1872,11 @@ test('the selection works on the chosen layer only, and never on a hidden one', 
   const dot = await p.evaluate(async () => {
     const all = [...(await import('/src/state.js')).app.cards.values()];
     const c = all.find((e) => e.card.title === 'Под выделением')?.card;
-    return c ? c.pixels[3 * 32 + 3] : all.map((e) => e.card.title).join('|');
+    if (!c) return all.map((e) => e.card.title).join('|');
+    const lit = [...c.pixels].map((v, i) => (v ? `${i % c.width},${Math.floor(i / c.width)}=${v}` : '')).filter(Boolean);
+    return { at: c.pixels[3 * c.width + 3], lit: lit.slice(0, 8).join(' '), w: c.width };
   });
-  assert.equal(typeof dot, 'number', `the card was signed (cards: ${dot})`);
-  assert.notEqual(dot, 0, 'the bottom layer kept its dot');
+  assert.equal(typeof dot, 'object', `the card was signed (cards: ${dot})`);
+  assert.notEqual(dot.at, 0, `the bottom layer kept its dot (drawn: ${dot.lit || 'nothing'}, ${dot.w} wide)`);
   await p.context().close();
 });
