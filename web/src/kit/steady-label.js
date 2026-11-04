@@ -7,24 +7,18 @@
 
 import { h } from '../dom.js';
 
-/** @param {string[]} texts */
-export function steadyLabel(texts) {
+/** @param {() => string[]} words asked again on each show: the language may have changed */
+export function steadyLabel(words) {
   const el = h('span', { class: 'steady' });
-  let current = 0;
-  /** @param {string[]} words */
-  const set = (words) => {
+  /** @param {number} current */
+  function show(current) {
+    const now = words();
     // Rebuilt only when the words change (another language), not on every paint.
-    if (words.length === el.children.length && words.every((w, i) => el.children[i].textContent === w)) return;
-    el.replaceChildren(...words.map((w, i) => h('span', { class: i === current ? 'on' : null }, w)));
-  };
-  set(texts);
-  return {
-    el,
-    /** Shows the `i`-th, with the words as they are now. @param {number} i @param {string[]} [words] */
-    show(i, words) {
-      if (words) set(words);
-      current = i;
-      [...el.children].forEach((c, k) => c.classList.toggle('on', k === i));
-    },
-  };
+    if (now.length !== el.children.length || now.some((w, i) => el.children[i].textContent !== w)) {
+      el.replaceChildren(...now.map((w) => h('span', {}, w)));
+    }
+    [...el.children].forEach((c, k) => c.classList.toggle('on', k === current));
+  }
+  show(0);
+  return { el, show };
 }

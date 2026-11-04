@@ -63,7 +63,7 @@ export function collectionView(o) {
   const backBtn = iconButton({ icon: 'back', label: t('collection.back'), plain: true, onClick: () => back() });
   const archBtn = iconButton({ icon: 'archive', label: t('archive.title'), onClick: () => setPlace('archive') });
   const binBtn = iconButton({ icon: 'trash', label: t('archive.trash'), onClick: () => setPlace('trash') });
-  const selLabel = steadyLabel([t('collection.select'), t('collection.done')]);
+  const selLabel = steadyLabel(() => [t('collection.select'), t('collection.done')]);
   const selBtn = h('button', { type: 'button', class: 'pill', onclick: () => (selection.active ? selection.stop() : selection.start()) }, selLabel.el);
   const title = h('h1');
   // The level's name doubles as a switch between weeks and months, so
@@ -97,7 +97,7 @@ export function collectionView(o) {
     onChange: (v) => refilter(() => { filter.owner = v; }),
   });
   // Its two words take the same room: the filters beside it do not move when it is pressed.
-  const groupLabel = steadyLabel([t('group.date'), t('group.author')]);
+  const groupLabel = steadyLabel(() => [t('group.date'), t('group.author')]);
   const groupBtn = h('button', { type: 'button', class: 'group-btn', onclick: () => regroup() }, groupLabel.el);
   const tagChips = chips({ label: t('tags.label'), onToggle: (tag) => setQuery(toggleTag(filter.query, tag)) });
   const none = h('p', { class: 'search-none' }, t('search.none'));
@@ -372,8 +372,8 @@ export function collectionView(o) {
     zoomBox.hidden = !MOUSE || selecting || firstRun || !stage.list.length;
     zoomOut.el.disabled = lv <= 0;
     zoomIn.el.disabled = lv >= 3;
-    selLabel.show(selecting ? 1 : 0, [t('collection.select'), t('collection.done')]);
-    groupLabel.show(filter.by === 'author' ? 1 : 0, [t('group.date'), t('group.author')]);
+    selLabel.show(selecting ? 1 : 0);
+    groupLabel.show(filter.by === 'author' ? 1 : 0);
     tagChips.update(tagCounts(inPlace(filter.place).map(asItem)).map(([tag, n]) => ({ value: tag, text: `#${tag}`, count: n, on: words(filter.query).includes(`#${tag}`) })));
     none.hidden = !filtered || count > 0;
     first.el.hidden = !firstRun;

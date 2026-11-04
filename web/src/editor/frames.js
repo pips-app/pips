@@ -41,7 +41,7 @@ export function framesStrip(o) {
   const addText = h('span', {}, t('ed.frame.first'));
   const add = h('button', { type: 'button', class: 'ed-frame add first', 'aria-label': t('ed.frame.add'), title: t('ed.frame.add'), onclick: o.add }, icon('plus'), addText);
   // «вкл» and «выкл» take the same room: the strip beside the button does not move when it is pressed.
-  const onionState = steadyLabel([t('ed.on'), t('ed.off')]);
+  const onionState = steadyLabel(() => [t('ed.on'), t('ed.off')]);
   const onionName = h('b', {}, t('ed.onion'));
   const onion = h('button', { type: 'button', class: 'ed-onion-btn', onclick: o.onion }, onionName, onionState.el);
   const layerCount = h('span', { class: 'ed-layers-n' });
@@ -91,7 +91,7 @@ export function framesStrip(o) {
       // A copy lasts as long as the frame it copies: the card's frames, holds counted, must have room.
       add.hidden = ticks(doc) + doc.holds[f] > MAX_FRAMES;
       onionName.textContent = t('ed.onion');
-      onionState.show(s.onion ? 0 : 1, [t('ed.on'), t('ed.off')]);
+      onionState.show(s.onion ? 0 : 1);
       onion.setAttribute('aria-pressed', String(s.onion));
       onion.hidden = still;
       const many = doc.layers.length > 1;
