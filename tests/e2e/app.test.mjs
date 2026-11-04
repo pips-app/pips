@@ -259,9 +259,22 @@ test('a monkey loose in the app finds nothing wrong', { timeout: 300_000 }, asyn
   // developer mode), or open the browser's own window (reading the
   // clipboard: Firefox asks with a menu of its own, outside the page).
   const SPARE = /Сменить ключ|Удалить насовсем|Выключить|Очистить|Убрать образцы|Вставить ссылку из буфера/;
-  // What it did last: said if a step never comes back, instead of a silent hang.
+  // What it did last: said if a step never comes back, instead of a silent
+  // hang — and what the page was like then, for a hang is either the app's
+  // (the page does not answer at all) or the browser's (it does).
   const done = [];
-  const within = (/** @type {Promise<unknown>} */ step) => Promise.race([step, new Promise((_, no) => setTimeout(() => no(new Error(`a step hung; the last ones: ${done.slice(-6).join(' · ')}`)), 15_000))]);
+  let at = { x: 0, y: 0 };
+  const state = () => p.evaluate(({ x, y }) => {
+    const e = document.elementFromPoint(x, y), path = [];
+    for (let a = e; a && path.length < 4; a = a.parentElement) path.push(`${a.tagName.toLowerCase()}${typeof a.className === 'string' && a.className ? `.${a.className.trim().split(/\s+/).join('.')}` : ''}`);
+    return `under ${x},${y}: ${path.join(' < ')}; selected: «${String(getSelection()).slice(0, 40)}»; screen: ${document.querySelector('section.view:not([hidden])')?.className}`;
+  }, at);
+  const late = (ms, what) => new Promise((_, no) => setTimeout(() => no(new Error(what)), ms));
+  const within = (/** @type {Promise<unknown>} */ step) => Promise.race([step, late(15_000, 'hung')]).catch(async (e) => {
+    if (e?.message !== 'hung') throw e;
+    const page = await Promise.race([state(), late(3000, 'the page does not answer')]).catch((x) => x.message);
+    throw new Error(`a step hung; the last ones: ${done.slice(-6).join(' · ')}. Then: ${page}`);
+  });
   const { width: W, height: H } = /** @type {{width: number, height: number}} */ (p.viewportSize());
   for (let step = 0; step < 250; step++) {
     const k = rnd(10);
@@ -277,6 +290,7 @@ test('a monkey loose in the app finds nothing wrong', { timeout: 300_000 }, asyn
         if (!fair.length) continue;
         const tp = fair[rnd(fair.length)];
         done.push(`tap «${tp.n}»`);
+        at = tp;
         await within(p.mouse.click(tp.x, tp.y));
       } else if (k < 8) {
         const key = KEYS[rnd(KEYS.length)];
@@ -285,6 +299,7 @@ test('a monkey loose in the app finds nothing wrong', { timeout: 300_000 }, asyn
       } else {
         const x = 40 + rnd(W - 80), y = 120 + rnd(H - 260);
         done.push(`drag at ${x},${y}`);
+        at = { x, y };
         await within((async () => {
           await p.mouse.move(x, y);
           await p.mouse.down();
