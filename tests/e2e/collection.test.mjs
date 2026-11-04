@@ -371,6 +371,8 @@ test('the archive strip goes away after an undo, even when the write takes its t
   await p.evaluate(() => { /** @type {any} */ (window).slowWrites = 1500; });
   await p.click('.toast button');
   await until(async () => !(await stripUp()), 'the strip went down');
+  // The strip goes as the write ends; then the feed glides back to the card.
+  await still(p);
   assert.equal(await p.$eval('.stage-host .on-stage.centre .cap b', (e) => e.textContent), title, 'the card is back in the feed');
   await p.context().close();
 });
