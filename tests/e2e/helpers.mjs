@@ -14,6 +14,13 @@ import { chromium, firefox } from 'playwright';
 
 /** BROWSER=firefox runs the same journeys in Firefox. */
 const engine = process.env.BROWSER === 'firefox' ? firefox : chromium;
+/**
+ * A folder to measure into: with it, every page writes which of the app's
+ * code ran (Chromium's JS coverage) as it closes; tests/coverage-report.mjs
+ * sums it up. Firefox has no such measure.
+ */
+const COVERAGE = engine === chromium ? process.env.COVERAGE : undefined;
+let measured = 0;
 
 const WEB = new URL('../../web/', import.meta.url).pathname;
 const TYPES = {
@@ -84,6 +91,15 @@ export async function setup() {
   const browser = await engine.launch();
   const dir = await mkdtemp(join(tmpdir(), 'pips-e2e-'));
   const errors = [];
+  /** @type {import('playwright').Page[]} */
+  const phones = [];
+  /** Writes down which of the app's own code ran in `p`, once. @param {import('playwright').Page} p */
+  async function keepCoverage(p) {
+    if (p.isClosed() || !phones.includes(p)) return;
+    phones.splice(phones.indexOf(p), 1);
+    const ran = (await p.coverage.stopJSCoverage()).filter((e) => new URL(e.url).pathname.startsWith('/src/'));
+    await writeFile(join(/** @type {string} */ (COVERAGE), `${process.pid}-${measured++}.json`), JSON.stringify(ran.map(({ url, functions }) => ({ url, functions }))));
+  }
   /** A fresh phone at its first screen; `desk`: a computer's screen instead; `scale`: device pixels to a CSS pixel. */
   async function blank(name, desk = false, scale = 1) {
     const viewport = desk ? { width: 1440, height: 900 } : { width: 390, height: 844 };
@@ -91,6 +107,14 @@ export async function setup() {
     await ctx.addInitScript(hearToasts);
     await ctx.addInitScript(hearDrags);
     const p = await ctx.newPage();
+    if (COVERAGE) {
+      // Measured from the first script to the last reload, and written down
+      // before the phone goes: the tests close their phones themselves.
+      await p.coverage.startJSCoverage({ resetOnNavigation: false });
+      const close = ctx.close.bind(ctx);
+      ctx.close = async (...a) => { await keepCoverage(p); return close(...a); };
+      phones.push(p);
+    }
     p.on('pageerror', (e) => errors.push(`${name}: ${e.message}`));
     p.on('console', (m) => { if (m.type() === 'error') errors.push(`${name}: ${m.text()}`); });
     await p.goto(site.url);
@@ -116,6 +140,7 @@ export async function setup() {
   return {
     phone, blank, dir, errors, url: site.url,
     async close() {
+      for (const p of [...phones]) await keepCoverage(p); // phones still open as the file ends
       await browser.close();
       site.close();
     },

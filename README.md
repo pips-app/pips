@@ -73,12 +73,22 @@ scripts/serve.sh            # http://localhost:8000
 
 Browser tests drive the app in Chromium (and, in CI, Firefox) through its
 real journeys — import, exchange by QR, link, file and picture, refusals,
-numbered copies, backups, restoring, the editor; unit tests (`tests/unit`,
-plain node) cover the app's logic:
+numbered copies, backups, restoring, the editor — and keep each screen's
+layout at three sizes and the collection's zoom from laying the page out on
+every frame; unit tests (`tests/unit`, plain node) cover the app's logic:
 
 ```sh
 node --test tests/unit/*.test.mjs
 cd tests/e2e && npm ci && npx playwright install chromium && npm test
+```
+
+What the tests reach of the app's code can be measured (Chromium and node,
+about 94% of lines today), with the functions no test runs listed:
+
+```sh
+cd tests/e2e && COVERAGE=/tmp/cov npm test && cd ../..
+NODE_V8_COVERAGE=/tmp/cov node --test tests/unit/*.test.mjs
+node tests/coverage-report.mjs /tmp/cov
 ```
 
 Every parser of outside input has a fuzz target (`fuzz/`, nightly Rust):
@@ -92,7 +102,9 @@ cd fuzz && cargo +nightly fuzz run card corpus/card seeds/card
 formatting, clippy, tests, the minimum Rust version, a RustSec check of the
 dependencies, a type check of the app and the browser tests (Chromium and
 Firefox, a seeded "monkey" among them), and deploys `main`; a second workflow fuzzes
-every target on each push and for longer once a week.
+every target on each push and for longer once a week. A third, run by hand
+(Actions → Repeat browser tests), runs the browser tests many rounds over in
+both browsers, to find any that pass only sometimes.
 
 ## Contributing
 
