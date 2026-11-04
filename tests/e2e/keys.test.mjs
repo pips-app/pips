@@ -6,7 +6,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { suite, photo, fromPicture, choose, tab, png, textMatching, samples, words, cards, picture, ownCard, still, toastAfter } from './helpers.mjs';
+import { suite, photo, fromPicture, choose, tab, png, textMatching, samples, words, cards, picture, ownCard, act, still, toastAfter } from './helpers.mjs';
 
 const env = suite();
 
@@ -199,4 +199,74 @@ test('a wrong picture for the paper key is answered every time, in the frame', a
   await choose(p, () => p.click('.onb >> text=Из картинки'), broken);
   assert.match(await textMatching(p, note, /повреждён/), /не картинка/, 'not a picture is not "no code"');
   await p.context().close();
+});
+
+// The author's log of numbered copies goes into every backup. Two of its
+// states real people reach broke the backup for good: a number given out
+// on two phones of one key (the logs, joined, hold it twice), and a key
+// changed after copies were issued (the log stays on a card no longer
+// "mine"). A backup that cannot be saved is lost work waiting to happen.
+test('a backup is saved with a copy number given out on two phones, and after the key changes', { timeout: 180_000 }, async () => {
+  const a = await env.phone('twofox');
+  await ownCard(a, 'Дважды', env.dir);
+  const a2 = await env.phone('twofox2', await words(a)); // the same key, on a second phone
+  await act(a, 'share');
+  const plain = await photo(a, '.top-sheet .qr-box', env.dir, 'twice-plain');
+  await tab(a2, 'receive');
+  await fromPicture(a2, 'section.view:visible', plain);
+  await a2.locator('.turn:not([hidden])').waitFor();
+  await act(a2, 'share');
+
+  /** A recipient code from a phone of its own. @param {string} nick */
+  const recipient = async (nick) => {
+    const r = await env.phone(nick);
+    await tab(r, 'receive');
+    await r.click('text=Код получателя');
+    return photo(r, '.overlay .qr-box', env.dir, `rc-${nick}`);
+  };
+  /** Copy №1 of a run of two, from this phone, to whoever's code it is. */
+  const issueFirst = async (p, rc) => {
+    await p.click('.top-sheet button:text("Экземпляр №")');
+    await p.fill('.edition-panel input', '2');
+    await p.click('text=Выдать №1');
+    await fromPicture(p, '.overlay', rc);
+    await p.click('.dialog button:text-is("Выдать")');
+    await p.click('.overlay >> text=Готово');
+    await p.keyboard.press('Escape');
+    await still(p);
+  };
+  await issueFirst(a, await recipient('getsone'));
+  await issueFirst(a2, await recipient('getstwo')); // the second phone did not know: №1 again
+
+  /** Saves a backup; it must come out as a file. */
+  const save = async (p) => {
+    await tab(p, 'me');
+    const [d] = await Promise.all([p.waitForEvent('download', { timeout: 10_000 }), p.click('text=Сохранить копию')]);
+    const f = join(env.dir, `${Date.now()}-${d.suggestedFilename()}`);
+    await d.saveAs(f);
+    return f;
+  };
+  // The second phone's backup, restored on the first: the logs are joined.
+  const fromSecond = await save(a2);
+  await tab(a, 'me');
+  assert.match(await toastAfter(a, () => choose(a, () => a.click('.group:has(h2:text("Резервная копия")) >> text=Восстановить'), fromSecond)), /Восстановлено/);
+  const log = await a.evaluate(async () => [...(await import('/src/state.js')).app.cards.values()].find((e) => e.card.title === 'Дважды')?.rec.editions?.issued.map((i) => i.edition));
+  assert.deepEqual(log, [1, 1], 'number 1, given out twice, to two people');
+  await save(a); // it used to fail here, and every time after
+
+  // A new key: the card is a former self's now, its log still with it.
+  await tab(a, 'me');
+  await a.click('.btn.wide:text-is("Сменить ключ")');
+  await a.click('.dialog button:text-is("Сменить ключ")');
+  await a.locator('.onb').waitFor();
+  await a.click('text=Создать ключ');
+  await a.check('.check input');
+  await a.click('text=Дальше');
+  await a.locator('.onb').waitFor({ state: 'detached' });
+  const kept = await a.evaluate(async () => {
+    const e = [...(await import('/src/state.js')).app.cards.values()].find((x) => x.card.title === 'Дважды');
+    return { mine: e?.rec.mine, copies: e?.rec.editions?.issued.length };
+  });
+  assert.deepEqual(kept, { mine: false, copies: 2 });
+  await save(a); // and here
 });

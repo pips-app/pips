@@ -251,15 +251,53 @@ fn an_empty_backup_is_fine() {
 
 #[test]
 fn the_issue_log_is_checked() {
+    let copy = |edition: u16, holder: u8| Issued {
+        edition,
+        day: 20_380,
+        holder: key(holder).public_key().to_bytes(),
+        nick: "n".into(),
+    };
+    let with = |copies: Vec<Issued>, of: u16| {
+        let mut b = sample();
+        b.cards[0].issued = Some(IssueLog { of, copies });
+        b
+    };
+    let roundtrip = |b: &Backup| assert_eq!(open(&seal(b, &key(1), NONCE).unwrap(), &key(1)).unwrap(), *b);
+    // Logs joined from two devices: a number skipped (issued on the other,
+    // not joined yet), and one number given out twice, to two people (one
+    // key on two phones) — even past the count a small run allows.
+    roundtrip(&with(vec![copy(1, 3), copy(3, 4)], 10));
+    roundtrip(&with(vec![copy(1, 3), copy(2, 4), copy(2, 5)], 2));
+    // Refused: going down, a number past the run or none at all, a copy twice.
+    let refused = |copies: Vec<Issued>, of: u16, why: &'static str| {
+        assert_eq!(seal(&with(copies, of), &key(1), NONCE), Err(Error::Invalid(why)));
+    };
+    refused(vec![copy(2, 3), copy(1, 4)], 10, "copies out of order");
+    refused(vec![copy(1, 3), copy(3, 4)], 2, "a copy number outside the run");
+    refused(vec![copy(0, 3)], 0, "a copy number outside the run");
+    refused(vec![copy(2, 3), copy(2, 3)], 10, "a copy listed twice");
+    // An open run takes any number.
+    roundtrip(&with(vec![copy(7, 3)], 0));
+}
+
+#[test]
+fn an_issue_log_stays_on_a_card_after_the_key_changes() {
+    // The card a former key signed is no longer "mine", but the copies it
+    // gave out still happened: switching back must not number them again.
     let mut b = sample();
-    b.cards[0].issued.as_mut().unwrap().copies[1].edition = 3;
-    assert_eq!(seal(&b, &key(1), NONCE), Err(Error::Invalid("copies out of order")));
+    let former = key(9);
+    b.cards[0] =
+        Entry {
+            mine: false, issued: b.cards[0].issued.clone(), ..entry(encode(&card(&former, "Прежняя")).unwrap())
+        };
+    assert_eq!(open(&seal(&b, &key(1), NONCE).unwrap(), &key(1)).unwrap(), b);
+}
+
+#[test]
+fn an_issue_log_needs_a_signed_card() {
     let mut b = sample();
-    b.cards[0].issued.as_mut().unwrap().of = 1;
-    assert_eq!(seal(&b, &key(1), NONCE), Err(Error::Invalid("more copies than the run")));
-    let mut b = sample();
-    b.cards[1].issued = b.cards[0].issued.clone();
-    assert_eq!(seal(&b, &key(1), NONCE), Err(Error::Invalid("an issue log on someone else's card")));
+    b.cards[0] = Entry { issued: b.cards[0].issued.clone(), ..entry(encode(&Card::new(4, 4)).unwrap()) };
+    assert_eq!(seal(&b, &key(1), NONCE), Err(Error::Invalid("an issue log on an unsigned card")));
 }
 
 #[test]
