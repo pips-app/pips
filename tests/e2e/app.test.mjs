@@ -312,7 +312,13 @@ test('a monkey loose in the app finds nothing wrong', { timeout: 300_000 }, asyn
         steps.push({ key });
         await within(p.keyboard.press(key));
       } else {
-        const x = 40 + rnd(W - 80), y = 120 + rnd(H - 260), to = { x: x + rnd(240) - 120, y: y + rnd(400) - 200 };
+        // It ends on the screen, as a finger does. Let go outside the window,
+        // Firefox now and then loses the release, and the driver's next press
+        // lands on a button it thinks is still down: the step hangs (twice
+        // and three times in sixty rounds, never in Chromium). A person's
+        // mouse let go out there is released by the system.
+        const inside = (/** @type {number} */ v, /** @type {number} */ max) => Math.min(Math.max(v, 1), max - 1);
+        const x = 40 + rnd(W - 80), y = 120 + rnd(H - 260), to = { x: inside(x + rnd(240) - 120, W), y: inside(y + rnd(400) - 200, H) };
         done.push(`drag at ${x},${y}`);
         steps.push({ drag: { x, y }, to });
         at = { x, y };
