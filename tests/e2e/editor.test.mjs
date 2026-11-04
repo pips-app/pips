@@ -4,7 +4,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { suite, photo, choose, tab, toast, heart, gradient, wide, png, textMatching, cards, picture, act, still } from './helpers.mjs';
+import { suite, photo, choose, tab, toast, heart, gradient, wide, png, textMatching, cards, picture, act, still, until } from './helpers.mjs';
 
 const env = suite();
 
@@ -44,7 +44,7 @@ test('a picture comes onto the canvas: pixel art as it is, the rest through a sq
     for (let i = 1; i <= 6; i++) { await new Promise((r) => setTimeout(r, 16)); fire('pointermove', x0 - i * 15, y0 - i * 15); }
     fire('pointerup', x0 - 90, y0 - 90);
   }, [box.x + box.width - 3, box.y + box.height - 3]);
-  await p.waitForTimeout(300);
+  await still(p);
   const after = await p.locator('.pic-crop').boundingBox();
   assert.ok(Math.abs(after.width - (box.width - 90)) < 3 && Math.abs(after.x - box.x) < 1, 'smaller, from the corner held still');
   await p.click('.overlay .btn.key');
@@ -177,8 +177,8 @@ test('the editor: drawing, undo that loses nothing, palettes, frames, a draft, s
   await p.fill('.ed-title', 'Лесенка');
   assert.match(await p.textContent('.ed-meter'), /1 QR/);
 
-  // The draft, with its history, outlives a reload.
-  await p.waitForTimeout(900);
+  // The draft, with its history, outlives a reload — once it is written (a moment after the last change).
+  await until(() => p.evaluate(async () => (await (await import('/src/store.js')).getMeta('draft'))?.doc.title === 'Лесенка'), 'the draft written');
   await p.reload();
   await p.locator('nav.tabs').waitFor();
   await tab(p, 'draw');
@@ -386,7 +386,7 @@ test('the editor holds still: a pinch keeps its zoom as the fingers lift, a sele
   await finger('pointermove', 1, -80, 6);
   await finger('pointermove', 1, -70, 12);
   await finger('pointerup', 1, -70, 12);
-  await p.waitForTimeout(400);
+  await still(p); // a spring back, if any, would have run its course
   assert.ok(Math.abs((await width()) - w1) < 1, `the zoom stays as the fingers lift (${w1} → ${await width()})`);
 
   // A selection, plain and precise: the card does not move by a pixel.
@@ -396,10 +396,10 @@ test('the editor holds still: a pinch keeps its zoom as the fingers lift, a sele
     if (precise) await p.click('.ed-tool-precise');
     const r0 = await rect();
     await p.keyboard.press('Control+a');
-    await p.waitForTimeout(100);
+    await still(p);
     assert.equal(await rect(), r0, `${precise ? 'precise' : 'plain'}: the card stays as the selection's bar comes`);
     await p.keyboard.press('Escape');
-    await p.waitForTimeout(100);
+    await still(p);
     assert.equal(await rect(), r0, `${precise ? 'precise' : 'plain'}: and as it goes`);
   }
   await p.context().close();
@@ -444,7 +444,7 @@ test('the editor: many frames scroll in their strip, frames last longer, layers 
     while (await p.locator('.ed-frame-list .ed-frame').count() > 2) {
       await p.click('.ed-frame[aria-pressed="true"]');
       await p.click('.bottom-sheet.on .ed-menu-item:has-text("Удалить кадр")');
-      await p.waitForTimeout(150);
+      await still(p);
     }
     await p.click('.ed-frame-list .ed-frame >> nth=0');
     await p.click('.ed-frame[aria-pressed="true"]');

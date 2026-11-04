@@ -6,7 +6,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { suite, photo, fromPicture, choose, tab, toast, png, textMatching, samples, words, cards, picture, ownCard, still } from './helpers.mjs';
+import { suite, photo, fromPicture, choose, tab, toast, png, textMatching, samples, words, cards, picture, ownCard, still, toastAfter } from './helpers.mjs';
 
 const env = suite();
 
@@ -24,7 +24,6 @@ test('restoring on a new phone: the backup and the key in one step', async () =>
   const a = await env.phone('pixelfox');
   await tab(a, 'me');
   await samples(a);
-  await a.waitForTimeout(1500);
   await a.evaluate(async () => {
     const s = await import('/src/state.js');
     await s.setProfile({ ...s.app.profile, link: 'pixelfox.example' });
@@ -117,7 +116,6 @@ test('a backup restores cards, notes and the copy log, only for its key', async 
   const a = await env.phone('pixelfox');
   await tab(a, 'me');
   await samples(a);
-  await a.waitForTimeout(1500);
   await a.evaluate(async () => {
     const s = await import('/src/state.js');
     const [d1, d2] = [...s.app.cards.keys()];
@@ -135,9 +133,7 @@ test('a backup restores cards, notes and the copy log, only for its key', async 
   assert.match(await status(), /Последняя: .*, 18 карточек/, 'the status updates at once');
 
   const restore = async (p, f) => {
-    await choose(p, () => p.click('.group:has(h2:text("Резервная копия")) >> text=Восстановить'), f);
-    await p.waitForTimeout(800);
-    return toast(p);
+    return toastAfter(p, () => choose(p, () => p.click('.group:has(h2:text("Резервная копия")) >> text=Восстановить'), f));
   };
   const b = await env.phone('новый', await words(a));
   await tab(b, 'me');
@@ -197,7 +193,7 @@ test('a wrong picture for the paper key is answered every time, in the frame', a
   await choose(p, () => p.click('.onb >> text=Из картинки'), plain);
   assert.match(await textMatching(p, note, /не нашлось QR-кода/), /не нашлось/);
   assert.ok(await p.$eval(note, (e) => e.classList.contains('bad')), 'said as a problem');
-  await p.waitForTimeout(400); // the first answer has finished moving
+  await p.waitForFunction((s) => !document.querySelector(s)?.getAnimations().length, note); // the first answer has finished moving
   await choose(p, () => p.click('.onb >> text=Из картинки'), plain);
   await p.waitForFunction((s) => document.querySelector(s)?.getAnimations().length, note);
   assert.ok((await shakes()) > 0, 'the same picture again: answered again, visibly');

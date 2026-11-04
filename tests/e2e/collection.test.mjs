@@ -4,7 +4,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { suite, tab, toast, samples, words, cards, ownCard, act, still, overlaps } from './helpers.mjs';
+import { suite, tab, toast, textMatching, samples, words, cards, ownCard, act, still, overlaps, until } from './helpers.mjs';
 
 const env = suite();
 
@@ -58,8 +58,7 @@ test('the collection: tags, search, archive and the bin, all without gestures', 
   await p.keyboard.type('Ночные Совы');
   await p.keyboard.press('Enter');
   await p.click('.turn .pen');
-  await p.waitForTimeout(100);
-  assert.match(await p.textContent('.turn .tags'), /#ночные-совы/);
+  assert.match(await textMatching(p, '.turn .tags', /#ночные-совы/), /#ночные-совы/);
 
   // The tag on the back is a filter: every card with it, in the months.
   await p.click('.turn .tag');
@@ -90,14 +89,14 @@ test('the collection: tags, search, archive and the bin, all without gestures', 
   // To the archive from the feed's bar, back with undo, then for good.
   await clickCard();
   await act(p, 'down');
-  await p.waitForTimeout(2200);
+  await still(p);
   assert.equal(await toast(p), 'Карточка в архиве');
   assert.equal(await inPlace('collection'), 17);
   await p.click('.toast button');
   await still(p);
   assert.equal(await inPlace('collection'), 18, 'undone');
   await act(p, 'down');
-  await p.waitForTimeout(2200);
+  await still(p);
   // Beside one card, the places stay out of the bar: a bin there would read as «delete this».
   assert.ok(!(await p.isVisible('.collection-bar .ib[aria-label="Архив"]')), 'no places in the feed');
   await p.keyboard.press('Escape');
@@ -136,7 +135,7 @@ test('on a computer, a mouse and the keys reach every level', async () => {
   await still(p);
   const level = () => p.$eval('.stage-host', (e) => Number(e.dataset.level));
   const centre = () => p.$eval('.stage-host .on-stage.centre', (e) => [...e.parentElement.children].indexOf(e));
-  const settle = () => p.waitForTimeout(800);
+  const settle = () => still(p);
   assert.equal(await level(), 1);
   await p.click('.collection-bar .zoom [aria-label="Дальше"]');
   await settle();
@@ -191,7 +190,7 @@ test('on a computer, a mouse and the keys reach every level', async () => {
   await p.mouse.down();
   for (let i = 1; i <= 12; i++) await p.mouse.move(box.x, box.y + i * 30);
   await p.mouse.up();
-  await p.waitForTimeout(1800);
+  await still(p);
   const ys = await p.evaluate(() => window.__ys);
   assert.ok(Math.max(...ys) <= ys[0] + 1, `the neighbour never drops below where it was (${ys[0]} → max ${Math.max(...ys)})`);
   await p.context().close();
@@ -200,21 +199,20 @@ test('on a computer, a mouse and the keys reach every level', async () => {
 test('nothing on screen covers anything else, and the hint shows only when it applies', async () => {
   for (const desk of [false, true]) {
     const p = await env.phone('pixelfox', undefined, desk);
-    await p.waitForTimeout(600);
+    await p.locator('.first-run').waitFor();
     // An empty collection: nothing to zoom, so no word about zooming.
     assert.ok(await p.locator('.first-run').isVisible());
     assert.equal(await p.locator('.coach').isVisible(), false, 'no zoom hint without cards');
     for (const t of ['me', 'receive', 'give', 'draw']) {
       await tab(p, t);
-      await p.waitForTimeout(500);
       assert.deepEqual(await overlaps(p), [], `${t}, ${desk ? 'computer' : 'phone'}`);
     }
     // Two-up rows keep their labels on one line.
     await tab(p, 'me');
-    await p.waitForTimeout(400);
-    for (const b of await p.$$('section.view:not([hidden]) .row-btns .btn')) assert.ok((await b.boundingBox()).height <= 50, await b.textContent());
+    const twoUp = p.locator('section.view:not([hidden]) .row-btns .btn');
+    await twoUp.first().waitFor(); // the profile draws its groups once it has read them
+    for (const b of await twoUp.all()) assert.ok((await b.boundingBox()).height <= 50, await b.textContent());
     await samples(p);
-    await p.waitForTimeout(1500);
     await tab(p, 'collection');
     await still(p);
     // With cards: the hint, clear of the scan button; gone once used.
@@ -225,10 +223,27 @@ test('nothing on screen covers anything else, and the hint shows only when it ap
     assert.equal(await p.locator('.coach').isVisible(), false, 'learnt: gone');
     await p.reload();
     await p.locator('nav.tabs').waitFor();
-    await p.waitForTimeout(800);
+    await still(p);
     assert.equal(await p.locator('.coach').isVisible(), false, 'and stays gone');
     await p.context().close();
   }
+});
+
+// Under the title, the level and how many cards: a switch to the months, so
+// it is read, not cut. Where «по неделям · 18 карточек» does not fit (320
+// and 360 px phones), the word goes and the number stays.
+test('the level and the count under the title are whole on every phone', async () => {
+  const p = await env.phone('pixelfox');
+  await tab(p, 'me');
+  await samples(p);
+  for (const [w, said] of [[320, 'по неделям · 18'], [360, 'по неделям · 18'], [390, 'по неделям · 18 карточек']]) {
+    await p.setViewportSize({ width: w, height: 700 });
+    await tab(p, 'collection');
+    await still(p);
+    const sub = await p.$eval('.collection-bar .level-switch', (e) => ({ text: e.innerText, cut: e.scrollWidth > e.clientWidth }));
+    assert.deepEqual(sub, { text: said, cut: false }, `${w} px across`);
+  }
+  await p.context().close();
 });
 
 test('the tab bar waits for the card to land in the archive and the strip to go', async () => {
@@ -262,7 +277,6 @@ test('an animated card holds still in the grid, with a mark, and plays when look
   const p = await env.phone('pixelfox');
   await tab(p, 'me');
   await samples(p);
-  await p.waitForTimeout(1200);
   await tab(p, 'collection');
   await still(p);
   const id = await p.evaluate(async () => [...(await import('/src/state.js')).app.cards.values()].find((e) => e.card.title === 'Кораблик')?.rec.digest);
@@ -277,7 +291,7 @@ test('an animated card holds still in the grid, with a mark, and plays when look
   await p.locator(art).scrollIntoViewIfNeeded();
   const box = await p.locator(art).boundingBox();
   await p.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
-  await p.waitForTimeout(1000);
+  await still(p);
   const seen = new Set();
   for (let k = 0; k < 6; k++) { seen.add(await pixels()); await p.waitForTimeout(170); }
   assert.ok(seen.size > 1, 'it plays in the feed');
@@ -306,7 +320,7 @@ test('the feed under a finger: held still before lifting it stays, a flick carri
     await new Promise((r) => setTimeout(r, hold));
     fire('pointerup', x0 + dx);
   }, [dx, ms, hold]);
-  const settle = () => p.waitForTimeout(1500);
+  const settle = () => still(p);
 
   const c0 = await centre();
   // Fast across a third of a card, then held: no throw, back where it was.
@@ -352,8 +366,7 @@ test('the archive strip goes away after an undo, even when the write takes its t
   // Undone at once, while the strip is still up; the write is slow.
   await p.evaluate(() => { /** @type {any} */ (window).slowWrites = 1500; });
   await p.click('.toast button');
-  await p.waitForTimeout(3200);
-  assert.equal(await stripUp(), false, 'the strip went down');
+  await until(async () => !(await stripUp()), 'the strip went down');
   assert.equal(await p.$eval('.stage-host .on-stage.centre .cap b', (e) => e.textContent), title, 'the card is back in the feed');
   await p.context().close();
 });
@@ -370,7 +383,7 @@ test('the keyboard: a sheet holds focus, Escape closes only what is on top, focu
   await p.keyboard.press('Shift+Tab');
   await p.keyboard.press('Tab');
   await p.keyboard.press('Enter');
-  await p.waitForTimeout(400);
+  await still(p);
   const inside = (sel) => p.evaluate((sel) => !!document.activeElement?.closest(sel), sel);
   assert.ok(await inside('.bottom-sheet.on'), 'focus went into the sheet');
   for (let i = 0; i < 25; i++) await p.keyboard.press('Tab');
@@ -382,7 +395,7 @@ test('the keyboard: a sheet holds focus, Escape closes only what is on top, focu
   assert.equal(await p.locator('.dialog').count(), 0, 'Escape answers the question…');
   assert.equal(await p.locator('.bottom-sheet.on').count(), 1, '…and leaves the sheet under it');
   await p.keyboard.press('Escape');
-  await p.waitForTimeout(400);
+  await still(p);
   assert.equal(await p.locator('.bottom-sheet.on').count(), 0, 'the next one closes the sheet');
   assert.ok(await p.isVisible('.ed-tools'), 'the editor stayed');
   assert.ok(await p.evaluate(() => document.activeElement?.classList.contains('ed-tool-more')), 'focus is back where it was');
@@ -400,7 +413,7 @@ test('a chosen card scrolled far off the screen flies to the archive from where 
   await p.mouse.click(first.x + first.width / 2, first.y + first.height / 2);
   // Off the top in two goes: hidden once past the edge (not drawn there), then much further.
   await p.mouse.move(200, 500);
-  for (let i = 0; i < 2; i++) { await p.mouse.wheel(0, 1200); await p.waitForTimeout(900); }
+  for (let i = 0; i < 2; i++) { await p.mouse.wheel(0, 1200); await still(p); }
   assert.equal(await p.$eval('.on-stage.chosen', (e) => e.style.visibility), 'hidden', 'past the edge, not shown where it was');
   await p.click('.action-bar.up [data-act="archive"]');
   await p.locator('.fly-layer .on-stage').waitFor({ state: 'attached' });
@@ -416,7 +429,7 @@ test('the opened card goes to the archive over the strip, face up — turned ove
   await samples(p);
   await p.locator('.collection-view:visible').waitFor();
   await still(p);
-  for (let i = 0; i < 3; i++) { await p.keyboard.press('+'); await p.waitForTimeout(700); }
+  for (let i = 0; i < 3; i++) { await p.keyboard.press('+'); await still(p); }
   await act(p, 'turn');
   await still(p);
   const side = () => p.$eval('.turn-flip', (e) => Math.round(Math.abs(Number(e.dataset.angle)) / 180) * 180 % 360);
@@ -426,7 +439,7 @@ test('the opened card goes to the archive over the strip, face up — turned ove
   assert.equal(await side(), 0, 'face up again while it flies');
   assert.ok(await p.$eval('.turn', (e) => !!e.closest('.fly-layer')), 'over the archive strip it lands on, not under it');
   // Face up from the start, the next one too: over the strip all the way down.
-  await p.waitForTimeout(1500);
+  await still(p);
   await act(p, 'down');
   const over = [];
   for (let i = 0; i < 6; i++) { await p.waitForTimeout(90); over.push(await p.$eval('.turn', (e) => e.hidden || !!e.closest('.fly-layer') || !document.querySelector('.fly-layer .on-stage'))); } // landed: the next card, back in the stage
@@ -449,12 +462,13 @@ test('a feed card pulled down by a finger lies over the archive strip, before an
     fire('pointerdown', 380);
     for (let i = 1; i <= 12; i++) { await new Promise((r) => setTimeout(r, 25)); fire('pointermove', 380 + i * 30); }
   });
-  await p.waitForTimeout(300);
-  const held = await p.evaluate(() => {
+  // The finger stays down, so things never come to rest (the card is held): wait for the state itself.
+  const held = () => p.evaluate(() => {
     const c = document.querySelector('.on-stage.centre');
     return { over: !!c?.closest('.fly-layer'), strip: !/101%/.test(/** @type {HTMLElement} */ (document.querySelector('.strip')).style.transform) };
   });
-  assert.deepEqual(held, { over: true, strip: true }, 'while held: the card over the strip that rose for it');
+  await until(async () => { const h = await held(); return h.over && h.strip; }, 'while held: the card over the strip that rose for it').catch(() => {});
+  assert.deepEqual(await held(), { over: true, strip: true }, 'while held: the card over the strip that rose for it');
   // The empty archive says so, from where its title starts; the words stay while nothing is on its way.
   const words = await p.evaluate(() => {
     const e = /** @type {HTMLElement} */ (document.querySelector('.strip-empty')), b = /** @type {HTMLElement} */ (document.querySelector('.strip-head b'));
@@ -463,7 +477,7 @@ test('a feed card pulled down by a finger lies over the archive strip, before an
   assert.deepEqual(words, { gone: false, lined: true });
   // Let go a little up the way: it goes back into the feed, and back into the stage.
   await p.evaluate(() => document.querySelector('.stage-host').dispatchEvent(new PointerEvent('pointercancel', { bubbles: true, pointerId: 7, pointerType: 'touch', isPrimary: true })));
-  await p.waitForTimeout(1500);
+  await still(p);
   assert.ok(await p.$eval('.on-stage.centre', (e) => !!e.closest('.stage-host')), 'back in its place in the feed');
   await p.context().close();
 });

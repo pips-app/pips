@@ -5,7 +5,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { suite, tab, toast, textMatching, samples, words, cards, ownCard, still } from './helpers.mjs';
+import { suite, tab, toast, textMatching, samples, words, cards, ownCard, still, until } from './helpers.mjs';
 
 const env = suite();
 
@@ -17,7 +17,8 @@ test('a fault nobody caught is written down, told once, and can be read and sent
   await boom();
   assert.match(await textMatching(p, '.toast span', /журнал/), /Что-то пошло не так — это записано в журнал/);
   await boom(); // the same again: one entry, counted
-  await p.waitForTimeout(300);
+  const counted = () => p.evaluate(async () => (await import('/src/diagnostics.js')).journal.entries[0]?.count === 2);
+  await until(counted, 'the second fault counted');
   env.errors.splice(before); // thrown on purpose
 
   // The toast leads to the journal.
@@ -35,7 +36,7 @@ test('a fault nobody caught is written down, told once, and can be read and sent
   // It survives a restart (written a moment after it happened).
   await p.keyboard.press('Escape');
   await p.locator('.overlay').waitFor({ state: 'detached' });
-  await p.waitForTimeout(1200);
+  await until(() => p.evaluate(async () => (await (await import('/src/store.js')).getMeta('journal'))?.[0]?.count === 2), 'the journal written');
   await p.reload();
   await p.locator('nav.tabs').waitFor();
   await tab(p, 'me');
@@ -62,8 +63,7 @@ test('developer mode opens only for its phrase, and its samples come and go as a
   assert.equal(await group.locator('button').count(), 0, 'no tools, only the folded gate');
   await group.locator('summary').click();
   for (const wrong of ['i am a developer', 'I am a developer ', 'I am a develope']) {
-    await group.locator('input').fill(wrong);
-    await p.waitForTimeout(150);
+    await group.locator('input').fill(wrong); // the gate answers as it is typed
     assert.equal(await group.locator('.dev-gate').count(), 1, `not for «${wrong}»`);
   }
   await group.locator('input').fill('I am a developer');
@@ -75,7 +75,6 @@ test('developer mode opens only for its phrase, and its samples come and go as a
   await tab(p, 'collection');
   await tab(p, 'me');
   await samples(p);
-  await p.waitForTimeout(500);
   assert.equal(await cards(p), 19);
   // Taken away as a set: the person's own card stays.
   await tab(p, 'me');
@@ -100,13 +99,12 @@ test('the profile keeps itself as it is typed, and the scanner frame turns the c
   await field('Соцсеть').fill('quill.bsky');
   await field('Ссылка').fill('Quill.ART/Shop');
   await field('Ссылка').blur(); // leaving a field keeps it at once
-  await p.waitForTimeout(300);
   const profile = () => p.evaluate(async () => (await import('/src/state.js')).app.profile);
+  await until(async () => (await profile()).link === 'quill.art/Shop', 'the link kept');
   assert.deepEqual(await profile(), { nick: 'quill2', handle: { network: 'bluesky', text: 'quill.bsky' }, link: 'quill.art/Shop' });
   // An empty name: no network is kept, whatever the list shows.
   await field('Соцсеть').fill('');
-  await p.waitForTimeout(1000);
-  assert.equal((await profile()).handle, null);
+  await until(async () => (await profile()).handle === null, 'an empty name keeps no network');
   assert.equal(await p.locator('section.view:visible button:text-is("Сохранить")').count(), 0, 'nothing to press');
   assert.equal(await p.locator('section.view:visible button:text-is("Сменить ключ")').count(), 1);
 
@@ -198,7 +196,7 @@ test('a camera granted after the scanner was left is switched off at once', asyn
   await p.click('section.view:not([hidden]) .scanner-start');
   await p.click('section.view:not([hidden]) .scanner-start'); // twice, impatiently
   await tab(p, 'collection'); // and away before the camera came
-  await p.waitForTimeout(1200);
+  await p.waitForTimeout(1200); // time itself: a camera granted late would have come by now
   const states = await p.evaluate(() => /** @type {any} */ (window).tracks?.map((t) => t.readyState) ?? []);
   assert.ok(states.length <= 1, `asked for the camera once (${states.length})`);
   assert.ok(states.every((s) => s === 'ended'), `no camera left on: ${states}`);
@@ -300,7 +298,7 @@ test('a monkey loose in the app finds nothing wrong', { timeout: 300_000 }, asyn
       /* a target gone before the tap: not a finding */
     }
   }
-  for (let i = 0; i < 6; i++) { await p.keyboard.press('Escape'); await p.waitForTimeout(400); }
+  for (let i = 0; i < 6; i++) { await p.keyboard.press('Escape'); await still(p); }
   const open = await p.evaluate(() => [...document.querySelectorAll('[role="dialog"], .overlay, .scrim')].filter((e) => {
     const r = e.getBoundingClientRect(), cs = getComputedStyle(e);
     return r.width > 0 && r.height > 0 && r.top < innerHeight - 2 && r.bottom > 2 && cs.visibility !== 'hidden' && Number(cs.opacity) > 0.05 && !e.closest('[hidden]');

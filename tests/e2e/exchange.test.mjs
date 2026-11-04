@@ -6,7 +6,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { suite, photo, fromPicture, choose, tab, toast, heart, png, textMatching, samples, words, cards, picture, ownCard, act, backText, still } from './helpers.mjs';
+import { suite, photo, fromPicture, choose, tab, toast, heart, png, textMatching, samples, words, cards, picture, ownCard, act, backText, still, until, toastAfter } from './helpers.mjs';
 
 const env = suite();
 
@@ -29,8 +29,7 @@ test('a card goes from one phone to another and is checked on arrival', async ()
 
   // The same code again: recognised, not duplicated.
   await tab(b, 'receive');
-  await fromPicture(b, 'section.view:visible', code);
-  await b.waitForTimeout(500);
+  assert.equal(await toastAfter(b, () => fromPicture(b, 'section.view:visible', code)), 'Такая карточка уже есть');
   assert.equal(await cards(b), 1);
 
   // Passed on once more: the code names its last sender, not the hands
@@ -65,11 +64,8 @@ test('damaged and forged codes are refused with their reason', async () => {
   const b = await env.phone('mossfern');
   await tab(b, 'receive');
   const paste = async (t) => {
-    await b.evaluate(() => { document.querySelector('.toast span').textContent = ''; });
     await b.fill('section.view:visible .field input', t);
-    await b.press('section.view:visible .field input', 'Enter');
-    await b.waitForTimeout(300);
-    return toast(b);
+    return toastAfter(b, () => b.press('section.view:visible .field input', 'Enter'));
   };
   const flip = (at) => text.slice(0, at) + (text[at] === 'A' ? 'B' : 'A') + text.slice(at + 1);
   assert.match(await paste(flip(60)), /Код Pips, но повреждён/);
@@ -90,7 +86,7 @@ test('numbered copies: issued once each, until the run is complete', async () =>
   await ownCard(a, 'Сердце', env.dir);
   await act(a, 'share');
   // The sheet keeps its place and size from the copy's code to the panel.
-  const sheetBox = async () => { await a.waitForTimeout(700); return a.locator('.top-sheet').boundingBox(); }; // once it has come down
+  const sheetBox = async () => { await still(a); return a.locator('.top-sheet').boundingBox(); }; // once it has come down
   const asCopy = await sheetBox();
   await a.click('.top-sheet button:text("Экземпляр №")');
   assert.deepEqual(await sheetBox(), asCopy, 'nothing jumps between «Копия» and «Экземпляр №»');
@@ -225,8 +221,7 @@ test('give: one’s own cards with their codes, as a link, a file or a picture; 
   const q = await env.phone('lumen');
   await tab(q, 'receive');
   await choose(q, () => q.click('section.view:visible >> text=Файл .pips'), pips);
-  await q.waitForTimeout(800);
-  assert.equal(await cards(q), 1, 'the file opens on another phone');
+  await until(async () => (await cards(q)) === 1, 'the file opens on another phone');
 
   // One's own card starts a new one in the editor: the picture, without the name.
   await tab(p, 'collection');
@@ -338,12 +333,13 @@ test('several cards at once: chosen in the collection, sent as one file or as pi
   await a.click('.collection-bar .pill');
 
   // As pictures: one file each, two at a time.
-  await a.waitForTimeout(500);
+  await still(a);
   await choose3(3, 2);
   const pics = [];
   a.on('download', (d) => pics.push(d));
   await a.click('.bottom-sheet.on .many-way >> nth=1');
-  await a.waitForTimeout(3000);
+  await until(async () => pics.length >= 2, 'a picture for each card');
+  await still(a); // and no third behind them
   assert.equal(pics.length, 2, 'a picture for each card');
   const files = [];
   for (const [k, d] of pics.entries()) { const f = join(env.dir, `pic-${k}.png`); await d.saveAs(f); files.push(f); }

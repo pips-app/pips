@@ -101,14 +101,32 @@ export async function choose(page, click, file) {
   await chooser.setFiles(file);
 }
 
-/** The text of `selector` once it matches `re` (waits up to 5 s). */
-export async function textMatching(page, selector, re) {
+/**
+ * Waits for `check` to come true — a state, asked from the test: a count in
+ * the app, something written to storage, a download in. Throws, naming
+ * `what`, if it has not in `timeout` ms.
+ * @param {() => Promise<unknown>} check @param {string} what
+ */
+export async function until(check, what, timeout = 5000) {
   const at = Date.now();
-  for (;;) {
-    const text = (await page.locator(selector).first().textContent()) ?? '';
-    if (re.test(text) || Date.now() - at > 5000) return text;
-    await page.waitForTimeout(50);
+  while (!(await check())) {
+    if (Date.now() - at > timeout) throw new Error(`waited ${timeout} ms, still not: ${what}`);
+    await new Promise((r) => setTimeout(r, 50));
   }
+}
+
+/** The text of `selector` once it matches `re` (waits up to 5 s; then the text as it is, for the assertion to show). */
+export async function textMatching(page, selector, re) {
+  let text = '';
+  await until(async () => re.test(text = (await page.locator(selector).first().textContent()) ?? ''), `${selector} matches ${re}`).catch(() => {});
+  return text;
+}
+
+/** The toast `action` brings: the old text cleared first, so a toast already up is not taken for the answer. */
+export async function toastAfter(page, action) {
+  await page.evaluate(() => { const s = document.querySelector('.toast span'); if (s) s.textContent = ''; });
+  await action();
+  return textMatching(page, '.toast span', /./);
 }
 
 /** Taps a tab. The feed, a single card and the archive hide the tab bar,
