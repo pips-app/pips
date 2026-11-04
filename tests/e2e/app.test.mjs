@@ -281,11 +281,12 @@ test('a monkey loose in the app finds nothing wrong', { timeout: 300_000 }, asyn
   };
   const within = (/** @type {Promise<unknown>} */ step) => Promise.race([step, late(15_000, 'hung')]).catch(async (e) => {
     if (e?.message !== 'hung') throw e;
-    const page = await Promise.race([state(), late(3000, 'the page does not answer')]).catch((x) => x.message);
+    const t0 = Date.now();
+    const page = await Promise.race([state().then((x) => `${x} (answered in ${Date.now() - t0} ms)`), late(20_000, 'the page does not answer in 20 s')]).catch((x) => x.message);
     const other = await Promise.race([fresh(), late(5000, 'a fresh page does not answer either')]).catch((x) => x.message);
     const after = await Promise.race([p.mouse.up().then(state), late(3000, 'still nothing')]).catch((x) => x.message);
     if (process.env.PIPS_TEST_OUT) await writeFile(join(process.env.PIPS_TEST_OUT, `monkey-${process.env.BROWSER ?? 'chromium'}-${Date.now()}.json`), JSON.stringify({ steps, page, other, after }, null, 1));
-    throw new Error(`a step hung; the last ones: ${done.slice(-6).join(' · ')}. Then: ${page}; ${other}; after letting go of the mouse: ${after}`);
+    throw new Error(`a step hung; the last ones: ${done.slice(-6).join(' · ')}. Then: ${page}; ${other}; after letting go of the mouse: ${after}\nsteps: ${JSON.stringify(steps.slice(-30))}`);
   });
   const { width: W, height: H } = /** @type {{width: number, height: number}} */ (p.viewportSize());
   for (let step = 0; step < 250; step++) {
