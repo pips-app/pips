@@ -209,8 +209,11 @@ test('nothing on screen covers anything else, and the hint shows only when it ap
     }
     // Two-up rows keep their labels on one line.
     await tab(p, 'me');
-    const twoUp = p.locator('section.view:not([hidden]) .row-btns .btn');
-    await twoUp.first().waitFor(); // the profile draws its groups once it has read them
+    // The profile draws its groups once it has read them, the developer's last;
+    // what is folded away in it has no box and is not looked at.
+    await p.locator('section.view:not([hidden]) .group.developer > *').first().waitFor();
+    const twoUp = p.locator('section.view:not([hidden]) .row-btns .btn:visible');
+    assert.ok(await twoUp.count() >= 2, 'there are two-up rows to look at');
     for (const b of await twoUp.all()) assert.ok((await b.boundingBox()).height <= 50, await b.textContent());
     await samples(p);
     await tab(p, 'collection');
