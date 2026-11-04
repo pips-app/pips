@@ -1,0 +1,81 @@
+# The browser tests, many rounds over, in both browsers: to find the tests
+# that pass only sometimes, before a pull request does. Run by hand:
+# Actions → Repeat browser tests → Run workflow. The rounds are spread over
+# five machines per browser; the last job counts them in one table.
+name: Repeat browser tests
+
+on:
+  workflow_dispatch:
+    inputs:
+      rounds:
+        description: Rounds per browser
+        default: '10'
+      only:
+        description: Only the tests whose name matches this regular expression (empty for all)
+        default: ''
+
+permissions:
+  contents: read
+
+jobs:
+  rounds:
+    name: ${{ matrix.browser }} · machine ${{ matrix.machine }}
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chromium, firefox]
+        machine: [1, 2, 3, 4, 5]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/core
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: tests/e2e/package-lock.json
+      - name: Install
+        working-directory: tests/e2e
+        run: |
+          npm ci
+          npx playwright install --with-deps ${{ matrix.browser }}
+      # Rounds 1, 6, 11… on machine 1; 2, 7, 12… on machine 2; and so on.
+      # A failing round goes on: the count is the point.
+      - name: Rounds
+        working-directory: tests/e2e
+        env:
+          BROWSER: ${{ matrix.browser }}
+          MACHINE: ${{ matrix.machine }}
+          ROUNDS: ${{ inputs.rounds || '10' }}
+          ONLY: ${{ inputs.only || '' }}
+        run: |
+          mine=$(( ROUNDS >= MACHINE ? (ROUNDS - MACHINE) / 5 + 1 : 0 ))
+          only=(); [ -n "$ONLY" ] && only=(--test-name-pattern="$ONLY")
+          mkdir -p "results-$BROWSER-$MACHINE"
+          for i in $(seq "$mine"); do
+            echo "::group::Round $i of $mine on this machine"
+            npm test -- "${only[@]}" \
+              --test-reporter=dot --test-reporter-destination=stdout \
+              --test-reporter=../record.mjs --test-reporter-destination="results-$BROWSER-$MACHINE/round-$i.jsonl" || true
+            echo "::endgroup::"
+          done
+      - uses: actions/upload-artifact@v7
+        with:
+          name: results-${{ matrix.browser }}-${{ matrix.machine }}
+          path: tests/e2e/results-${{ matrix.browser }}-${{ matrix.machine }}
+          if-no-files-found: error
+
+  count:
+    name: Count
+    needs: rounds
+    if: always()
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: results-*
+          path: results
+      - name: Which tests failed, how often
+        shell: bash # with pipefail: the count's verdict, not tee's
+        run: node tests/repeat-summary.mjs results | tee -a "$GITHUB_STEP_SUMMARY"

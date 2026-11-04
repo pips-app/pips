@@ -62,18 +62,7 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: wasm32-unknown-unknown
-      - uses: Swatinem/rust-cache@v2
-      # The CLI must match the wasm-bindgen library version in Cargo.lock
-      # exactly; build-wasm.sh checks it again.
-      - name: wasm-bindgen-cli
-        run: |
-          want=$(awk '/^name = "wasm-bindgen"$/ { getline; gsub(/version = |"/, ""); print; exit }' Cargo.lock)
-          have=$(wasm-bindgen --version 2>/dev/null | awk '{ print $2 }' || true)
-          [ "$have" = "$want" ] || cargo install wasm-bindgen-cli --version "$want" --locked
-      - run: scripts/build-wasm.sh
+      - uses: ./.github/actions/core
       - name: Type-check the app
         run: npx --yes -p typescript@5.9.3 tsc -p web/jsconfig.json
       # The interface's plain parts (layout, filters, springs), without a browser.
