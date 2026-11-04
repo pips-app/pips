@@ -4,7 +4,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { suite, tab, toast, textMatching, samples, words, cards, ownCard, act, still, overlaps, until } from './helpers.mjs';
+import { suite, tab, toast, textMatching, samples, words, cards, ownCard, act, still, overlaps, until, visible } from './helpers.mjs';
 
 const env = suite();
 
@@ -212,9 +212,10 @@ test('nothing on screen covers anything else, and the hint shows only when it ap
     // The profile draws its groups once it has read them, the developer's last;
     // what is folded away in it has no box and is not looked at.
     await p.locator('section.view:not([hidden]) .group.developer > *').first().waitFor();
-    const twoUp = p.locator('section.view:not([hidden]) .row-btns .btn:visible');
-    assert.ok(await twoUp.count() >= 2, 'there are two-up rows to look at');
-    for (const b of await twoUp.all()) assert.ok((await b.boundingBox()).height <= 50, await b.textContent());
+    // Measured in one go: the profile may draw a group again between two questions.
+    const twoUp = await visible(p, 'section.view:not([hidden]) .row-btns .btn');
+    assert.ok(twoUp.length >= 2, 'there are two-up rows to look at');
+    for (const b of twoUp) assert.ok(b.box[3] - b.box[1] <= 50, b.label);
     await samples(p);
     await tab(p, 'collection');
     await still(p);
