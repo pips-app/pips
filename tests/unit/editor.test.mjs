@@ -427,3 +427,46 @@ test('any mix of layer and frame changes keeps the picture whole, and undoes and
     assert.equal(snap(m.doc), end, `redone to the end: run ${run}`);
   }
 });
+
+test('every tool with the mirror on: a picture symmetric on its axes, on the chosen layer alone, undone whole', async () => {
+  const { createStrokes } = await import('../../web/src/editor/strokes.js');
+  const N = 8;
+  const symmetric = (/** @type {Uint8Array} */ c, /** @type {{x: boolean, y: boolean}} */ ax) => {
+    for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+      const v = c[y * N + x];
+      if (ax.x && c[y * N + (N - 1 - x)] !== v) return false;
+      if (ax.y && c[(N - 1 - y) * N + x] !== v) return false;
+    }
+    return true;
+  };
+  const kinds = [
+    { tool: 'pen', pen: 'solid' }, { tool: 'pen', pen: 'square' }, { tool: 'pen', pen: 'dither' }, { tool: 'eraser' }, { tool: 'fill' },
+    ...['line', 'rect', 'rect-fill', 'ellipse', 'ellipse-fill'].map((shape) => ({ tool: 'shapes', shape })),
+  ];
+  for (const axes of [{ x: true, y: false }, { x: false, y: true }, { x: true, y: true }]) {
+    for (const k of kinds) {
+      const m = createModel(blank(N, PAL));
+      // Something on the bottom layer, not symmetric at all: it must stay as it is.
+      const s0 = m.stroke(0, 0);
+      for (const i of [0, 9, 10, 27]) s0.set(i, 2);
+      s0.commit('pen');
+      m.addLayer(0);
+      // The top layer: full of one colour for the eraser to take from, a wall to fill up to for the fill.
+      if (k.tool === 'eraser') { const s = m.stroke(0, 1); for (let i = 0; i < N * N; i++) s.set(i, 3); s.commit('fill'); }
+      if (k.tool === 'fill') { const s = m.stroke(0, 1); for (let i = 0; i < N; i++) { s.set(i * N + 3, 1); s.set(i * N + 4, 1); } s.commit('pen'); }
+      const bottom = [...m.doc.frames[0][0]], before = [...m.doc.frames[0][1]];
+      const strokes = createStrokes({
+        model: m, pick() {}, selection: /** @type {any} */ ({}),
+        now: () => ({ frame: 0, layer: 1, color: 2, shape: /** @type {any} */ (k.shape ?? 'line'), pen: /** @type {any} */ (k.pen ?? 'solid'), mirror: true, axes }),
+      });
+      const name = `${k.tool}${k.pen ? `/${k.pen}` : ''}${k.shape ? `/${k.shape}` : ''} on ${axes.x ? 'x' : ''}${axes.y ? 'y' : ''}`;
+      const hnd = strokes.start({ x: 1, y: 1 }, /** @type {any} */ (k.tool));
+      if (hnd) { for (const c of [{ x: 2, y: 1 }, { x: 2, y: 2 }, { x: 1, y: 3 }]) hnd.move(c); hnd.end(); }
+      assert.ok(symmetric(m.doc.frames[0][1], axes), `${name}: the layer drawn on is symmetric`);
+      assert.notDeepEqual([...m.doc.frames[0][1]], before, `${name}: something was drawn`);
+      assert.deepEqual([...m.doc.frames[0][0]], bottom, `${name}: the other layer is untouched`);
+      m.undo();
+      assert.deepEqual([...m.doc.frames[0][1]], before, `${name}: one undo takes it all back`);
+    }
+  }
+});

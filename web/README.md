@@ -21,8 +21,10 @@ Profile → «For developers», behind the exact phrase `I am a developer`
 into `samples/`, and removable as a set.
 
 The published site is assembled by `scripts/build-site.sh` into `_site/`:
-without `dev/` and the stub, and with the service worker's cache version and
-file list filled in from what is actually published.
+without `dev/` and the stub, with the service worker's cache version and
+file list filled in from what is actually published, and with a
+`modulepreload` for every module the app needs to start
+(`scripts/module-graph.mjs`), so a first visit fetches them all at once.
 
 ## Layout
 
@@ -88,7 +90,8 @@ thing, with one way of fitting together:
   4. `kit/*` controls — icon button, segmented switch, chips, search field,
      top and bottom sheets (which hold the keyboard's focus while open,
      `focus.js`), strip, action bar, identicon, `drag-scroll.js` (a row a
-     mouse drags sideways, as a finger does).
+     mouse drags sideways, as a finger does), `steady-label.js` (a label
+     that changes its word without changing its width).
   5. Screen parts — `collection/stage.js` (the zoom axis), `turn.js` (the card
      that turns over), `back.js`, `share.js` (the share sheet), `share-many.js` (several cards at once), `moves.js`
      (sending cards between places, the strip, undo), `selection.js`,

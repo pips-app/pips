@@ -67,8 +67,8 @@ export function createMoves(o) {
     settleStrip();
   }
 
-  /** @param {number} [room] @param {string} [landed] @param {Place} [target] */
-  function drawStrip(room = 0, landed, target = DOWN[o.place()]) {
+  /** @param {number} [room] @param {string} [landed] @param {Place} [target] @param {boolean} [coming] cards are flying here */
+  function drawStrip(room = 0, landed, target = DOWN[o.place()], coming = false) {
     const there = [...app.cards.values()].filter((e) => e.rec.state === target);
     if (!recents[target].length) recents[target] = there.sort((a, b) => b.rec.received - a.rec.received).slice(0, 8).map((e) => e.rec.digest);
     const ids = recents[target].filter((id) => app.cards.get(id)?.rec.state === target || id === landed);
@@ -81,7 +81,7 @@ export function createMoves(o) {
         return m;
       },
     })), {
-      room, landed, title: t(PLACE_TITLE[target]), count: there.length ? t('collection.count', there.length) : '',
+      room, landed, coming, title: t(PLACE_TITLE[target]), count: there.length ? t('collection.count', there.length) : '',
       empty: t(target === 'archive' ? 'strip.archive.empty' : 'strip.collection.empty'),
     });
   }
@@ -96,7 +96,7 @@ export function createMoves(o) {
     o.busy.n++;
     const from = o.place(), to = DOWN[from], inFeed = stage.Z.v > 1.5;
     o.beforeFlight();
-    drawStrip();
+    drawStrip(0, undefined, to, true);
     showStrip(1, true);
     // With less motion asked for, the cards are simply there: no lift, no arc, no queue.
     const now = performance.now(), start = now + (pulled || REDUCED ? 0 : 160);

@@ -10,9 +10,11 @@ import { h, cssNumber } from '../dom.js';
 export function strip() {
   const title = h('b');
   const count = h('span');
-  const row = h('div', { class: 'strip-row' });
+  // «Empty» lies in the row itself, where the first card will lie: it starts
+  // where the title starts, at any width, and steps aside as the card comes.
   const empty = h('div', { class: 'strip-empty' });
-  const el = h('div', { class: 'strip', 'aria-hidden': 'true' }, h('div', { class: 'strip-head' }, title, count), row, empty);
+  const row = h('div', { class: 'strip-row' }, empty);
+  const el = h('div', { class: 'strip', 'aria-hidden': 'true' }, h('div', { class: 'strip-head' }, title, count), row);
   /** @type {Map<string, HTMLElement>} */
   const minis = new Map();
 
@@ -25,15 +27,18 @@ export function strip() {
 
   /**
    * @param {StripItem[]} items newest first
-   * @param {{room?: number, landed?: string, title: string, count: string, empty: string}} o
-   * landed: the item that has just touched down, shown in place at once.
+   * @param {{room?: number, landed?: string, coming?: boolean, title: string, count: string, empty: string}} o
+   * landed: the item that has just touched down, shown in place at once;
+   * coming: something is on its way here (the words saying it is empty go).
    */
   function draw(items, o) {
     title.textContent = o.title;
     count.textContent = o.count;
     const room = o.room ?? 0;
     empty.textContent = o.empty;
-    empty.hidden = !!(items.length || room);
+    // A card on its way: the words saying there is none step aside as it
+    // sets off, so they are gone before it lands where they were.
+    empty.classList.toggle('gone', !!(items.length || room || o.coming));
     const step = cssNumber('--slot', el), gap = step - cssNumber('--mini', el);
     const fit = Math.max(1, Math.floor((row.clientWidth + gap) / step));
     for (const [id, m] of minis) if (!items.some((i) => i.id === id)) { m.remove(); minis.delete(id); }

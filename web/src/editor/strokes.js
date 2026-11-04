@@ -73,8 +73,11 @@ export function createStrokes(o) {
       const last = path[path.length - 1];
       if (last && last.x === p.x && last.y === p.y) return;
       path.push(p);
+      // Shading decides by the cell drawn, and its mirror images follow it:
+      // asked of each image itself, a mirror across an even width would
+      // shade the other cells, and the two halves would not match.
+      if (dither && !dithered(p)) return;
       for (const q of spots(p, s)) {
-        if (dither && !dithered(q)) continue;
         const i = index(q);
         cover.set(i, (cover.get(i) ?? 0) + 1);
         st.set(i, v);

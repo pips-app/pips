@@ -11,6 +11,7 @@
 import { h, icon, reveal } from '../dom.js';
 import { t } from '../i18n.js';
 import { dragScroll } from '../kit/drag-scroll.js';
+import { steadyLabel } from '../kit/steady-label.js';
 import { T, MAX_FRAMES, composite, ticks } from './model.js';
 import { rgb } from './color.js';
 
@@ -39,7 +40,10 @@ export function framesStrip(o) {
   const list = h('div', { class: 'ed-frame-list', hidden: true });
   const addText = h('span', {}, t('ed.frame.first'));
   const add = h('button', { type: 'button', class: 'ed-frame add first', 'aria-label': t('ed.frame.add'), title: t('ed.frame.add'), onclick: o.add }, icon('plus'), addText);
-  const onion = h('button', { type: 'button', class: 'ed-onion-btn', onclick: o.onion });
+  // «вкл» and «выкл» take the same room: the strip beside the button does not move when it is pressed.
+  const onionState = steadyLabel(() => [t('ed.on'), t('ed.off')]);
+  const onionName = h('b', {}, t('ed.onion'));
+  const onion = h('button', { type: 'button', class: 'ed-onion-btn', onclick: o.onion }, onionName, onionState.el);
   const layerCount = h('span', { class: 'ed-layers-n' });
   const layers = h('button', { type: 'button', class: 'ed-layers-btn', onclick: o.layers }, icon('layers'), layerCount);
   const scroller = h('div', { class: 'ed-frame-scroll' }, list);
@@ -86,7 +90,8 @@ export function framesStrip(o) {
       addText.hidden = !still;
       // A copy lasts as long as the frame it copies: the card's frames, holds counted, must have room.
       add.hidden = ticks(doc) + doc.holds[f] > MAX_FRAMES;
-      onion.replaceChildren(h('b', {}, t('ed.onion')), h('span', {}, s.onion ? t('ed.on') : t('ed.off')));
+      onionName.textContent = t('ed.onion');
+      onionState.show(s.onion ? 0 : 1);
       onion.setAttribute('aria-pressed', String(s.onion));
       onion.hidden = still;
       const many = doc.layers.length > 1;
