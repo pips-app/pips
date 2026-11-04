@@ -72,10 +72,10 @@ async function rows(p) {
  * any length, and that is how it says it goes on.
  * @param {import('playwright').Page} p
  */
-const spilling = (p) => p.evaluate(() => [...document.querySelectorAll('button, summary, [role="tab"]')]
-  .filter((e) => !e.closest('[hidden], .on-stage, .turn') && e.getClientRects().length && getComputedStyle(e).visibility !== 'hidden' && getComputedStyle(e).textOverflow !== 'ellipsis')
-  .filter((e) => e.scrollWidth > e.clientWidth + 1 || e.scrollHeight > e.clientHeight + 1)
-  .map((e) => `«${e.getAttribute('aria-label') || e.textContent?.trim()}» ${e.scrollWidth}×${e.scrollHeight} in ${e.clientWidth}×${e.clientHeight}`));
+async function spilling(p) {
+  const seen = await visible(p, ':is(button, summary, [role="tab"]):not(:is(.on-stage, .turn) *)');
+  return seen.filter((c) => c.spills).map((c) => `«${c.label}»`);
+}
 
 /** A row as a line of its file: «label» height · «label» height. @param {[string, number][]} row */
 const line = (row) => row.map(([label, h]) => `«${label}» ${h}`).join(' · ');

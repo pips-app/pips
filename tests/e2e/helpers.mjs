@@ -268,11 +268,12 @@ export async function backText(p) {
 }
 
 /**
- * What of `selector` a person can see, each as { name, label, box, within }:
+ * What of `selector` a person can see, each as { name, label, box, within, spills }:
  * box is [left, top, right, bottom] of the part on screen — cut by the
  * screen and by every container that clips or scrolls it (a button scrolled
  * out of its panel is not there to cover anything); within lists the
- * entries it lies inside. Hidden, invisible and faded-out elements are left
+ * entries it lies inside; spills, whether its content is larger than it (a
+ * label out of its button) — unless it cuts it with an ellipsis on purpose. Hidden, invisible and faded-out elements are left
  * out, as is anything with nothing left of it.
  * @param {import('playwright').Page} p @param {string} selector
  */
@@ -299,6 +300,7 @@ export const visible = (p, selector) => p.evaluate((selector) => {
     label: e.getAttribute('aria-label') || (e.textContent ?? '').replace(/\s+/g, ' ').trim().slice(0, 32) || e.className || e.tagName,
     box,
     within: kept.flatMap((o, i) => (o.e !== e && o.e.contains(e) ? [i] : [])),
+    spills: (e.scrollWidth > e.clientWidth + 1 || e.scrollHeight > e.clientHeight + 1) && getComputedStyle(e).textOverflow !== 'ellipsis',
   }));
 }, selector);
 
