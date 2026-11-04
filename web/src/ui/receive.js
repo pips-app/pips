@@ -105,7 +105,15 @@ export function receiveView() {
     const one = got.length === 1 ? got[0] : null;
     if (one && 'problem' in one) return toast(t(one.problem));
     if (one && 'payload' in one) {
-      try { done(await receivePayload(one.payload)); } catch { toast(t('receive.not-pips')); }
+      // A bare card from before envelopes, refused for what it is, as any
+      // file is: it is a Pips file, so «not Pips» would not be true.
+      try {
+        done(await receivePayload(one.payload));
+      } catch (e) {
+        caught(e, 'receive');
+        const code = /** @type {any} */ (e)?.code;
+        toast(t(/** @type {any} */ (e)?.name === 'QuotaExceededError' ? 'err.storage-full' : FORGED.has(code) ? 'receive.forged' : 'receive.file-damaged'));
+      }
       return;
     }
     // Several files: a bare card from long ago, or a file with nothing in it, counts as not taken.

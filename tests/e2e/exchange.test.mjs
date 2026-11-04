@@ -52,6 +52,36 @@ test('a card goes from one phone to another and is checked on arrival', async ()
   for (const p of [a, b, c]) await p.context().close();
 });
 
+test('a .pips file from before envelopes — a bare signed card — still opens, checked; a forged one does not', async () => {
+  const a = await env.phone('oldfox');
+  await ownCard(a, 'Старинная', env.dir);
+  // The file as it was written then: the magic, then the card itself.
+  const bare = await a.evaluate(async () => {
+    const { MAGIC } = await import('/src/links.js');
+    const [e] = [...(await import('/src/state.js')).app.cards.values()];
+    return [...MAGIC, ...e.rec.payload];
+  });
+  const old = join(env.dir, 'old.pips');
+  await writeFile(old, Uint8Array.from(bare));
+  const b = await env.phone('newowl');
+  await tab(b, 'receive');
+  const open = (file) => toastAfter(b, () => choose(b, () => b.click('section.view:visible >> text=Файл .pips'), file));
+  assert.equal(await open(old), 'Карточка в коллекции');
+  await b.locator('.turn:not([hidden])').waitFor();
+  assert.match(await backText(b), /верна/, 'its signature checked');
+  assert.equal(await cards(b), 1);
+  // One byte of the picture changed: the signature no longer holds.
+  const forged = Uint8Array.from(bare);
+  forged[forged.length - 80] ^= 1;
+  const bad = join(env.dir, 'old-forged.pips');
+  await writeFile(bad, forged);
+  await tab(b, 'receive');
+  assert.match(await open(bad), /^Подпись не сходится/, 'refused for what it is (it used to say «not Pips»)');
+  assert.equal(await cards(b), 1, 'and not added');
+  await a.context().close();
+  await b.context().close();
+});
+
 test('damaged and forged codes are refused with their reason', async () => {
   const a = await env.phone('pixelfox');
   await ownCard(a, 'Сердце', env.dir);
