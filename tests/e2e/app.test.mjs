@@ -271,7 +271,8 @@ test('a monkey loose in the app finds nothing wrong', { timeout: 300_000 }, asyn
   const state = () => p.evaluate(({ x, y }) => {
     const e = document.elementFromPoint(x, y), path = [];
     for (let a = e; a && path.length < 4; a = a.parentElement) path.push(`${a.tagName.toLowerCase()}${typeof a.className === 'string' && a.className ? `.${a.className.trim().split(/\s+/).join('.')}` : ''}`);
-    return `under ${x},${y}: ${path.join(' < ')}; selected: «${String(getSelection()).slice(0, 40)}»; screen: ${document.querySelector('section.view:not([hidden])')?.className}`;
+    const drags = /** @type {any} */ (window).__drags;
+    return `under ${x},${y}: ${path.join(' < ')}; selected: «${String(getSelection()).slice(0, 40)}»; screen: ${document.querySelector('section.view:not([hidden])')?.className}; native drags: ${drags.length ? drags.slice(-2).join(' / ') : 'none'}`;
   }, at);
   const late = (ms, what) => new Promise((_, no) => setTimeout(() => no(new Error(what)), ms));
   const fresh = async () => {

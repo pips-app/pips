@@ -61,6 +61,23 @@ function hearToasts() {
   find.observe(document, { childList: true, subtree: true });
 }
 
+/**
+ * Runs in every page before the app: writes down each native drag the
+ * browser starts (window.__drags) — a picture or text carried off by the
+ * mouse, which the app never means; Firefox then holds the mouse until it
+ * is dropped. Read by the monkey when a step hangs.
+ */
+function hearDrags() {
+  const w = /** @type {any} */ (window);
+  w.__drags = [];
+  addEventListener('dragstart', (e) => {
+    const t = /** @type {Element} */ (e.target);
+    const path = [];
+    for (let a = t instanceof Element ? t : t?.parentElement; a && path.length < 4; a = a.parentElement) path.push(`${a.tagName.toLowerCase()}${typeof a.className === 'string' && a.className ? `.${a.className.trim().split(/\s+/).join('.')}` : ''}`);
+    w.__drags.push(`${t?.nodeName}: ${path.join(' < ')}`);
+  }, true);
+}
+
 /** One browser for a test file, plus a scratch folder for pictures. */
 export async function setup() {
   const site = await serve();
@@ -72,6 +89,7 @@ export async function setup() {
     const viewport = desk ? { width: 1440, height: 900 } : { width: 390, height: 844 };
     const ctx = await browser.newContext({ viewport, locale: 'ru-RU', acceptDownloads: true, deviceScaleFactor: scale });
     await ctx.addInitScript(hearToasts);
+    await ctx.addInitScript(hearDrags);
     const p = await ctx.newPage();
     p.on('pageerror', (e) => errors.push(`${name}: ${e.message}`));
     p.on('console', (m) => { if (m.type() === 'error') errors.push(`${name}: ${m.text()}`); });
