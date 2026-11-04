@@ -1850,6 +1850,8 @@ test('the selection works on the chosen layer only, and never on a hidden one', 
   await p.mouse.click(...cell(3, 3)); // a dot on the bottom layer
   await p.click('.ed-layers-btn');
   await p.click('.bottom-sheet.on .ed-layer-act:has-text("Новый слой")');
+  // The list drawn again with the new layer chosen, before its eye is pressed.
+  await p.waitForFunction(() => document.querySelectorAll('.bottom-sheet.on .ed-layers li').length === 2 && document.querySelector('.bottom-sheet.on .ed-layers li.here') === document.querySelector('.bottom-sheet.on .ed-layers li'));
   await p.click('.bottom-sheet.on .ed-layers li.here .ed-layer-eye'); // the new top layer, hidden
   await p.keyboard.press('Escape');
   // Everything selected on the hidden layer: Delete and the arrows are refused, and said so.
