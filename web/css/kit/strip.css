@@ -8,4 +8,6 @@
 .strip-head b { font: 600 17px var(--serif); color: var(--text2); }
 .strip-row { position: relative; height: var(--slot); }
 .strip .mini { position: absolute; top: 0; left: 0; width: var(--mini); height: var(--mini); container-type: inline-size; /* what it holds can size by it */ transition: transform .45s cubic-bezier(.2, .9, .25, 1), opacity .3s; }
-.strip-empty { position: absolute; left: 16px; right: 16px; bottom: calc(28px + var(--safe-b)); color: var(--text3); font-size: 13px; line-height: 1.4; }
+.strip-empty { position: absolute; inset: 0; display: flex; align-items: center; color: var(--text3); font-size: 13px; line-height: 1.4;
+  transition: opacity .3s, transform .45s cubic-bezier(.2, .9, .25, 1); } /* the minis' own easing: it steps aside with them */
+.strip-empty.gone { opacity: 0; transform: translateX(var(--slot)); }

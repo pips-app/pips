@@ -1828,6 +1828,12 @@ test('a feed card pulled down by a finger lies over the archive strip, before an
     return { over: !!c?.closest('.fly-layer'), strip: !/101%/.test(/** @type {HTMLElement} */ (document.querySelector('.strip')).style.transform) };
   });
   assert.deepEqual(held, { over: true, strip: true }, 'while held: the card over the strip that rose for it');
+  // The empty archive says so, from where its title starts; the words stay while nothing is on its way.
+  const words = await p.evaluate(() => {
+    const e = /** @type {HTMLElement} */ (document.querySelector('.strip-empty')), b = /** @type {HTMLElement} */ (document.querySelector('.strip-head b'));
+    return { gone: e.classList.contains('gone'), lined: Math.abs(e.getBoundingClientRect().left - b.getBoundingClientRect().left) < 1 };
+  });
+  assert.deepEqual(words, { gone: false, lined: true });
   // Let go a little up the way: it goes back into the feed, and back into the stage.
   await p.evaluate(() => document.querySelector('.stage-host').dispatchEvent(new PointerEvent('pointercancel', { bubbles: true, pointerId: 7, pointerType: 'touch', isPrimary: true })));
   await p.waitForTimeout(1500);
