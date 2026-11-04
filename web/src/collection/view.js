@@ -354,8 +354,13 @@ export function collectionView(o) {
     const firstRun = filter.place === 'collection' && !inPlace('collection').length;
     title.textContent = selecting ? t('collection.select-title') : t(PLACE_TITLE[filter.place]);
     const levelName = lv >= 3 ? 'collection.card' : lv === 2 ? 'collection.feed' : filter.by === 'author' ? 'collection.by-authors' : lv === 0 ? 'collection.by-months' : 'collection.by-weeks';
-    sub.textContent = selecting ? t('collection.selected', selection.size)
-      : lv <= 1 ? `${t(levelName)} · ${filter.place === 'trash' ? t('collection.bin-note') : t('collection.count', stage.list.length)}` : t(levelName);
+    const n = stage.list.length;
+    // «по неделям · 18 карточек»; where that does not fit (a phone under
+    // 390 px across) the word goes and the number stays: «по неделям · 18».
+    if (selecting) sub.textContent = t('collection.selected', selection.size);
+    else if (lv > 1) sub.textContent = t(levelName);
+    else if (filter.place === 'trash') sub.textContent = `${t(levelName)} · ${t('collection.bin-note')}`;
+    else sub.replaceChildren(`${t(levelName)} · ${n}`, h('span', { class: 'level-word' }, ` ${t('collection.count.word', n)}`));
     sub.disabled = selecting || lv > 1;
     // The filter chip belongs to the levels it filters, not to one card.
     const showChip = filtered && lv >= 1 && lv <= 2 && !selecting && !firstRun;
