@@ -4,44 +4,60 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { suite, tab, toast, textMatching, samples, words, cards, ownCard, act, still, overlaps, until, visible, toastAfter } from './helpers.mjs';
+import { suite, tab, textMatching, samples, words, cards, ownCard, act, still, overlaps, until, visible, toastAfter } from './helpers.mjs';
 
 const env = suite();
 
-test('the collection: tags, search, archive and the bin, all without gestures', async () => {
-  const p = await env.phone('pixelfox');
+/**
+ * A phone with the sample cards, in its collection at rest, and what the
+ * tests below ask of it: the level's name under the title, how many cards
+ * are in the set, where the cards are, and a click on the first card.
+ * @param {string} nick
+ */
+async function inCollection(nick) {
+  const p = await env.phone(nick);
   await tab(p, 'me');
   await samples(p);
   await p.locator('.collection-view:visible').waitFor();
   await still(p);
-  const sub = async () => (await p.textContent('.collection-bar .level-switch')).split(' · ')[0];
-  const inPlace = (st) => p.evaluate(async (x) => [...(await import('/src/state.js')).app.cards.values()].filter((e) => e.rec.state === x).length, st);
-  // In the set: not fading out. A card past the screen's edge is not drawn at all (no opacity written yet).
-  const shown = () => p.$$eval('.on-stage', (els) => els.filter((e) => e.isConnected && (e.style.opacity === '' || Number(e.style.opacity) > 0.5)).length);
-  /** Clicks the first card fully on screen below the bar. */
-  const clickCard = async () => {
-    const at = await p.$$eval('.on-stage', (els) => els.map((e) => e.getBoundingClientRect()).filter((r) => r.top > 70 && r.bottom < 700 && r.width > 20)[0]);
-    await p.mouse.click(at.x + at.width / 2, at.y + at.height / 2);
-    await still(p);
+  return {
+    p,
+    /** The level, as the line under the title names it. */
+    level: async () => (await p.textContent('.collection-bar .level-switch')).split(' · ')[0],
+    /** In the set: not fading out. A card past the screen's edge is not drawn at all (no opacity written yet). */
+    shown: () => p.$$eval('.on-stage', (els) => els.filter((e) => e.isConnected && (e.style.opacity === '' || Number(e.style.opacity) > 0.5)).length),
+    /** How many cards are in a place, as stored. @param {string} place */
+    inPlace: (place) => p.evaluate(async (x) => [...(await import('/src/state.js')).app.cards.values()].filter((e) => e.rec.state === x).length, place),
+    /** Clicks the first card fully on screen below the bar, and waits for what it opens. */
+    async clickCard() {
+      const at = await p.$$eval('.on-stage', (els) => els.map((e) => e.getBoundingClientRect()).filter((r) => r.top > 70 && r.bottom < 700 && r.width > 20)[0]);
+      await p.mouse.click(at.x + at.width / 2, at.y + at.height / 2);
+      await still(p);
+    },
   };
-  assert.equal(await shown(), 18);
-  assert.equal(await sub(), 'по неделям');
-  await p.click('.collection-bar .level-switch');
-  await still(p);
-  assert.equal(await sub(), 'по месяцам', 'the months are a tap away');
-  await p.click('.collection-bar .level-switch');
-  await still(p);
+}
 
-  // A card opens: feed, then the card itself; a tag goes on its back.
+test('the levels: the line under the title switches weeks and months, a card opens to the feed and turns either way', async () => {
+  const { p, level, shown, clickCard } = await inCollection('levelfox');
+  assert.equal(await shown(), 18);
+  assert.equal(await level(), 'по неделям');
+  await p.click('.collection-bar .level-switch');
+  await still(p);
+  assert.equal(await level(), 'по месяцам', 'the months are a tap away');
+  await p.click('.collection-bar .level-switch');
+  await still(p);
+  assert.equal(await level(), 'по неделям', 'and back');
+
+  // A card opens: the feed, Escape back; then the card itself.
   await clickCard();
-  assert.equal(await sub(), 'лента');
+  assert.equal(await level(), 'лента');
   await p.keyboard.press('Escape');
   await still(p);
-  assert.equal(await sub(), 'по неделям');
+  assert.equal(await level(), 'по неделям');
   await clickCard();
   await act(p, 'turn');
   await still(p);
-  assert.equal(await sub(), 'карточка');
+  assert.equal(await level(), 'карточка');
   // A press on the card's left half turns it the other way.
   const flip = async () => Math.round(Number(await p.$eval('.turn-flip', (e) => e.dataset.angle)) / 180) * 180;
   const before = await flip();
@@ -52,18 +68,26 @@ test('the collection: tags, search, archive and the bin, all without gestures', 
   await p.mouse.click(card.x + card.width * 0.8, card.y + card.height * 0.9);
   await still(p);
   assert.equal(await flip(), before, 'right half: back again');
+  await p.context().close();
+});
+
+test('a tag goes on a card\'s back and finds its cards; search and owner narrow the set and give it back whole', async () => {
+  const { p, level, shown, clickCard } = await inCollection('tagfox');
+  await clickCard();
+  await act(p, 'turn');
+  await still(p);
   assert.ok(await p.$eval('.turn textarea', (t) => t.readOnly), 'nothing to type before the pencil');
   await p.click('.turn .pen');
   await p.click('.turn .tag.add');
   await p.keyboard.type('Ночные Совы');
   await p.keyboard.press('Enter');
   await p.click('.turn .pen');
-  assert.match(await textMatching(p, '.turn .tags', /#ночные-совы/), /#ночные-совы/);
+  assert.match(await textMatching(p, '.turn .tags', /#ночные-совы/), /#ночные-совы/, 'written as a tag is');
 
   // The tag on the back is a filter: every card with it, in the months.
   await p.click('.turn .tag');
   await still(p);
-  assert.equal(await sub(), 'по месяцам');
+  assert.equal(await level(), 'по месяцам');
   assert.equal(await p.inputValue('.search-field input'), '#ночные-совы');
   assert.equal(await shown(), 1);
   await p.click('.search-field .clear');
@@ -74,7 +98,7 @@ test('the collection: tags, search, archive and the bin, all without gestures', 
   assert.equal(await shown(), 5, 'the five own sample cards');
   // Quickly to an empty set and back: the months start right under the
   // search again, with no room left for "nothing found".
-  await p.fill('.search-field input', 'pixelfox');
+  await p.fill('.search-field input', 'tagfox'); // the phone's own nick: its own cards, and none received
   await p.click('.seg button[data-value="got"]');
   await p.click('.seg button[data-value="mine"]');
   await still(p);
@@ -82,15 +106,14 @@ test('the collection: tags, search, archive and the bin, all without gestures', 
     .map((e) => e.getBoundingClientRect().top)) - document.querySelector('.search-panel').getBoundingClientRect().bottom);
   assert.ok(gap >= 0 && gap < 30, `months right under the search (gap ${gap})`);
   assert.ok(!(await p.isVisible('.search-none')));
-  await p.click('.search-field .clear');
-  await p.click('.seg button[data-value="all"]');
-  await still(p);
+  await p.context().close();
+});
 
-  // To the archive from the feed's bar, back with undo, then for good.
+test('to the archive from the feed\'s bar: said, undone, then for good; the places stay out of the feed', async () => {
+  const { p, inPlace, clickCard } = await inCollection('archfox');
   await clickCard();
-  await act(p, 'down');
+  assert.equal(await toastAfter(p, () => act(p, 'down')), 'Карточка в архиве');
   await still(p);
-  assert.equal(await toast(p), 'Карточка в архиве');
   // Where a card is, is a write: waited for as such, not as movement on screen.
   await until(async () => (await inPlace('collection')) === 17, 'one card fewer in the collection');
   await p.click('.toast button');
@@ -98,21 +121,29 @@ test('the collection: tags, search, archive and the bin, all without gestures', 
   await still(p);
   await act(p, 'down');
   await still(p);
+  await until(async () => (await inPlace('archive')) === 1, 'in the archive, this time for good');
   // Beside one card, the places stay out of the bar: a bin there would read as «delete this».
   assert.ok(!(await p.isVisible('.collection-bar .ib[aria-label="Архив"]')), 'no places in the feed');
   await p.keyboard.press('Escape');
   await still(p);
-  assert.equal(await p.textContent('.collection-bar .ib[aria-label="Архив"] .ib-badge'), '1');
+  assert.equal(await p.textContent('.collection-bar .ib[aria-label="Архив"] .ib-badge'), '1', 'the archive counts it');
+  await p.context().close();
+});
 
-  // The archive is a place like the collection: the card opens there too.
+test('the archive and the bin are places like the collection: a card opens there, goes to the bin, and is deleted for good', async () => {
+  const { p, shown, clickCard } = await inCollection('binfox');
+  await clickCard();
+  assert.equal(await toastAfter(p, () => act(p, 'down')), 'Карточка в архиве');
+  await p.keyboard.press('Escape');
+  await still(p);
+
   await p.click('.collection-bar .ib[aria-label="Архив"]');
   await still(p);
   assert.equal(await p.textContent('.collection-bar h1'), 'Архив');
   assert.equal(await shown(), 1);
   await clickCard();
-  await act(p, 'trash');
+  assert.equal(await toastAfter(p, () => act(p, 'trash')), 'Карточка в корзине');
   await still(p);
-  assert.equal(await toast(p), 'Карточка в корзине');
   assert.match(await p.textContent('.place-empty'), /В архиве пусто/);
   await p.click('.collection-bar .ib[aria-label="Назад"]');
   await still(p);

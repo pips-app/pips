@@ -18,10 +18,9 @@ test('a card goes from one phone to another and is checked on arrival', async ()
   const code = await photo(a, '.top-sheet .qr-box', env.dir, 'give');
 
   await tab(b, 'receive');
-  await fromPicture(b, 'section.view:visible', code);
+  assert.equal(await toastAfter(b, () => fromPicture(b, 'section.view:visible', code)), 'Карточка в коллекции');
   // It opens large in the collection, where it now is.
   await b.locator('.turn:not([hidden])').waitFor();
-  assert.equal(await toast(b), 'Карточка в коллекции');
   const back = await backText(b);
   assert.match(back, /верна/);
   assert.match(back, /@pixelfox → вам/);
@@ -161,7 +160,7 @@ test('a card sent as a link opens the app and arrives, even before the first run
   for (const cut of [fragment.slice(0, 40), fragment.slice(0, 41)]) { // whole base64 or not
     await b.goto('about:blank');
     await b.goto(env.url + cut);
-    assert.match(await textMatching(b, '.toast span', /Ссылка/), /Ссылка на карточку неполная/, cut.length);
+    assert.match(await toast(b), /Ссылка на карточку неполная/, cut.length); // a page just opened: its first toast
   }
   assert.equal(await cards(b), 1);
   for (const p of [a, b, c]) await p.context().close();
@@ -173,8 +172,7 @@ test('a card is signed with a name; one that came without shows «Без наз�
   await picture(p, await heart(env.dir));
   await p.click('.overlay .btn.key');
   assert.equal(await p.inputValue('.ed-title'), '', 'the file name is no card title');
-  await p.click('.ed-sign');
-  assert.match(await textMatching(p, '.toast span', /назовите/), /Сначала назовите карточку/);
+  assert.match(await toastAfter(p, () => p.click('.ed-sign')), /Сначала назовите карточку/);
   assert.equal(await p.evaluate(() => document.activeElement?.classList.contains('ed-title')), true);
   assert.equal(await cards(p), 0);
 
@@ -227,9 +225,8 @@ test('give: one’s own cards with their codes, as a link, a file or a picture; 
   await tab(p, 'collection');
   await p.evaluate(async () => (await import('/src/ui/shell.js')).go('collection', { open: [...(await import('/src/state.js')).app.cards.keys()][0] }));
   await still(p);
-  await act(p, 'derive');
+  assert.match(await toastAfter(p, () => act(p, 'derive')), /Новая карточка из прежней/);
   await p.locator('.ed-art').waitFor();
-  assert.match(await toast(p), /Новая карточка из прежней/);
   assert.equal(await p.inputValue('.ed-title'), '');
   assert.equal(await p.$eval('.ed-layer', (c) => c.width), 16, 'the heart’s canvas');
   for (const x of [p, q]) await x.context().close();
@@ -347,23 +344,19 @@ test('several cards at once: chosen in the collection, sent as one file or as pi
   // Another phone: the file of three, then both pictures at once.
   const b = await env.phone('manyowl');
   await tab(b, 'receive');
-  await choose(b, () => b.click('section.view:visible >> text=Файл .pips'), bundle);
-  assert.match(await textMatching(b, '.toast span', /Добавлено/), /Добавлено 3 карточки/);
+  assert.match(await toastAfter(b, () => choose(b, () => b.click('section.view:visible >> text=Файл .pips'), bundle)), /Добавлено 3 карточки/);
   assert.equal(await cards(b), 3);
   await tab(b, 'receive');
-  await choose(b, () => b.click('section.view:visible >> text=Файл .pips'), files);
-  assert.match(await textMatching(b, '.toast span', /Добавлено 2/), /Добавлено 2 карточки/);
+  assert.match(await toastAfter(b, () => choose(b, () => b.click('section.view:visible >> text=Файл .pips'), files)), /Добавлено 2 карточки/);
   assert.equal(await cards(b), 5);
   // The same file again: nothing new, and said so.
   await tab(b, 'receive');
-  await choose(b, () => b.click('section.view:visible >> text=Файл .pips'), bundle);
-  assert.match(await textMatching(b, '.toast span', /Новых/), /Новых карточек нет · уже были: 3/);
+  assert.match(await toastAfter(b, () => choose(b, () => b.click('section.view:visible >> text=Файл .pips'), bundle)), /Новых карточек нет · уже были: 3/);
   // A file cut short is refused whole, in words.
   const cut = join(env.dir, 'cut.pips');
   await writeFile(cut, (await readFile(bundle)).subarray(0, 100));
   await tab(b, 'receive');
-  await choose(b, () => b.click('section.view:visible >> text=Файл .pips'), cut);
-  assert.match(await textMatching(b, '.toast span', /повреждён/), /повреждён/);
+  assert.match(await toastAfter(b, () => choose(b, () => b.click('section.view:visible >> text=Файл .pips'), cut)), /повреждён/);
   assert.equal(await cards(b), 5);
   for (const x of [a, b]) await x.context().close();
 });

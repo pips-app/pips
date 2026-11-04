@@ -40,6 +40,27 @@ export async function serve() {
   return { url: `http://127.0.0.1:${port}/`, close: () => server.close() };
 }
 
+/**
+ * Runs in every page before the app: writes down each toast as the app
+ * sets it, in order (window.__toasts). The same words twice are two toasts,
+ * and one that came and went before the test looked is still there to read
+ * — what a glance at the toast's text cannot tell.
+ */
+function hearToasts() {
+  const w = /** @type {any} */ (window);
+  w.__toasts = [];
+  /** @param {Element} span */
+  const watch = (span) => {
+    if (span.textContent) w.__toasts.push(span.textContent); // set before the toast was found
+    new MutationObserver(() => w.__toasts.push(span.textContent)).observe(span, { childList: true, characterData: true, subtree: true });
+  };
+  const find = new MutationObserver(() => {
+    const span = document.querySelector('.toast > span');
+    if (span) { find.disconnect(); watch(span); }
+  });
+  find.observe(document, { childList: true, subtree: true });
+}
+
 /** One browser for a test file, plus a scratch folder for pictures. */
 export async function setup() {
   const site = await serve();
@@ -50,6 +71,7 @@ export async function setup() {
   async function blank(name, desk = false, scale = 1) {
     const viewport = desk ? { width: 1440, height: 900 } : { width: 390, height: 844 };
     const ctx = await browser.newContext({ viewport, locale: 'ru-RU', acceptDownloads: true, deviceScaleFactor: scale });
+    await ctx.addInitScript(hearToasts);
     const p = await ctx.newPage();
     p.on('pageerror', (e) => errors.push(`${name}: ${e.message}`));
     p.on('console', (m) => { if (m.type() === 'error') errors.push(`${name}: ${m.text()}`); });
@@ -122,11 +144,17 @@ export async function textMatching(page, selector, re) {
   return text;
 }
 
-/** The toast `action` brings: the old text cleared first, so a toast already up is not taken for the answer. */
+/**
+ * The toast `action` brings: waits for a toast shown after it began, so one
+ * already up is never taken for the answer. If it brings several (a series
+ * counting up), the latest.
+ * @param {import('playwright').Page} page @param {() => Promise<unknown>} action
+ */
 export async function toastAfter(page, action) {
-  await page.evaluate(() => { const s = document.querySelector('.toast span'); if (s) s.textContent = ''; });
+  const before = await toastsSoFar(page);
   await action();
-  return textMatching(page, '.toast span', /./);
+  await until(async () => (await toastsSoFar(page)) > before, 'a toast after the action');
+  return latestToast(page);
 }
 
 /** Taps a tab. The feed, a single card and the archive hide the tab bar,
@@ -138,7 +166,21 @@ export async function tab(page, name) {
   }
   await page.click(`nav.tabs button[data-tab="${name}"]`);
 }
-export const toast = (page) => page.locator('.toast span').textContent();
+/** How many toasts the page has shown. @param {import('playwright').Page} page */
+const toastsSoFar = (page) => page.evaluate(() => /** @type {any} */ (window).__toasts.length);
+/** The page's latest toast. @param {import('playwright').Page} page @returns {Promise<string>} */
+const latestToast = (page) => page.evaluate(() => /** @type {any} */ (window).__toasts.at(-1));
+
+/**
+ * The latest toast, waiting for the first if none came yet. For a page just
+ * opened; after a tap or a key, use toastAfter, which cannot mistake an
+ * earlier toast for the answer.
+ * @param {import('playwright').Page} page
+ */
+export async function toast(page) {
+  await until(async () => (await toastsSoFar(page)) > 0, 'a toast');
+  return latestToast(page);
+}
 /** Writes a PNG of RGBA pixels drawn by `f(x, y)`. */
 export async function png(dir, name, w, h, f) {
   const rows = [];
@@ -191,8 +233,8 @@ export async function samples(page) {
     await gate.locator('input').fill('I am a developer');
   }
   await page.click('section.view:visible >> text=Добавить образцы');
-  await page.click('.dialog button:text-is("Да")');
-  await page.locator('.toast span:text-matches("Добавлено образцов")').waitFor();
+  const said = await toastAfter(page, () => page.click('.dialog button:text-is("Да")'));
+  if (!/^Добавлено образцов/.test(said)) throw new Error(`samples: ${said}`);
 }
 
 // ---------------------------------------------------------------- a suite --
@@ -205,8 +247,15 @@ export async function samples(page) {
  */
 export function suite() {
   const env = /** @type {any} */ ({});
-  before(async () => { Object.assign(env, await setup()); });
+  /** @type {Promise<unknown> | undefined} */
+  let ready;
+  before(async () => { ready = setup().then((made) => Object.assign(env, made)); await ready; });
+  // When a name pattern leaves a file no test to run, node:test (22) starts
+  // `before` and runs `after` without waiting for it: wait here, or the
+  // browser opened meanwhile is never closed and the run never ends.
   after(async () => {
+    await ready;
+    if (!env.close) return;
     await env.close();
     assert.deepEqual(env.errors, [], 'no errors in any page');
   });

@@ -4,7 +4,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { suite, photo, choose, tab, toast, heart, gradient, wide, png, textMatching, cards, picture, act, still, until } from './helpers.mjs';
+import { suite, photo, choose, tab, heart, gradient, wide, png, textMatching, cards, picture, act, still, until, toastAfter } from './helpers.mjs';
 
 const env = suite();
 
@@ -17,8 +17,7 @@ test('a picture comes onto the canvas: pixel art as it is, the rest through a sq
   await p.selectOption('.overlay select', { label: 'PICO-8 · 16' });
   assert.match(await textMatching(p, '.overlay .import-status', /палитра PICO-8 · 512 пикселей сменили цвет/), /палитра PICO-8 · 512 пикселей сменили цвет/);
   assert.equal(await p.locator('.overlay .pic-stage').count(), 0, 'no crop: 64×8 fits the canvas as it is');
-  await p.click('.overlay .btn.key');
-  assert.equal(await toast(p), 'Картинка на холсте');
+  assert.equal(await toastAfter(p, () => p.click('.overlay .btn.key')), 'Картинка на холсте');
   const size = () => p.$eval('.ed-layer', (c) => String(c.width));
   assert.equal(await size(), '64', 'the canvas that holds it');
 
@@ -59,8 +58,7 @@ test('a picture comes onto the canvas: pixel art as it is, the rest through a sq
   const said = await textMatching(p, '.overlay .import-status', /полупрозрачн/);
   assert.match(said, /^\d+ полупрозрачн.*заметные стали сплошными/);
   assert.match(said, /12×12/);
-  await p.click('.overlay .btn.key');
-  assert.equal(await toast(p), 'Картинка на холсте');
+  assert.equal(await toastAfter(p, () => p.click('.overlay .btn.key')), 'Картинка на холсте');
   assert.equal(await size(), '16');
 
   // The heart: unscaled, and one tap brings the previous picture back.
@@ -74,8 +72,7 @@ test('a picture comes onto the canvas: pixel art as it is, the rest through a sq
   await picture(p, softBig);
   assert.ok(await p.isVisible('.overlay .pic-stage'));
   assert.match(await textMatching(p, '.overlay .import-status', /полупрозрачн/), /^\d+ полупрозрачн/);
-  await p.click('.overlay .btn.key');
-  assert.equal(await toast(p), 'Картинка на холсте');
+  assert.equal(await toastAfter(p, () => p.click('.overlay .btn.key')), 'Картинка на холсте');
   assert.equal(await cards(p), 0, 'nothing was signed on the way');
   await p.context().close();
 });
@@ -353,8 +350,7 @@ test('the editor: a still picture shows no frames to mistake for colours, and an
   const h1 = await height();
   // Signing nothing: said, and nothing is made.
   await p.fill('.ed-title', 'Пусто');
-  await p.click('.ed-sign');
-  assert.equal(await toast(p), 'Холст пуст — сначала нарисуйте что-нибудь');
+  assert.equal(await toastAfter(p, () => p.click('.ed-sign')), 'Холст пуст — сначала нарисуйте что-нибудь');
   assert.equal(await p.evaluate(async () => (await import('/src/state.js')).app.cards.size), 0);
   // Two frames: the strip of numbered frames, at the same height.
   await p.click('.ed-frame.add');
@@ -463,8 +459,7 @@ test('the editor: many frames scroll in their strip, frames last longer, layers 
     assert.equal(await p.textContent('.ed-layers-btn'), '2/2');
     await p.click('.bottom-sheet.on .ed-layers li.here .ed-layer-eye');
     await p.keyboard.press('Escape');
-    await p.mouse.click(...cell(2, 1));
-    assert.match(await toast(p), /скрыт/);
+    assert.match(await toastAfter(p, () => p.mouse.click(...cell(2, 1))), /скрыт/);
     // Shown again: the dot goes on the second layer, over nothing.
     await p.click('.ed-layers-btn');
     await p.click('.bottom-sheet.on .ed-layers li.here .ed-layer-eye');
@@ -500,8 +495,7 @@ test('the selection works on the chosen layer only, and never on a hidden one', 
   await p.keyboard.press('Escape');
   // Everything selected on the hidden layer: Delete and the arrows are refused, and said so.
   await p.keyboard.press('Control+a');
-  await p.keyboard.press('Delete');
-  assert.match(await toast(p), /скрыт/);
+  assert.match(await toastAfter(p, () => p.keyboard.press('Delete')), /скрыт/);
   await p.click('.ed-sel-bar button[aria-label="Снять выделение"]'); // the strip comes back for the layers button
   // Shown again: Delete empties the top layer's box — the dot below stays.
   await p.click('.ed-layers-btn');

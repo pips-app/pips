@@ -5,7 +5,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { suite, tab, toast, textMatching, samples, words, cards, ownCard, still, until } from './helpers.mjs';
+import { suite, tab, toast, textMatching, samples, words, cards, ownCard, still, until, toastAfter } from './helpers.mjs';
 
 const env = suite();
 
@@ -14,8 +14,7 @@ test('a fault nobody caught is written down, told once, and can be read and sent
   const before = env.errors.length;
   const words = await p.evaluate(async () => (await import('/src/state.js')).app.identity.words());
   const boom = () => p.evaluate(() => { setTimeout(() => { throw new Error('boom in a test'); }); });
-  await boom();
-  assert.match(await textMatching(p, '.toast span', /журнал/), /Что-то пошло не так — это записано в журнал/);
+  assert.match(await toastAfter(p, boom), /Что-то пошло не так — это записано в журнал/);
   await boom(); // the same again: one entry, counted
   const counted = () => p.evaluate(async () => (await import('/src/diagnostics.js')).journal.entries[0]?.count === 2);
   await until(counted, 'the second fault counted');
@@ -43,8 +42,7 @@ test('a fault nobody caught is written down, told once, and can be read and sent
   assert.match(await textMatching(p, '.journal-group', /1 запись/), /1 запись, последняя —/);
   // Sent the device's way (here: the clipboard, or a file where there is none).
   await p.context().grantPermissions(['clipboard-read', 'clipboard-write']).catch(() => {});
-  await p.click('.journal-group >> text=Отправить отчёт');
-  assert.match(await textMatching(p, '.toast span', /Отчёт/), /Отчёт (скопирован|сохранён файлом)/);
+  assert.match(await toastAfter(p, () => p.click('.journal-group >> text=Отправить отчёт')), /Отчёт (скопирован|сохранён файлом)/);
   // Cleared from its page.
   await p.click('.journal-group >> text=Открыть журнал');
   await p.click('.overlay >> text=Очистить журнал');
@@ -79,8 +77,7 @@ test('developer mode opens only for its phrase, and its samples come and go as a
   // Taken away as a set: the person's own card stays.
   await tab(p, 'me');
   await group.locator('text=Убрать образцы (18)').click();
-  await p.click('.dialog button:text-is("Да")');
-  assert.match(await textMatching(p, '.toast span', /Удалено/), /Удалено образцов: 18/);
+  assert.match(await toastAfter(p, () => p.click('.dialog button:text-is("Да")')), /Удалено образцов: 18/);
   assert.equal(await cards(p), 1);
   // Off again: back behind the phrase.
   await group.locator('text=Выключить режим разработчика').click();

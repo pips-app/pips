@@ -6,7 +6,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { suite, photo, fromPicture, choose, tab, toast, png, textMatching, samples, words, cards, picture, ownCard, still, toastAfter } from './helpers.mjs';
+import { suite, photo, fromPicture, choose, tab, png, textMatching, samples, words, cards, picture, ownCard, still, toastAfter } from './helpers.mjs';
 
 const env = suite();
 
@@ -158,9 +158,8 @@ test('a backup restores cards, notes and the copy log, only for its key', async 
   assert.equal(await c.textContent('.onb h1'), 'Другой ключ');
   assert.match(await c.textContent('.onb-file .idcard small'), /Ключ /, 'the backup comes along');
   await c.fill('.words-entry input >> nth=0', await words(a));
-  await c.click('.onb-go');
+  assert.equal(await toastAfter(c, () => c.click('.onb-go')), 'Ключ сменён');
   await c.locator('.onb').waitFor({ state: 'detached' });
-  assert.equal(await toast(c), 'Ключ сменён');
   const after = await c.evaluate(async () => {
     const s = await import('/src/state.js');
     const all = [...s.app.cards.values()];
