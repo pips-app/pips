@@ -1,15 +1,23 @@
-// The layout of each screen, kept: where every control is, on the smallest
-// phone, an ordinary one and a computer. A button that moves, grows, wraps
-// onto a second line or slides under another shows here as a changed
-// rectangle — what no journey test notices and a person sees at once.
+// The layout of each screen, kept: which controls stand in which row, in
+// what order, and how tall each is — on the smallest phone, an ordinary one
+// and a computer. A button that moves to another row, wraps onto a second
+// line, goes missing or comes in uninvited shows here as a changed row —
+// what no journey test notices and a person sees at once.
 //
-// The rectangles are compared with files in layout/, made by this test:
+// Not pixels: the fonts are our own, but Linux Chromium spaces their letters
+// by the system's hinting, so a label is a few pixels wider on one machine
+// than on another and all that follows it moves. Rows, order and height are
+// the same everywhere; a control grown too wide is caught by the checks
+// below, not by its width.
+//
+// The rows are compared with files in layout/, made by this test:
 //   UPDATE_LAYOUT=1 npm test -- layout.test.mjs
 // Look at what changed before you write them anew: a moved control should be
 // a decision, not an accident. Only Chromium is compared with them (Firefox
-// sets text a pixel differently); in every browser each screen is also
-// checked for what is never right: a page wider than the screen, or
-// controls on top of one another.
+// sets text on its own and may wrap a label elsewhere); in every browser
+// each screen is also checked for what is never right: a page wider than
+// the screen, controls on top of one another, a label that does not fit in
+// its button.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -19,8 +27,8 @@ import { suite, tab, samples, still, overlaps, visible } from './helpers.mjs';
 const env = suite();
 const DIR = new URL('./layout/', import.meta.url);
 const UPDATE = process.env.UPDATE_LAYOUT === '1';
-/** Rounded to the pixel; a difference this small or smaller is not a change. */
-const SLACK = 1;
+/** Heights a pixel or two apart are one height (rounding); a wrap adds a whole line. */
+const SLACK = 2;
 
 /** The screens, how to reach each from the one before (a phone with the sample cards), and whether a sheet lies over it. */
 const SCREENS = [
@@ -37,21 +45,42 @@ const SCREENS = [
 const SIZES = [[320, 568], [390, 844], [1440, 900]];
 
 /**
- * Every control on screen, as name → [x, y, width, height] of the part
- * seen: what can be pressed or typed in, not the cards (their places come
- * from the dates of the samples) nor anything parked off the screen or faded
- * out. The same name twice (palette colours) is numbered in order.
+ * Every control on screen in rows, top to bottom, each row left to right,
+ * as [label, height] — what can be pressed or typed in, not the cards (their
+ * places come from the dates of the samples) nor anything parked off the
+ * screen or faded out. A control is in the row of the one above it when its
+ * middle is level with it (the raised scan button is in the tab bar).
+ * @param {import('playwright').Page} p @returns {Promise<[string, number][][]>}
+ */
+async function rows(p) {
+  const seen = await visible(p, ':is(button, input, select, textarea, summary, [role="tab"]):not(:is(.on-stage, .stage-label, .turn, .toast) *)');
+  seen.sort((a, b) => a.box[1] - b.box[1] || a.box[0] - b.box[0]);
+  /** @type {{ top: number, bottom: number, in: typeof seen }[]} */
+  const out = [];
+  for (const c of seen) {
+    const mid = (c.box[1] + c.box[3]) / 2;
+    const row = out.find((r) => mid >= r.top && mid <= r.bottom);
+    if (row) row.in.push(c); else out.push({ top: c.box[1], bottom: c.box[3], in: [c] });
+  }
+  return out.map((r) => r.in.sort((a, b) => a.box[0] - b.box[0]).map((c) => [c.label, Math.round(c.box[3] - c.box[1])]));
+}
+
+/**
+ * Controls whose content does not fit in them: a label spilling out of its
+ * button or cut by it. Not fields — a long value scrolls in them by design —
+ * nor a control that ends its text with an ellipsis: a name or a tag can be
+ * any length, and that is how it says it goes on.
  * @param {import('playwright').Page} p
  */
-async function controls(p) {
-  const out = {};
-  for (const { label, box: [l, t, r, b] } of await visible(p, ':is(button, input, select, textarea, summary, [role="tab"]):not(:is(.on-stage, .stage-label, .turn, .toast) *)')) {
-    let key = label, n = 2;
-    while (key in out) key = `${label} #${n++}`;
-    out[key] = [l, t, r - l, b - t].map(Math.round);
-  }
-  return out;
-}
+const spilling = (p) => p.evaluate(() => [...document.querySelectorAll('button, summary, [role="tab"]')]
+  .filter((e) => !e.closest('[hidden], .on-stage, .turn') && e.getClientRects().length && getComputedStyle(e).visibility !== 'hidden' && getComputedStyle(e).textOverflow !== 'ellipsis')
+  .filter((e) => e.scrollWidth > e.clientWidth + 1 || e.scrollHeight > e.clientHeight + 1)
+  .map((e) => `«${e.getAttribute('aria-label') || e.textContent?.trim()}» ${e.scrollWidth}×${e.scrollHeight} in ${e.clientWidth}×${e.clientHeight}`));
+
+/** A row as a line of its file: «label» height · «label» height. @param {[string, number][]} row */
+const line = (row) => row.map(([label, h]) => `«${label}» ${h}`).join(' · ');
+/** @param {string} text @returns {[string, number][][]} */
+const parse = (text) => text.trim().split('\n').map((l) => [...l.matchAll(/«(.*?)» (\d+)/g)].map((m) => [m[1], Number(m[2])]));
 
 for (const [w, h] of SIZES) {
   test(`every screen keeps its layout at ${w}×${h}`, async () => {
@@ -67,23 +96,22 @@ for (const [w, h] of SIZES) {
       // Never right, anywhere: the page wider than the screen, controls on top of one another.
       assert.ok(await p.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `${name}: the page is no wider than the screen`);
       if (!sheet) assert.deepEqual(await overlaps(p), [], `${name}: nothing covers anything else`); // a sheet lies over the screen by design
+      assert.deepEqual(await spilling(p), [], `${name}: every label fits in its control`);
       if (!chromium) continue;
-      const now = await controls(p);
-      const file = new URL(`${name}-${w}.json`, DIR);
+      const now = await rows(p);
+      const file = new URL(`${name}-${w}.txt`, DIR);
       if (UPDATE) {
         await mkdir(DIR, { recursive: true });
-        await writeFile(file, `{\n${Object.entries(now).map(([k, v]) => ` ${JSON.stringify(k)}: ${JSON.stringify(v)}`).join(',\n')}\n}\n`); // a control a line: a change reads as one
+        await writeFile(file, `${now.map(line).join('\n')}\n`); // a row a line: a change reads as one
         continue;
       }
-      const kept = JSON.parse(await readFile(file, 'utf8'));
-      for (const key of new Set([...Object.keys(kept), ...Object.keys(now)])) {
-        const a = kept[key], b = now[key];
-        if (!a) changes.push(`${name}: «${key}» is new at ${b}`);
-        else if (!b) changes.push(`${name}: «${key}» is gone (was at ${a})`);
-        else if (a.some((v, i) => Math.abs(v - b[i]) > SLACK)) changes.push(`${name}: «${key}» ${a} → ${b}`);
+      const kept = parse(await readFile(file, 'utf8'));
+      const same = (a = [], b = []) => a.length === b.length && a.every(([l, h], i) => l === b[i][0] && Math.abs(h - b[i][1]) <= SLACK);
+      for (let i = 0; i < Math.max(kept.length, now.length); i++) {
+        if (!same(kept[i], now[i])) changes.push(`${name}, row ${i + 1}: ${kept[i] ? line(kept[i]) : '(none)'} → ${now[i] ? line(now[i]) : '(none)'}`);
       }
     }
-    assert.deepEqual(changes, [], 'controls where they were kept (x, y, width, height); if this was meant, UPDATE_LAYOUT=1');
+    assert.deepEqual(changes, [], 'controls in the rows kept, each as tall; if this was meant, UPDATE_LAYOUT=1');
     await p.context().close();
   });
 }
