@@ -9,7 +9,7 @@ import { plainText, fitChars, LIMITS } from '../../web/src/text.js';
 const crate = new URL('../../crates/pips-format/', import.meta.url);
 
 test('the cases the core is checked against: taken as they are, or cleaned', async () => {
-  const lines = (await readFile(new URL('tests/data/plain-text.txt', crate), 'utf8')).split('\n').filter((l) => l && !l.startsWith('#'));
+  const lines = (await readFile(new URL('tests/data/plain-text.txt', crate), 'utf8')).split('\n').filter((l) => l && !l.startsWith('#') && !l.startsWith('='));
   assert.ok(lines.length > 20);
   for (const line of lines) {
     const [mark, text] = [line[0], line.slice(2)];
@@ -23,10 +23,38 @@ test('the cases the core is checked against: taken as they are, or cleaned', asy
   }
 });
 
+// The same fold as plain_text_fingerprint in crates/pips-format/tests/format.rs:
+// every character in every context the rule tells apart. The app does not
+// trim while typing, so the start is checked as a save would: by trim().
+test('every character is taken or refused as the core does', async () => {
+  const pinned = /^=\t(\w+)$/m.exec(await readFile(new URL('tests/data/plain-text.txt', crate), 'utf8'))?.[1];
+  const contexts = [['a', 'b'], ['', 'a'], ['\u{1F642}\u200D', ''], ['', '\u200D\u{1F642}'], ['', '\uFE0F'], ['\u0628\u200C', ''], ['', '\u200C\u0628']];
+  let hash = 0x811c9dc5;
+  for (let c = 0; c <= 0x10ffff; c++) {
+    if (c >= 0xd800 && c <= 0xdfff) continue;
+    const ch = String.fromCodePoint(c);
+    let bits = 0;
+    contexts.forEach(([before, after], i) => {
+      const s = before + ch + after;
+      if (plainText(s) === s && s.trim() === s) bits |= 1 << i;
+    });
+    hash = Math.imul(hash ^ bits, 0x01000193) >>> 0;
+  }
+  assert.equal(hash.toString(16).padStart(8, '0'), pinned);
+});
+
 test('cleaning takes out only what is refused, and leaves what it typed between', () => {
   assert.equal(plainText('al​ice'), 'alice');
   assert.equal(plainText('‮ecila'), 'ecila');
-  assert.equal(plainText('a‍‍b'), 'ab', 'joiners with nothing to join');
+  assert.equal(plainText('a\u200D\u200Db'), 'ab', 'joiners with nothing to join');
+  assert.equal(plainText('a\uFE0F\u200D\u{1F642}'), 'a\u{1F642}', 'a joiner whose neighbour went goes too');
+  assert.equal(plainText('\u{1F642}\u200D\u200B\u{1F642}'), '\u{1F642}\u200D\u{1F642}', 'what was between goes, the join stays');
+  assert.equal(plainText('\u{1F469}\u200D'), '\u{1F469}', 'a joiner at the end, as a cut leaves it');
+  assert.equal(plainText('\u{1F3F4}\u{E0067}\u{E0062}'), '\u{1F3F4}', 'a flag cut short stays bare');
+  const long = 'a\u200B'.repeat(200_000);
+  const t0 = performance.now();
+  assert.equal(plainText(long), 'a'.repeat(200_000));
+  assert.ok(performance.now() - t0 < 2000, 'one pass, however hostile the paste');
   assert.equal(plainText('\u{1F469}‍\u{1F4BB}'), '\u{1F469}‍\u{1F4BB}', 'an emoji whole');
   assert.equal(plainText('Лис '), 'Лис ', 'a space typed before the next word stays');
   assert.equal(fitChars('\u{1F98A}'.repeat(30), 24), '\u{1F98A}'.repeat(24), 'characters, not UTF-16 units');

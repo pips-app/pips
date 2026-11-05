@@ -55,7 +55,8 @@ export async function cardPicture(card, envelope) {
   lines.forEach((l, i) => g.fillText(l, PAD, top + i * 74));
   g.fillStyle = shade.dim;
   g.font = '500 32px "IBM Plex Sans", system-ui, sans-serif';
-  g.fillText(card.author ? `@${card.author}` : '—', PAD, top + lines.length * 74 + 12);
+  // A name of 24 wide characters is wider than the room beside the code.
+  g.fillText(card.author ? fit(g, `@${card.author}`, textRight - PAD) : '—', PAD, top + lines.length * 74 + 12);
   g.font = '400 26px "IBM Plex Sans", system-ui, sans-serif';
   g.fillText(t(plan.kind === 'single' ? 'picture.scan' : 'picture.file'), PAD, H - PAD - 26);
 
@@ -120,7 +121,7 @@ const luma = (c) => {
 /** @param {number[]} a @param {number[]} b */
 const contrast = (a, b) => { const [x, y] = [luma(a), luma(b)].sort((p, q) => q - p); return (x + 0.05) / (y + 0.05); };
 
-/** The text in at most `max` lines of `width`, the last cut with an ellipsis. @param {CanvasRenderingContext2D} g @param {string} text @param {number} width @param {number} max */
+/** The text in at most `max` lines of `width`, a cut one ending with an ellipsis. @param {CanvasRenderingContext2D} g @param {string} text @param {number} width @param {number} max */
 function wrap(g, text, width, max) {
   const words = text.split(/\s+/), lines = [];
   let line = '';
@@ -130,17 +131,24 @@ function wrap(g, text, width, max) {
     else { lines.push(line); line = w; }
   }
   if (line) lines.push(line);
+  // The last line shown says that more was cut; a single word longer than
+  // the room is cut too.
   if (lines.length > max) {
     lines.length = max;
-    let last = lines[max - 1];
-    while (last && g.measureText(`${last}…`).width > width) last = last.slice(0, -1);
-    lines[max - 1] = `${last}…`;
+    lines[max - 1] = cut(g, lines[max - 1], width);
   }
-  // A single word longer than the room is cut too.
-  return lines.map((l) => {
-    if (g.measureText(l).width <= width) return l;
-    let s = l;
-    while (s && g.measureText(`${s}…`).width > width) s = s.slice(0, -1);
-    return `${s}…`;
-  });
+  return lines.map((l) => fit(g, l, width));
+}
+
+/** The text as it is if it fits `width`, or cut with an ellipsis. @param {CanvasRenderingContext2D} g @param {string} text @param {number} width */
+const fit = (g, text, width) => (g.measureText(text).width <= width ? text : cut(g, text, width));
+
+/**
+ * The text cut, whole characters at a time (never half an emoji), until it
+ * fits `width` with an ellipsis after it. @param {CanvasRenderingContext2D} g @param {string} text @param {number} width
+ */
+function cut(g, text, width) {
+  const chars = Array.from(text);
+  while (chars.length && g.measureText(`${chars.join('')}…`).width > width) chars.pop();
+  return `${chars.join('')}…`;
 }

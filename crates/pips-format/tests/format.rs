@@ -274,6 +274,12 @@ fn a_network_from_a_newer_app_is_kept() {
     let bytes = encode(&c).unwrap();
     let back = decode(&bytes).unwrap();
     assert_eq!(back.handle.as_ref().unwrap().network, Network::Later(42));
+    // A byte this version knows, or 0, is not a later network: it would read
+    // back as another one, or as no handle.
+    for b in [0, 3, 8] {
+        c.handle = Some(Handle { network: Network::Later(b), text: "@kitsu".into() });
+        assert_eq!(encode(&c), Err(Error::BadHandle), "{b}");
+    }
     assert_eq!(encode(&back).unwrap(), bytes, "the same bytes again: a signature still holds");
     assert_eq!(Network::from_byte(0), None, "0 is no handle");
     assert_eq!(Network::from_byte(8), Some(Network::Other));
@@ -285,7 +291,7 @@ fn a_network_from_a_newer_app_is_kept() {
 fn plain_text_cases() {
     let cases = include_str!("data/plain-text.txt");
     let mut n = 0;
-    for line in cases.lines().filter(|l| !l.starts_with('#')) {
+    for line in cases.lines().filter(|l| !l.starts_with('#') && !l.starts_with('=')) {
         let (mark, text) = line.split_once('\t').unwrap();
         assert_eq!(pips_format::text::plain(text, 32), mark == "+", "{text:?}");
         n += 1;
@@ -295,6 +301,36 @@ fn plain_text_cases() {
     let mut c = Card::new(2, 2);
     c.author = "\u{202E}ecila".into();
     assert_eq!(encode(&c), Err(Error::BadText(Field::Author)));
+}
+
+/// Every character, in the contexts that the rule tells apart — between
+/// letters, at the start, after and before a joiner of emoji and of Arabic,
+/// before a variation selector — folded into one number (FNV-1a). The app
+/// computes the same over its own lists (tests/unit/text.test.mjs): if
+/// either list moves by one character, the numbers part.
+#[test]
+fn plain_text_fingerprint() {
+    let contexts: [(&str, &str); 7] = [
+        ("a", "b"),
+        ("", "a"),
+        ("\u{1F642}\u{200D}", ""),
+        ("", "\u{200D}\u{1F642}"),
+        ("", "\u{FE0F}"),
+        ("\u{628}\u{200C}", ""),
+        ("", "\u{200C}\u{628}"),
+    ];
+    let mut hash: u32 = 0x811c_9dc5;
+    for c in (0..=0x10_FFFF).filter_map(char::from_u32) {
+        let mut bits = 0u8;
+        for (i, (before, after)) in contexts.iter().enumerate() {
+            if pips_format::text::plain(&format!("{before}{c}{after}"), 32) {
+                bits |= 1 << i;
+            }
+        }
+        hash = (hash ^ u32::from(bits)).wrapping_mul(0x0100_0193);
+    }
+    let pinned = include_str!("data/plain-text.txt").lines().find_map(|l| l.strip_prefix("=\t")).unwrap();
+    assert_eq!(format!("{hash:08x}"), pinned);
 }
 
 #[test]

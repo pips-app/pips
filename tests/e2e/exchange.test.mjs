@@ -112,6 +112,10 @@ test('a card from a newer version of Pips is said to be so — as a file, a link
   await b.goto('about:blank');
   await b.goto(`${env.url}#${Buffer.from(newer).toString('base64url')}`);
   assert.equal(await toast(b), NEWER, 'a link');
+  // A link to something other than a card, of a kind a newer app makes.
+  await b.goto('about:blank');
+  await b.goto(`${env.url}#${Buffer.from('S\x01later').toString('base64url')}`);
+  assert.equal(await toast(b), NEWER, 'a link of a newer kind');
   assert.equal(await cards(b), 0, 'and nothing taken');
   await a.context().close();
   await b.context().close();
@@ -373,7 +377,7 @@ test('a picture of a card opens as the card: from the file, or by its code after
   for (const x of [p, q, r]) await x.context().close();
 });
 
-test('the code on a card picture takes the paper’s colours and still reads, on every paper, after JPEG', async () => {
+test('the code on a card picture takes the paper’s colours and still reads, on every paper, after JPEG; a long name keeps clear of it', async () => {
   const p = await env.phone('shadefox');
   const results = await p.evaluate(async () => {
     const s = await import('/src/state.js');
@@ -395,9 +399,22 @@ test('the code on a card picture takes the paper’s colours and still reads, on
       const want = s.app.core.qrPlan(env).text;
       out.push(texts.includes(want));
     }
+    // The widest name a card takes (24 wide letters) stays in its room: the
+    // gap between the text and the code (card-picture.js) is bare paper.
+    const card = { width: 16, height: 16, opaque: true, palette: { builtin: 0 }, frame: 0, frames: 1, delay_ms: 0, title: 'Имя', author: 'W'.repeat(24), handle: null, link: '', pixels: new Uint8Array(256) };
+    const env = s.app.identity.sealAsAuthor(s.app.identity.signCard({ ...card, author: 'shadefox' }), undefined);
+    const img = await createImageBitmap(await cardPicture(card, env));
+    const cv = new OffscreenCanvas(img.width, img.height);
+    const g = cv.getContext('2d');
+    g.drawImage(img, 0, 0);
+    const paper = g.getImageData(4, 4, 1, 1).data.join();
+    const gap = g.getImageData(1080 - 60 - 380 - 30, 1080, 28, 300).data; // W − PAD − QR − the gap's 32 px
+    let bare = true;
+    for (let k = 0; k < gap.length; k += 4) if (gap.slice(k, k + 4).join() !== paper) bare = false;
+    out.push(bare);
     return out;
   });
-  assert.deepEqual(results, Array(16).fill(true), `every paper, at both sizes: ${results.map(Number).join('')}`);
+  assert.deepEqual(results, Array(17).fill(true), `every paper, at both sizes; a wide name in its room: ${results.map(Number).join('')}`);
   await p.context().close();
 });
 

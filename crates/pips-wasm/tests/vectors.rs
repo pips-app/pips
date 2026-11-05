@@ -9,19 +9,24 @@
 //! the change is what goes. A new version of a structure gets new vectors
 //! beside these; these stay.
 //!
-//! Longer outputs are pinned by their SHA-256; short ones in full.
+//! Longer outputs are pinned by their SHA-256; short ones in full. Those
+//! pinned in full are also read back, by today's reader, as what they were
+//! made from: a reader that drifts from the writer is caught as well.
 
-use pips_format::{canonical_bytes, digest, encode, Animation, Card, Extension, Handle, Network, PaletteRef};
+use pips_format::{canonical_bytes, decode, digest, encode, Animation, Card, Extension, Handle, Network, PaletteRef};
 use pips_palette::{Palette, Rgb, BUILTINS};
-use pips_sign::recovery::{to_paper, to_words};
-use pips_sign::{seal, sign_card, Certificate, RecipientCode, SecretKey};
+use pips_sign::recovery::{from_paper, from_words, to_paper, to_words};
+use pips_sign::{open, seal, sign_card, verify_card, Certificate, RecipientCode, SecretKey};
 use pips_store::{Backup, Entry, Place, Profile};
-use pips_wasm::api::{card_link, qr_plan, Carousel, QrPlan};
+use pips_wasm::api::{card_link, classify, parse_link, qr_plan, Carousel, QrPlan, Scanned};
 use sha2::{Digest as _, Sha256};
 
 fn hex(b: &[u8]) -> String {
     const DIGITS: &[u8; 16] = b"0123456789abcdef";
     b.iter().flat_map(|x| [DIGITS[usize::from(x >> 4)], DIGITS[usize::from(x & 15)]]).map(char::from).collect()
+}
+fn unhex(s: &str) -> Vec<u8> {
+    (0..s.len()).step_by(2).map(|i| u8::from_str_radix(&s[i..i + 2], 16).unwrap()).collect()
 }
 fn sha(b: &[u8]) -> String {
     hex(&Sha256::digest(b))
@@ -171,4 +176,39 @@ fn the_bytes_given_out_never_change() {
     for ((name, value), (want_name, want)) in got.iter().zip(EXPECTED) {
         assert_eq!((name, value.as_str()), (want_name, *want), "{name} changed: the format broke");
     }
+}
+
+/// The value pinned under `name`.
+fn pinned(name: &str) -> &'static str {
+    EXPECTED.iter().find(|(n, _)| *n == name).unwrap().1
+}
+
+#[test]
+fn the_bytes_given_out_are_read_as_they_were() {
+    let (author, holder) = (key(1), key(2));
+    let card = signed(still(), &author);
+
+    assert_eq!(from_words(pinned("words 1")).unwrap().seed(), author.seed());
+    assert_eq!(from_paper(pinned("paper key 1")).unwrap().seed(), author.seed());
+
+    let still_back = decode(&unhex(pinned("still: payload"))).unwrap();
+    assert_eq!(still_back, card);
+    assert_eq!(verify_card(&still_back).unwrap(), author.public_key());
+    let anim_back = decode(&unhex(pinned("animated: payload"))).unwrap();
+    assert_eq!(anim_back, signed(animated(), &author), "the extension kept, to be signed with");
+    assert_eq!(verify_card(&anim_back).unwrap(), author.public_key());
+
+    let r = RecipientCode::from_bytes(&unhex(pinned("recipient code"))).unwrap();
+    assert_eq!((r.key, r.nick.as_str()), (holder.public_key(), "мох"));
+    let cert = Certificate::from_bytes(&unhex(pinned("certificate"))).unwrap();
+    cert.verify(&card).unwrap();
+    assert!(cert.is_held_by(&holder.public_key()));
+
+    let envelope = unhex(pinned("envelope by author"));
+    let opened = open(&envelope).unwrap();
+    assert_eq!((opened.card, opened.author), (card, Some(author.public_key())));
+    assert_eq!((opened.certificate, opened.sender), (None, None));
+    let Scanned::Envelope { bytes } = classify(pinned("qr text")) else { panic!("the code is a card") };
+    assert_eq!(bytes, envelope);
+    assert_eq!(parse_link(pinned("link")).unwrap(), envelope);
 }

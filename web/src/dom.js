@@ -124,8 +124,9 @@ export function icon(name) {
  */
 export function textLimit(input, max, unit) {
   input.addEventListener('input', () => {
-    const clean = plainText(input.value);
-    const v = unit === 'chars' ? fitChars(clean, max) : fitBytes(clean, max);
+    // Cleaned again once cut: a cut can end on a joiner, or in a flag's tags.
+    const fit = unit === 'chars' ? fitChars : fitBytes;
+    const v = plainText(fit(plainText(input.value), max));
     if (v !== input.value) input.value = v;
   });
   return input;

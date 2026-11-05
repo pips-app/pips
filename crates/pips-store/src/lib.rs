@@ -349,6 +349,7 @@ pub fn encode(b: &Backup) -> Result<Vec<u8>, Error> {
     str8(&mut w, &b.profile.nick)?;
     match &b.profile.handle {
         None => w.push(0),
+        Some(h) if !h.network.valid() => return Err(Error::Invalid("unknown network")),
         Some(h) => {
             w.push(h.network.byte());
             str8(&mut w, &h.text)?;

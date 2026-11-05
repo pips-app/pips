@@ -219,6 +219,8 @@ pub enum Network {
     /// A network a newer app knows (bytes 9 to 255): kept as it came, since
     /// the card is signed with it, and shown as [`Network::Other`]. A new
     /// network is then no reason for an older app to refuse the card.
+    /// `Later` with a byte of a known network, or 0, is not a network:
+    /// writing it is refused ([`Network::valid`]).
     Later(u8),
 }
 
@@ -238,6 +240,13 @@ impl Network {
             8 => Self::Other,
             b => Self::Later(b),
         })
+    }
+
+    /// Whether it is what its byte reads back as: not `Later` with the byte
+    /// of a network this version knows, nor with 0, which means no handle.
+    #[must_use]
+    pub const fn valid(self) -> bool {
+        !matches!(self, Self::Later(0..=8))
     }
 
     /// Its format byte.

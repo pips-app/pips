@@ -49,6 +49,7 @@ src/links.js                              card links: where they point, the card
 src/ui/player.js                          the one animated card that plays: the one looked at
 src/version.js                            the version, written by scripts/build-site.sh
 src/dom.js                                DOM without innerHTML, the icon set
+src/text.js                               the format's text rule for what is typed, the limits
 src/kit/                                  the bricks: motion, gestures, buttons, fields, sheets
 src/collection/                           the collection screen, built from the bricks
 src/editor/                               the pixel editor: model, undo tree, tools, its parts

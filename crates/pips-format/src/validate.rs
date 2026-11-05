@@ -106,6 +106,9 @@ pub fn card(c: &Card) -> Result<(), Error> {
     text(&c.title, MAX_TITLE, Field::Title)?;
     text(&c.author, MAX_AUTHOR, Field::Author)?;
     if let Some(h) = &c.handle {
+        if !h.network.valid() {
+            return Err(Error::BadHandle);
+        }
         handle(&h.text)?;
     }
     link(&c.link)?;

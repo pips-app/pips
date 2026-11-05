@@ -97,6 +97,17 @@ fn round_trip() {
     assert_eq!(owner(&file).unwrap(), key(1).public_key().to_bytes());
 }
 
+/// A network a newer app added is kept; one written with a byte this version
+/// knows would come back as another network, and is refused.
+#[test]
+fn a_later_network_is_kept_and_a_false_one_refused() {
+    let mut b = sample();
+    b.profile.handle = Some(Handle { network: Network::Later(42), text: "@kitsu".into() });
+    assert_eq!(decode(&encode_body(&b).unwrap()).unwrap(), b);
+    b.profile.handle = Some(Handle { network: Network::Later(3), text: "@kitsu".into() });
+    assert_eq!(encode_body(&b), Err(Error::Invalid("unknown network")));
+}
+
 #[test]
 fn the_same_words_open_it_on_another_device() {
     let file = seal(&sample(), &key(1), NONCE).unwrap();
