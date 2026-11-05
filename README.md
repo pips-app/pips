@@ -35,6 +35,10 @@ envelope.
   personal notes and tags.
 - Encrypted backups that open only with the same key (its words or paper QR);
   restoring brings back the key and the collection in one step.
+- Titles and names in any script, the same length in each (32 and 24
+  characters), emoji included; nothing invisible or text-reversing — the
+  same rule in the core and in what the app lets be typed.
+- A card from a newer version of Pips is said to be one, not called damaged.
 - Russian and English; installable, works offline.
 
 ## Layout
@@ -52,7 +56,7 @@ envelope.
 | `crates/pips-scan` | QR reading for browsers without `BarcodeDetector`, loaded on demand |
 | `web/` | the app: plain ES modules, no build step, strict CSP |
 
-Each crate does one thing, is `no_std` where it can be, and comes with a
+Each crate does one thing and is `no_std` where it can be; most come with a
 small command-line tool (`pips-card`, `pips-sign`, `pips-qr`, `pips-raster`,
 `pips-backup`…) that reads standard input and writes standard output.
 Every parser is strict: it refuses rather than repairs, and checks sizes
@@ -73,17 +77,18 @@ scripts/serve.sh            # http://localhost:8000
 
 Browser tests drive the app in Chromium (and, in CI, Firefox) through its
 real journeys — import, exchange by QR, link, file and picture, refusals,
-numbered copies, backups, restoring, the editor — and keep each screen's
-layout at three sizes and the collection's zoom from laying the page out on
-every frame; unit tests (`tests/unit`, plain node) cover the app's logic:
+numbered copies, backups, restoring, the editor, the published site with
+no network and its next release — and keep each screen's layout at three
+sizes (and in English at the narrowest) and the collection's zoom from
+laying the page out on every frame; unit tests (`tests/unit`, plain node) cover the app's logic:
 
 ```sh
 node --test tests/unit/*.test.mjs
 cd tests/e2e && npm ci && npx playwright install chromium && npm test
 ```
 
-What the tests reach of the app's code can be measured (Chromium and node,
-about 94% of lines today), with the functions no test runs listed:
+What the tests reach of the app's code can be measured (Chromium and node),
+with the functions no test runs and the files no test loads listed:
 
 ```sh
 cd tests/e2e && COVERAGE=/tmp/cov npm test && cd ../..
@@ -101,8 +106,9 @@ cd fuzz && cargo +nightly fuzz run card corpus/card seeds/card
 `scripts/build-site.sh` assembles what GitHub Pages publishes. CI runs
 formatting, clippy, tests, the minimum Rust version, a RustSec check of the
 dependencies, a type check of the app and the browser tests (Chromium and
-Firefox, a seeded "monkey" among them), and deploys `main`; a second workflow fuzzes
-every target on each push and for longer once a week. A third, run by hand
+Firefox, a seeded "monkey" among them), and deploys `main` — on each push
+to `main` and each pull request; a second workflow fuzzes every target on
+the same and for longer once a week. A third, run by hand
 (Actions → Repeat browser tests), runs the browser tests many rounds over in
 both browsers, to find any that pass only sometimes.
 

@@ -34,6 +34,7 @@ css/app.css                               tokens, base controls, the tab bar
 css/kit/*.css                             one file per component of src/kit/
 css/collection.css                        the collection screen
 css/editor.css                            the editor
+src/main.js                               starts the app: the core, the data, a card in the address
 src/core.js                               loads the WASM core (or the dev stub)
 src/qrscan.js                             QR reading: BarcodeDetector or pkg/pips_scan, on demand
 src/store.js, src/schema.js               IndexedDB: meta + cards, and the steps that upgrade stored data
@@ -52,10 +53,13 @@ src/dom.js                                DOM without innerHTML, the icon set
 src/text.js                               the format's text rule for what is typed, the limits
 src/kit/                                  the bricks: motion, gestures, buttons, fields, sheets
 src/collection/                           the collection screen, built from the bricks
-src/editor/                               the pixel editor: model, undo tree, tools, its parts
+src/editor/                               the pixel editor: model, undo tree, tools, its parts,
+                                          a card opened back into it (from-card.js)
 src/ui/                                   shell, card frame, qr, scan, the other tabs (give,
-                                          scanner, profile), sending out, the card picture,
-                                          edition, onboarding (with the words entry)
+                                          scanner, profile), a card arriving (arrival.js),
+                                          sending out, the card picture, edition,
+                                          onboarding (with the words entry), the journal
+                                          view, the developer group
 fonts/                                    Literata, IBM Plex Sans (OFL), self-hosted
 ```
 
