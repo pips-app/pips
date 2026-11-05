@@ -2,7 +2,7 @@
 // Building DOM without innerHTML. Card text comes from strangers, so every
 // string becomes a text node; only the icon constants below are markup.
 
-import { plainText, fitChars } from './text.js';
+import { keepTyped } from './text.js';
 
 /**
  * @param {string} tag
@@ -123,13 +123,17 @@ export function icon(name) {
  * @param {T} input @param {number} max @param {'chars'|'bytes'} unit @returns {T}
  */
 export function textLimit(input, max, unit) {
-  input.addEventListener('input', () => {
-    // Cleaned again once cut: a cut can end in a flag's tags. Being typed, a
-    // joiner at the end waits for the next letter; finished() lets it go.
-    const fit = unit === 'chars' ? fitChars : fitBytes;
-    const v = plainText(fit(plainText(input.value, true), max), true);
-    if (v !== input.value) input.value = v;
-  });
+  const keep = () => {
+    const r = keepTyped(input.value, input.selectionStart ?? input.value.length, max, unit);
+    if (r.value === input.value) return;
+    input.value = r.value;
+    input.setSelectionRange(r.caret, r.caret);
+  };
+  // Not while a word is being composed (a phone's keyboard, Japanese or
+  // Chinese input): changing the field then breaks the composition. Once
+  // it is in, the field is kept as any typing is.
+  input.addEventListener('input', (e) => { if (!(/** @type {InputEvent} */ (e).isComposing)) keep(); });
+  input.addEventListener('compositionend', keep);
   return input;
 }
 

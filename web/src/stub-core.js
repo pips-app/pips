@@ -90,7 +90,7 @@ export function parsePalette(bytes) {
 /** @param {any} card */
 function check(card) {
   if (card.width < 1 || card.height < 1 || card.pixels.length !== card.width * card.height * card.frames) fail('invalid_card', 'pixel count');
-  if (card.link && !/^[a-z0-9-]+(\.[a-z0-9-]+)+([/?#][!-~]*)?$/.test(card.link)) fail('invalid_card', 'bad link');
+  if (card.link && !/^[a-z0-9-]+(\.[a-z0-9-]+)+([/?#][!-~]*)?$/.test(card.link)) fail('bad_site', 'bad link');
 }
 
 /** @param {any} card */

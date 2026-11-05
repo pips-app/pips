@@ -30,7 +30,7 @@ import { go, hideTabs, toast, ask } from '../ui/shell.js';
 import { FRAME_SHADES } from '../ui/card.js';
 import { bottomSheet } from '../kit/bottom-sheet.js';
 import { clamp } from '../kit/motion.js';
-import { blank, createModel, composite, upgradeDraft, T, SIZES, MAX_HOLD, MAX_FRAMES } from './model.js';
+import { blank, createModel, composite, upgradeDraft, DRAFT_VERSION, T, SIZES, MAX_HOLD, MAX_FRAMES } from './model.js';
 import { pickPicture } from './picture.js';
 import { inside } from './raster.js';
 import { parseHex, hex, fromRgb } from './color.js';
@@ -448,20 +448,38 @@ export function editorView() {
       toast(t('import.saved'));
     } catch (e) {
       caught(e, 'editor');
-      // The device full: said as such; the drawing stays, nothing is lost.
-      toast(/** @type {any} */ (e)?.name === 'QuotaExceededError' ? t('err.storage-full') : `${t('err.generic')}: ${/** @type {any} */ (e)?.message ?? e}`);
+      // The device full: said as such; anything else is in the journal
+      // (caught above), in words, not the core's. The drawing stays.
+      toast(/** @type {any} */ (e)?.name === 'QuotaExceededError' ? t('err.storage-full') : t('journal.toast'));
     }
   }
 
   // ------------------------------------------------------------ keeping --
+  /** A pause in drawing long enough that a stroke is not stored mid-way. */
+  const KEEP_MS = 600;
   let saving = 0;
+  /** A draft not kept is said once, not at every stroke, until one is kept again. */
+  let unkept = false;
+  function store() {
+    clearTimeout(saving);
+    saving = 0;
+    setMeta(DRAFT, { v: DRAFT_VERSION, doc: { ...model.doc }, history: model.history.save(), frame: state.frame, layer: state.layer, color: state.color })
+      .then(() => { unkept = false; })
+      .catch((e) => {
+        caught(e, 'draft');
+        if (unkept) return;
+        unkept = true;
+        toast(t(/** @type {any} */ (e)?.name === 'QuotaExceededError' ? 'err.storage-full' : 'ed.draft.unkept'));
+      });
+  }
   /** The draft, with its whole history, a moment after each change. */
   function keep() {
     clearTimeout(saving);
-    saving = window.setTimeout(() => {
-      setMeta(DRAFT, { v: 2, doc: { ...model.doc }, history: model.history.save(), frame: state.frame, layer: state.layer, color: state.color }).catch((e) => caught(e, 'draft')); // a draft not kept is worth the journal: storage full, most likely
-    }, 600);
+    saving = window.setTimeout(store, KEEP_MS);
   }
+  // The app put away (another app, the screen off, the tab closed): what was
+  // waiting to be kept is kept now — a phone may end the page without a word.
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden' && saving) store(); });
   model.listen((c) => {
     // A stroke being drawn: only its frame's picture, cheaply, on every move.
     if (c.live) {
@@ -579,7 +597,7 @@ export function editorView() {
         loaded = true;
         // A draft kept by an older version is taken up as it is now (layers, holds).
         const d = upgradeDraft(await getMeta(DRAFT).catch(() => null));
-        if (d?.v === 2 && SIZES.includes(d.doc?.size)) {
+        if (d?.v === DRAFT_VERSION && SIZES.includes(d.doc?.size)) {
           state.frame = d.frame ?? 0;
           state.layer = d.layer ?? 0;
           state.color = d.color ?? 0;

@@ -44,17 +44,20 @@ export async function sendFile(file, title) {
   toast(t('share.file.saved', download(file)));
 }
 
+/** How long a download's address is kept: the browser has started reading it by then. */
+const DOWNLOAD_URL_MS = 10_000;
+
 /**
  * Saves a file as a download; returns the name it got. A download keeps to
  * Latin letters: some browsers drop any other name for a plain «download»,
  * with no extension to open it by. @param {File} file
  */
-function download(file) {
+export function download(file) {
   const a = /** @type {HTMLAnchorElement} */ (h('a', { href: URL.createObjectURL(file), download: latin(file.name) }));
   document.body.append(a);
   a.click();
   a.remove();
-  setTimeout(() => URL.revokeObjectURL(a.href), 10_000);
+  setTimeout(() => URL.revokeObjectURL(a.href), DOWNLOAD_URL_MS);
   return a.download;
 }
 

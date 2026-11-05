@@ -7,7 +7,7 @@ const { parseHex, hex, toHsv, fromHsv, nearest, ramp } = await import('../../web
 const { line, rect, ellipse, fill, mirror, corner, span, within, lift, flip, turn, place, dithered } = await import('../../web/src/editor/raster.js');
 const { budget, LIMIT, issuable, MAX_EDGE } = await import('../../web/src/budget.js');
 const { createHistory } = await import('../../web/src/editor/history.js');
-const { blank, createModel, composite, upgradeDraft, T, MAX_HOLD, MAX_FRAMES } = await import('../../web/src/editor/model.js');
+const { blank, createModel, composite, upgradeDraft, DRAFT_VERSION, T, MAX_HOLD, MAX_FRAMES } = await import('../../web/src/editor/model.js');
 const { toCard } = await import('../../web/src/editor/to-card.js');
 
 const PAL = { colors: [0xf7f3ea, 0x17151f, 0xc4392f, 0x3b5fa8], id: 7 };
@@ -107,6 +107,43 @@ test('undo tree: merging, the limit, saving', () => {
   copy.load(JSON.parse(JSON.stringify(h.save())));
   assert.deepEqual(copy.line().map((n) => n.label), h.line().map((n) => n.label));
   assert.equal(copy.current.label, 'z');
+});
+
+test('undo tree: a session thousands of steps long is kept as a draft and taken back, branches and all', () => {
+  const h = createHistory({ apply: () => {}, sizeOf: () => 1 });
+  for (let i = 0; i < 20_000; i++) h.push(i, { label: `s${i}` });
+  h.undo();
+  h.undo();
+  h.push(-1, { label: 'branch' }); // a branch beside the two undone
+  h.undo();
+  // Stored as IndexedDB stores it: a structured clone, which nesting this
+  // deep used to overflow (the draft then quietly stopped being kept).
+  const saved = structuredClone(h.save());
+  const copy = createHistory({ apply: () => {}, sizeOf: () => 1 });
+  copy.load(saved);
+  assert.equal(copy.line().length, h.line().length);
+  assert.equal(copy.current.label, h.current.label);
+  assert.equal(copy.redoStep?.label, 'branch', 'the branch last taken is the one redo takes');
+  assert.deepEqual(copy.current.kids.map((k) => k.label), ['s19998', 'branch'], 'kids in their order');
+});
+
+test('a draft whose history was kept nested (version 2) is taken up as a list, however deep', () => {
+  // A line 3000 steps deep, current at step 2000, as version 2 kept it.
+  /** @returns {any} */
+  const step = (i) => ({ e: { k: 'set', key: 'title', b: '', a: String(i) }, l: 'ed.h.title', f: -1, t: i, x: 0, k: [] });
+  const root = { e: null, l: '', f: -1, t: 0, x: 0, k: [] };
+  let n = root;
+  for (let i = 1; i <= 3000; i++) { const s = step(i); n.k.push(s); n = s; }
+  n.x = -1;
+  const v2 = { v: 2, frame: 0, color: 1, layer: 0, doc: blank(2, PAL), history: { tree: root, at: Array(2000).fill(0) } };
+  const d = upgradeDraft(v2);
+  assert.equal(d.v, DRAFT_VERSION);
+  assert.equal(d.history.nodes.length, 3001);
+  assert.equal(d.history.nodes[d.history.at].e.a, '2000', 'the current step stays the current step');
+  const h = createHistory({ apply: () => {}, sizeOf: () => 1 });
+  h.load(d.history);
+  assert.equal(h.line().length, 3001);
+  assert.equal(v2.history.tree, root, 'the draft as stored is left alone');
 });
 
 test('undo tree: a step forgotten to keep within the limit cannot be gone to, and nothing moves', () => {
@@ -402,7 +439,7 @@ test('a draft kept before layers is taken up with its history', () => {
     history: { tree: { e: null, l: '', f: -1, t: 0, x: 0, k: [{ e: { k: 'px', f: 0, i: [0], b: [255], a: [1] }, l: 'ed.h.pen', f: 0, t: 1, x: -1, k: [] }] }, at: [0] },
   };
   const d = upgradeDraft(old);
-  assert.equal(d.v, 2);
+  assert.equal(d.v, DRAFT_VERSION);
   const m = createModel(blank(2, PAL));
   m.reset({ ...d.doc, frames: d.doc.frames.map((f) => f.map((c) => Uint8Array.from(c))) }, d.history);
   assert.equal(m.doc.frames[0][0][0], 1);

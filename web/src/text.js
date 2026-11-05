@@ -135,5 +135,29 @@ export function plainText(s, typing = false) {
  */
 export const finished = (s) => plainText(s).trim();
 
-/** The first `max` characters of `s` (characters, not UTF-16 units). @param {string} s @param {number} max */
-export const fitChars = (s, max) => Array.from(s).slice(0, max).join('');
+const utf8 = new TextEncoder();
+
+/**
+ * A field's text as it is being typed, kept to the rule and to `max` —
+ * characters for a title or a name, the same room in every script; bytes
+ * of UTF-8 for a handle or a link, which are addresses. What is too much
+ * goes where it was typed, just before the caret, as `maxLength` refuses a
+ * key: typing in the middle of a full title never cuts its end. The caret
+ * stays after what was typed. Being typed, a joiner at the end waits for
+ * the next letter (`plainText`'s `typing`); `finished()` lets it go.
+ * @param {string} value @param {number} caret in UTF-16 units, as the field gives it
+ * @param {number} max @param {'chars'|'bytes'} unit
+ * @returns {{value: string, caret: number}}
+ */
+export function keepTyped(value, caret, max, unit) {
+  const head = Array.from(plainText(value.slice(0, caret), true));
+  const tail = Array.from(plainText(value.slice(caret), true));
+  const size = unit === 'chars' ? () => head.length + tail.length : () => utf8.encode(head.join('') + tail.join('')).length;
+  while (size() > max) {
+    if (head.length) head.pop();
+    else tail.pop();
+  }
+  // Once more as one text: a joiner either side of the caret meets its neighbour.
+  const kept = plainText(head.join('') + tail.join(''), true);
+  return { value: kept, caret: Math.min(head.join('').length, kept.length) };
+}

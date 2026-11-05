@@ -4,7 +4,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { plainText, finished, fitChars, LIMITS } from '../../web/src/text.js';
+import { plainText, finished, keepTyped, LIMITS } from '../../web/src/text.js';
 
 const crate = new URL('../../crates/pips-format/', import.meta.url);
 
@@ -66,14 +66,27 @@ test('cleaning takes out only what is refused, and leaves what it typed between'
   assert.ok(performance.now() - t0 < 2000, 'one pass, however hostile the paste');
   assert.equal(plainText('\u{1F469}‍\u{1F4BB}'), '\u{1F469}‍\u{1F4BB}', 'an emoji whole');
   assert.equal(plainText('Лис '), 'Лис ', 'a space typed before the next word stays');
-  assert.equal(fitChars('\u{1F98A}'.repeat(30), 24), '\u{1F98A}'.repeat(24), 'characters, not UTF-16 units');
+  assert.equal(keepTyped('\u{1F98A}'.repeat(30), 60, 24, 'chars').value, '\u{1F98A}'.repeat(24), 'characters, not UTF-16 units');
 });
 
 test('a half-space is typed as any letter: one at a time, through the field\'s cleaning', () => {
   let v = '';
-  for (const ch of '\u0645\u06CC\u200C\u062E\u0648\u0627\u0647\u0645') v = plainText(fitChars(plainText(v + ch, true), 24), true);
+  for (const ch of '\u0645\u06CC\u200C\u062E\u0648\u0627\u0647\u0645') v = keepTyped(v + ch, v.length + ch.length, 24, 'chars').value;
   assert.equal(v, '\u0645\u06CC\u200C\u062E\u0648\u0627\u0647\u0645');
   assert.equal(finished(v), v);
+});
+
+test('a full field refuses what is typed, where it is typed, and the caret stays after it', () => {
+  // A letter typed in the middle of a full title: the title stays whole.
+  const full = 'Ж'.repeat(32);
+  assert.deepEqual(keepTyped(full.slice(0, 10) + 'Ы' + full.slice(10), 11, 32, 'chars'), { value: full, caret: 10 });
+  // A paste longer than the room: its tail goes, not the text after it.
+  assert.deepEqual(keepTyped('ab' + 'xyz' + 'cd', 5, 6, 'chars'), { value: 'abxycd', caret: 4 });
+  // Bytes for an address: a Cyrillic letter is two.
+  assert.deepEqual(keepTyped('@abcд', 5, 5, 'bytes'), { value: '@abc', caret: 4 });
+  // Cleaned on the way, the caret moved back by what was taken out before it.
+  assert.deepEqual(keepTyped('al\u200Bice', 4, 24, 'chars'), { value: 'alice', caret: 3 });
+  assert.deepEqual(keepTyped('alice', 5, 24, 'chars'), { value: 'alice', caret: 5 }, 'nothing to do');
 });
 
 test('the limits are the core\'s', async () => {

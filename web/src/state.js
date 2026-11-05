@@ -24,6 +24,8 @@ export const app = {
   /** @type {Profile} */ profile: { nick: '', handle: null, link: '' },
   /** @type {Map<string, Entry>} */ cards: new Map(),
   /** What changed since the last backup. @type {Pending} */ pending: { cards: [], profile: false, issued: 0 },
+  /** Stored cards this version could not open: kept on disk, not shown, and said. */
+  unreadable: 0,
 };
 
 /** @typedef {{cards: string[], profile: boolean, issued: number}} Pending
@@ -51,6 +53,7 @@ export async function load(core, stub) {
   app.pending = (await store.getMeta('pending')) ?? app.pending;
 
   const now = Date.now();
+  app.unreadable = 0;
   for (const rec of await store.allCards()) {
     if (rec.state === 'trash' && rec.trashedAt && now - rec.trashedAt > TRASH_DAYS * DAY) {
       await store.deleteCard(rec.digest);
@@ -60,7 +63,10 @@ export async function load(core, stub) {
       const i = core.inspectCard(rec.payload);
       app.cards.set(rec.digest, { rec, card: i.card, author: i.author ?? null });
     } catch (e) {
-      // A stored card that no longer checks out is kept on disk but not shown.
+      // A stored card that no longer checks out is kept on disk but not
+      // shown — nor in a backup, which takes only cards that check out:
+      // counted, so that the person is told (main.js).
+      app.unreadable++;
       journal.warn(e, 'storage: a stored card failed inspection');
     }
   }
@@ -130,20 +136,6 @@ export async function setProfile(profile) {
   changed();
 }
 
-/** Received cards in the collection, newest first. */
-export function collection() {
-  return [...app.cards.values()].filter((e) => !e.rec.mine && e.rec.state === 'collection').sort((a, b) => b.rec.received - a.rec.received);
-}
-
-/** The user's own cards that are not archived, newest first. */
-export function mine() {
-  return [...app.cards.values()].filter((e) => e.rec.mine && e.rec.state === 'collection').sort((a, b) => b.rec.received - a.rec.received);
-}
-
-/** Cards in the archive or bin, own and received alike. @param {'archive'|'trash'} state */
-export function pile(state) {
-  return [...app.cards.values()].filter((e) => e.rec.state === state).sort((a, b) => (b.rec.trashedAt ?? b.rec.received) - (a.rec.trashedAt ?? a.rec.received));
-}
 
 /** Days left before a binned card goes for good. @param {CardRecord} rec */
 export const daysLeft = (rec) => Math.max(1, TRASH_DAYS - Math.floor((Date.now() - (rec.trashedAt ?? Date.now())) / DAY));
@@ -347,7 +339,7 @@ export async function applyBackup(b) {
       // This person's numbered copy in the backup, a plain one here: the numbered one is kept.
       const numbered = ownCopyOf(here.rec, c);
       if (numbered) {
-        here.rec = { ...here.rec, payload: c.payload, cert: c.cert, edition: c.edition, mine: isMine(i.author ?? null) };
+        here.rec = { ...here.rec, payload: c.payload, cert: c.cert, edition: c.edition, from: c.from ?? null, mine: isMine(i.author ?? null) };
         here.card = i.card;
         here.author = i.author ?? null;
       }
@@ -355,12 +347,12 @@ export async function applyBackup(b) {
       // What the backup adds to this card: a note or tags it has not got.
       const takeNote = !r.note && !!c.note;
       const takeTags = !r.tags?.length && !!c.tags?.length;
-      const note = takeNote ? c.note : r.note;
-      const tags = takeTags ? c.tags : r.tags;
       const editions = r.editions || c.editions ? joinLogs(r.editions, c.editions) : undefined;
       const more = (editions?.issued.length ?? 0) > (r.editions?.issued.length ?? 0);
       if (numbered || takeNote || takeTags || more) {
-        here.rec = { ...r, note, tags, ...(editions ? { editions } : {}) };
+        // Only what it adds: a field the card has not got stays as it was
+        // (absent, not set to nothing — a backup holds every field whole).
+        here.rec = { ...r, ...(takeNote ? { note: c.note } : {}), ...(takeTags ? { tags: c.tags } : {}), ...(editions ? { editions } : {}) };
         await store.putCard(here.rec);
         await touch({ card: i.digest });
       }

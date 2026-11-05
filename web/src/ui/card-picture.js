@@ -124,24 +124,42 @@ const luma = (c) => {
 /** @param {number[]} a @param {number[]} b */
 const contrast = (a, b) => { const [x, y] = [luma(a), luma(b)].sort((p, q) => q - p); return (x + 0.05) / (y + 0.05); };
 
-/** The text in at most `max` lines of `width`, a cut one ending with an ellipsis. @param {CanvasRenderingContext2D} g @param {string} text @param {number} width @param {number} max */
-function wrap(g, text, width, max) {
-  const words = text.split(/\s+/), lines = [];
+/**
+ * The text in at most `max` lines of `width`, a cut one ending with an
+ * ellipsis. Lines break between words; a word wider than a line — a title
+ * in Japanese, which has no spaces, or one long name — between its
+ * characters. @param {CanvasRenderingContext2D} g @param {string} text @param {number} width @param {number} max
+ */
+export function wrap(g, text, width, max) {
+  /** @type {string[]} */
+  const lines = [];
   let line = '';
-  for (const w of words) {
+  for (const w of text.split(/\s+/)) {
     const next = line ? `${line} ${w}` : w;
-    if (g.measureText(next).width <= width || !line) line = next;
-    else { lines.push(line); line = w; }
+    if (g.measureText(next).width <= width) {
+      line = next;
+      continue;
+    }
+    if (line) lines.push(line);
+    line = '';
+    for (const ch of shown(w)) {
+      if (line && g.measureText(line + ch).width > width) {
+        lines.push(line);
+        line = ch;
+      } else line += ch;
+    }
   }
   if (line) lines.push(line);
-  // The last line shown says that more was cut; a single word longer than
-  // the room is cut too.
+  // The last line shown says that more was cut.
   if (lines.length > max) {
     lines.length = max;
     lines[max - 1] = cut(g, lines[max - 1], width);
   }
   return lines.map((l) => fit(g, l, width));
 }
+
+/** What a person sees as single characters: an emoji or a flag is one. @param {string} s */
+const shown = (s) => Array.from(new Intl.Segmenter().segment(s), (x) => x.segment);
 
 /** The text as it is if it fits `width`, or cut with an ellipsis. @param {CanvasRenderingContext2D} g @param {string} text @param {number} width */
 const fit = (g, text, width) => (g.measureText(text).width <= width ? text : cut(g, text, width));
@@ -152,7 +170,7 @@ const fit = (g, text, width) => (g.measureText(text).width <= width ? text : cut
  * @param {CanvasRenderingContext2D} g @param {string} text @param {number} width
  */
 function cut(g, text, width) {
-  const shown = Array.from(new Intl.Segmenter().segment(text), (x) => x.segment);
-  while (shown.length && g.measureText(`${shown.join('')}…`).width > width) shown.pop();
-  return `${shown.join('')}…`;
+  const chars = shown(text);
+  while (chars.length && g.measureText(`${chars.join('')}…`).width > width) chars.pop();
+  return `${chars.join('')}…`;
 }

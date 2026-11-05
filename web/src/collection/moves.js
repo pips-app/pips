@@ -11,6 +11,7 @@ import { t } from '../i18n.js';
 import { app, move, purge } from '../state.js';
 import { artCanvas, FRAME_SHADES } from '../ui/card.js';
 import { toast, ask } from '../ui/shell.js';
+import { caught } from '../diagnostics.js';
 import { clamp, flight, REDUCED } from '../kit/motion.js';
 
 /** @typedef {import('./query.js').Place} Place */
@@ -132,7 +133,11 @@ export function createMoves(o) {
         o.host.append(c.el);
         recents[to] = [c.id, ...recents[to].filter((x) => x !== c.id)].slice(0, 8);
         o.selection.forget(c.id);
-        move(c.id, to);
+        // A write that fails (the device full) is said and journaled, not lost in a timer.
+        move(c.id, to).catch((e) => {
+          caught(e, 'collection');
+          toast(t(/** @type {any} */ (e)?.name === 'QuotaExceededError' ? 'err.storage-full' : 'journal.toast'));
+        });
         stage.reflow(stage.list.filter((x) => x !== c));
         drawStrip(0, c.id, to);
       }, t0 + dur - now);

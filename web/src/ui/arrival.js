@@ -34,10 +34,12 @@ export function arrived(r) {
   else toast(t(r.status === 'added' ? 'receive.got' : 'receive.dup'));
 }
 
+/** What damage is called, by the way the card came: a code is scanned again, a link was most likely cut short, a file changed on the way. */
+const DAMAGED = { code: 'receive.damaged', link: 'link.bad', file: 'receive.file-damaged' };
+
 /**
- * Opens, checks and keeps an envelope. A damaged one from a link was most
- * likely cut short on the way, and is called that.
- * @param {Uint8Array} envelope @param {'link'|'code'} [via]
+ * Opens, checks and keeps an envelope.
+ * @param {Uint8Array} envelope @param {keyof typeof DAMAGED} [via]
  * @returns {Promise<boolean>} whether it was taken
  */
 export async function arrive(envelope, via = 'code') {
@@ -46,8 +48,7 @@ export async function arrive(envelope, via = 'code') {
     return true;
   } catch (e) {
     caught(e, 'arrival');
-    // A damaged link was most likely cut short on the way, and is called that.
-    toast(refusal(e, via === 'link' ? 'link.bad' : 'receive.damaged'));
+    toast(refusal(e, DAMAGED[via]));
     return false;
   }
 }
@@ -75,7 +76,7 @@ export function peek(envelope) {
  * @param {Uint8Array[]} envelopes @param {number} [failed] files already found to hold no card, counted with the rest
  */
 export async function arriveMany(envelopes, failed = 0) {
-  if (envelopes.length === 1 && !failed) return void (await arrive(envelopes[0]));
+  if (envelopes.length === 1 && !failed) return void (await arrive(envelopes[0], 'file'));
   // Damaged or forged, a card not taken is counted the same: one line cannot say which was which.
   let added = 0, had = 0, bad = failed;
   for (const env of envelopes) {
@@ -83,8 +84,15 @@ export async function arriveMany(envelopes, failed = 0) {
       const r = await receive(app.core.openEnvelope(env));
       if (r.status === 'duplicate') had++; else added++; // a numbered copy over a plain one is a card gained
     } catch (e) {
+      // The device full: no use going on, and said as such.
+      if (/** @type {any} */ (e)?.name === 'QuotaExceededError') {
+        caught(e, 'arrival');
+        go('collection');
+        return toast(t('err.storage-full'));
+      }
       bad++;
-      if (!(/** @type {any} */ (e)?.code)) caught(e, 'arrival'); // a code is an expected answer; anything else is worth the journal
+      // The core's refusals carry a code in words; anything else is worth the journal.
+      if (typeof (/** @type {any} */ (e)?.code) !== 'string') caught(e, 'arrival');
     }
   }
   go('collection');

@@ -154,14 +154,27 @@ export function createHistory(o) {
     /** Bytes the steps take. */
     get bytes() { return bytes; },
 
-    /** The whole tree as plain data, with where the current step is. */
+    /**
+     * The whole tree as plain data: its steps in a list, each naming its
+     * parent's place in it (a parent before its kids, kids in order), and
+     * the current step's place. A list, not nested objects: a long session
+     * is a line thousands of steps deep, and storing nesting that deep
+     * overflows the browser's stack — the draft would quietly stop being kept.
+     */
     save() {
-      /** @param {Node<E>} n @returns {any} */
-      const dump = (n) => ({ e: n.entry, l: n.label, f: n.frame, t: n.t, x: n.next, k: n.kids.map(dump) });
-      /** @type {number[]} */
-      const at = [];
-      for (let n = cur; n.parent; n = n.parent) at.unshift(n.parent.kids.indexOf(n));
-      return { tree: dump(root), at };
+      /** @type {{e: E|null, l: string, f: number, t: number, x: number, p: number}[]} */
+      const nodes = [];
+      /** @type {Map<Node<E>, number>} */
+      const place = new Map();
+      /** @type {Node<E>[]} */
+      const todo = [root];
+      while (todo.length) {
+        const n = /** @type {Node<E>} */ (todo.pop());
+        place.set(n, nodes.length);
+        nodes.push({ e: n.entry, l: n.label, f: n.frame, t: n.t, x: n.next, p: n.parent ? /** @type {number} */ (place.get(n.parent)) : -1 });
+        for (let i = n.kids.length - 1; i >= 0; i--) todo.push(n.kids[i]); // the first kid next: kids keep their order
+      }
+      return { nodes, at: /** @type {number} */ (place.get(cur)) };
     },
     /** Forgets every step: what is now is the start. */
     clear() {
@@ -170,21 +183,24 @@ export function createHistory(o) {
       cur = root;
     },
     /** Takes back a tree from `save`, without applying anything: the
-     * document must already be as it was at the current step. @param {any} data */
+     * document must already be as it was at the current step.
+     * @param {{nodes: {e: E|null, l: string, f: number, t: number, x: number, p: number}[], at: number}} data */
     load(data) {
       bytes = 0;
-      /** @param {any} d @param {Node<E>|null} parent @returns {Node<E>} */
-      const make = (d, parent) => {
+      /** @type {Node<E>[]} */
+      const made = [];
+      for (const d of data.nodes) {
+        const parent = d.p < 0 ? null : made[d.p];
+        if (parent === undefined) throw new Error('a step before its parent');
         const n = node(parent, d.e, d.l, d.f, '');
         n.t = d.t;
         n.next = d.x;
         bytes += n.bytes;
-        n.kids = d.k.map((/** @type {any} */ k) => make(k, n));
-        return n;
-      };
-      root = make(data.tree, null);
-      cur = root;
-      for (const i of data.at) cur = cur.kids[i];
+        parent?.kids.push(n);
+        made.push(n);
+      }
+      root = made[0];
+      cur = made[data.at] ?? root;
     },
   };
   return api;

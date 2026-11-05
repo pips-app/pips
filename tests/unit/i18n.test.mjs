@@ -47,3 +47,18 @@ test('no Russian quotes or untranslated words in English', () => {
   const bad = Object.entries(en).filter(([, v]) => /[«»а-яё]/i.test(typeof v === 'function' ? v.toString() : v)).map(([k]) => k);
   assert.deepEqual(bad, []);
 });
+
+// A code the core can give, with no words for it, would fall back to «something
+// went wrong»: every code of the core's import and backup errors has its string.
+test('every code the core gives for a picture or a backup has words, in both languages', () => {
+  const crate = (name) => readFileSync(new URL(`../../crates/${name}/src/lib.rs`, import.meta.url), 'utf8');
+  const codes = (src) => {
+    const body = /pub const fn code\(&self\) -> &'static str \{([\s\S]*?)\n {4}\}/.exec(src)?.[1] ?? '';
+    return [...body.matchAll(/=> "(\w+)"/g)].map((m) => m[1]);
+  };
+  for (const [prefix, name] of [['import.err', 'pips-raster'], ['backup.err', 'pips-store']]) {
+    const all = codes(crate(name));
+    assert.ok(all.length > 3, `the codes of ${name} were found`);
+    for (const lang of [ru, en]) assert.deepEqual(all.filter((c) => !(`${prefix}.${c}` in lang)), [], `${name}: codes without words`);
+  }
+});

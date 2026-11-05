@@ -357,7 +357,7 @@ async function bitmapOf(card) {
 
 /** @param {string} value @param {(v: string) => void} onChange */
 function paletteSelect(value, onChange) {
-  const sel = /** @type {HTMLSelectElement} */ (h('select', { onchange: () => onChange(sel.value) },
+  const sel = /** @type {HTMLSelectElement} */ (h('select', { 'aria-label': t('import.opt.palette'), onchange: () => onChange(sel.value) },
     h('option', { value: '' }, t('import.opt.palette.auto')),
     h('option', { value: 'fit:32' }, t('import.opt.palette.fit', 32)),
     h('option', { value: 'fit:16' }, t('import.opt.palette.fit', 16)),

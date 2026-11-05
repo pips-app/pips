@@ -44,6 +44,7 @@ const ru = {
   'import.err.too_big': (/** @type {number[]} */ ...a) => `${a[0]}×${a[1]} — больше карточки (до 128×128)`,
   'import.err.too_many_colors': (/** @type {number} */ n) => `${n > 256 ? 'Больше 256' : n} ${plural(n, 'цвет', 'цвета', 'цветов')}, а в карточке до 32. Выберите палитру ниже — цвета подберутся к ближайшим`,
   'import.err.too_many_frames': 'Больше 64 кадров',
+  'import.err.partial_alpha': 'В картинке есть полупрозрачные пиксели, а у карточки пиксель или виден, или нет',
   'import.err.unequal_delays': 'У кадров разная длительность, а у карточки она одна. Выровняйте её в Aseprite или возьмите только первый кадр',
   'import.err.delay_out_of_range': (/** @type {number} */ ms) => `Кадр длится ${ms} мс, а можно от 20 до 5000`,
   'give.title': 'Отдать', 'give.sub': 'покажите код — его отсканируют с вашего экрана', 'give.yours': 'Ваши карточки', 'give.hint': 'Пусть другой телефон отсканирует код.', 'give.new': 'Нарисовать новую',
@@ -89,6 +90,10 @@ const ru = {
   'receive.paper': 'Это чей-то секретный ключ. Его нельзя показывать — тот, кто его видел, может подписывать карточки от имени владельца.',
   'me.title': 'Профиль', 'me.nick': 'Ник', 'me.handle': 'Соцсеть', 'me.handle.ph': 'Имя в соцсети', 'me.network': 'Соцсеть', 'me.link': 'Ссылка',
   'me.link.hint': 'Например, kitsu.art/shop — https:// добавится сам',
+  'ed.draft.unkept': 'Черновик не сохраняется — причина записана в журнал',
+  'me.err.bad_author': 'Такой ник карточка не возьмёт: до 24 символов, без невидимых знаков',
+  'me.err.bad_handle': 'Имя в соцсети — одним словом, без пробелов',
+  'me.err.bad_site': 'Такую ссылку карточка не возьмёт: адрес латиницей вроде kitsu.art/shop — без порта и пароля',
   'me.card-back': 'На обороте ваших карточек', 'me.saved': 'Сохранено',
   'backup.title': 'Резервная копия', 'backup.save': 'Сохранить копию', 'backup.restore': 'Восстановить',
   'backup.never': 'Копии ещё нет. Ключ восстанавливается словами, а коллекция — только из копии.',
@@ -107,8 +112,8 @@ const ru = {
   'backup.err.too_large': 'Файл слишком большой',
   'me.key': 'Ключ', 'me.words': '24 слова', 'me.paper': 'Бумажный ключ',
   'me.switch': 'Сменить ключ',
-  'me.switch.confirm': (/** @type {number} */ n) => `${n} ${plural(n, 'ваша карточка подписана', 'ваши карточки подписаны', 'ваших карточек подписаны')} нынешним ключом. После смены они останутся у вас, но выдавать их номерные экземпляры отсюда будет нельзя. Если слова этого ключа не записаны — запишите их сначала.`,
-  'me.switch.go': 'Сменить ключ', 'me.switch.done': 'Ключ сменён', 'me.switch.same': 'Это тот же ключ: копия добавлена',
+  'me.switch.confirm': (/** @type {number} */ n) => `${n} ${plural(n, 'ваша карточка подписана', 'ваши карточки подписаны', 'ваших карточек подписано')} нынешним ключом. После смены они останутся у вас, но выдавать их номерные экземпляры отсюда будет нельзя. Если слова этого ключа не записаны — запишите их сначала.`,
+  'me.switch.go': 'Сменить ключ', 'me.switch.done': 'Ключ сменён', 'me.switch.same': 'Это тот же ключ: копия добавлена', 'me.switch.same-bare': 'Это тот же ключ — ничего не изменилось',
   'me.words.hide': 'Скрыть слова', 'me.paper.hide': 'Скрыть ключ', 'me.paper.text': 'Показать ключ текстом',
   'me.secret.confirm': 'Покажите это только себе. Кто увидит — сможет подписывать карточки от вашего имени. Показать?',
   'journal.title': 'Журнал ошибок',
@@ -151,7 +156,7 @@ const ru = {
   'share.many.file': 'Одним файлом', 'share.many.file.note': 'Откроется в Pips: Сканер → Файл .pips — все карточки сразу',
   'share.many.pictures': 'Картинками', 'share.many.pictures.note': 'Каждая карточка — своей картинкой, для мессенджера',
   'share.many.pictures.max': (/** @type {number} */ n) => `Картинками — до ${n} карточек за раз`,
-  'share.many.making': 'Рисую картинки…',
+  'share.many.making': 'Картинки готовятся…',
   'share.link.copied': 'Ссылка скопирована', 'share.link.failed': 'Не удалось скопировать ссылку',
   'share.link.text': (/** @type {string} */ title) => `Карточка «${title}» — откройте в Pips`,
   'onb.create': 'Создать ключ', 'onb.restore': 'У меня уже есть ключ',
@@ -182,6 +187,8 @@ const ru = {
   'framed.title': 'Pips открыт внутри другого сайта и здесь не запускается.', 'framed.open': 'Открыть Pips отдельно',
   'core.failed': 'Не удалось загрузить ядро приложения.',
   'store.reload': 'Обновить страницу',
+  'store.unavailable.title': 'Хранилище не открылось', 'store.unavailable': 'Браузер не дал открыть хранилище, где лежат ваш ключ и коллекция. Ничего не стёрто: обновите страницу, а если не поможет — перезапустите браузер.',
+  'store.unreadable': (/** @type {number} */ n) => `Не открываются в этой версии: ${n} ${plural(n, 'карточка', 'карточки', 'карточек')}. Это сохранено на устройстве, но не показано и в копию не попадёт`,
   'store.blocked.title': 'Нужно закрыть другие вкладки', 'store.blocked': 'Pips открыт ещё в одной вкладке, в старой версии. Закройте её — данные обновятся, и приложение откроется само.',
   'store.newer.title': 'Pips обновился', 'store.newer': 'Данные на этом устройстве уже записаны более новой версией. Обновите страницу, чтобы открыть её.',
   'store.replaced.title': 'Pips обновился', 'store.replaced': 'В другой вкладке открыта новая версия: она обновила данные. Обновите и эту страницу.',
@@ -351,6 +358,7 @@ const en = {
   'import.err.too_big': (/** @type {number[]} */ ...a) => `${a[0]}×${a[1]} is larger than a card (up to 128×128)`,
   'import.err.too_many_colors': (/** @type {number} */ n) => `${n > 256 ? 'More than 256' : n} colours, but a card holds 32. Choose a palette below and they are mapped to the nearest`,
   'import.err.too_many_frames': 'More than 64 frames',
+  'import.err.partial_alpha': 'The picture has semi-transparent pixels; a card pixel is either there or not',
   'import.err.unequal_delays': 'The frames last different times, but a card has one frame time. Even them out in Aseprite or take only the first frame',
   'import.err.delay_out_of_range': (/** @type {number} */ ms) => `A frame lasts ${ms} ms; 20 to 5000 are allowed`,
   'give.title': 'Give', 'give.sub': 'show the code — the other phone scans it from your screen', 'give.yours': 'Your cards', 'give.hint': 'Let the other phone scan the code.', 'give.new': 'Draw a new one',
@@ -396,6 +404,10 @@ const en = {
   'receive.paper': 'That is someone’s secret key. Anyone who sees it can sign cards as its owner.',
   'me.title': 'Profile', 'me.nick': 'Name', 'me.handle': 'Social media', 'me.handle.ph': 'Your name there', 'me.network': 'Social network', 'me.link': 'Link',
   'me.link.hint': 'For example kitsu.art/shop — https:// is added for you',
+  'ed.draft.unkept': 'The draft is not being kept — the reason is in the journal',
+  'me.err.bad_author': 'A card cannot carry this name: up to 24 characters, nothing invisible',
+  'me.err.bad_handle': 'A social name is one word, with no spaces',
+  'me.err.bad_site': 'A card cannot carry this link: an address in Latin letters, like kitsu.art/shop — no port or password',
   'me.card-back': 'On the back of your cards', 'me.saved': 'Saved',
   'backup.title': 'Backup', 'backup.save': 'Save a backup', 'backup.restore': 'Restore',
   'backup.never': 'No backup yet. Your key comes back from the words; your collection only from a backup.',
@@ -415,7 +427,7 @@ const en = {
   'me.key': 'Key', 'me.words': '24 words', 'me.paper': 'Paper key',
   'me.switch': 'Switch key',
   'me.switch.confirm': (/** @type {number} */ n) => `${n} of your cards ${n === 1 ? 'is' : 'are'} signed with the current key. After the switch they stay with you, but their numbered copies can no longer be issued from here. If this key's words are not written down, write them down first.`,
-  'me.switch.go': 'Switch key', 'me.switch.done': 'Key switched', 'me.switch.same': 'The same key: the backup was added',
+  'me.switch.go': 'Switch key', 'me.switch.done': 'Key switched', 'me.switch.same': 'The same key: the backup was added', 'me.switch.same-bare': 'The same key — nothing has changed',
   'me.words.hide': 'Hide the words', 'me.paper.hide': 'Hide the key', 'me.paper.text': 'Show the key as text',
   'me.secret.confirm': 'Show this only to yourself. Anyone who sees it can sign cards as you. Show it?',
   'journal.title': 'Error journal',
@@ -489,6 +501,8 @@ const en = {
   'framed.title': 'Pips is open inside another site and does not start there.', 'framed.open': 'Open Pips on its own',
   'core.failed': 'Could not load the app core.',
   'store.reload': 'Reload',
+  'store.unavailable.title': 'Storage did not open', 'store.unavailable': 'The browser would not open the storage that holds your key and collection. Nothing was erased: reload, and if that does not help, restart the browser.',
+  'store.unreadable': (/** @type {number} */ n) => `${n} ${n === 1 ? 'card does' : 'cards do'} not open in this version: kept, but not shown and not in a backup`,
   'store.blocked.title': 'Close the other tabs', 'store.blocked': 'Pips is open in another tab, in an older version. Close it: the data will be updated and the app will open by itself.',
   'store.newer.title': 'Pips has been updated', 'store.newer': 'The data on this device was stored by a newer version. Reload to open it.',
   'store.replaced.title': 'Pips has been updated', 'store.replaced': 'A newer version, open in another tab, has updated the data. Reload this page too.',
@@ -644,13 +658,15 @@ export function t(key, ...args) {
 
 /**
  * A core error in words: the string `<prefix>.<code>` if there is one,
- * otherwise the generic one with the core's own message.
+ * otherwise that something went wrong and is in the journal — never the
+ * core's own message, which is English and for developers. The caller
+ * journals the error (`caught`).
  * @param {string} prefix @param {any} e @param {...any} args for the string
  */
 export function reason(prefix, e, ...args) {
   const key = `${prefix}.${e?.code}`;
   const text = t(key, ...args);
-  return text === key ? `${t('err.generic')}: ${e?.message ?? e}` : text;
+  return text === key ? t('journal.toast') : text;
 }
 
 /** Russian plural forms. @param {number} n @param {string} one @param {string} few @param {string} many */

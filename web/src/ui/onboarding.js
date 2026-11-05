@@ -18,17 +18,28 @@ import { iconButton } from '../kit/icon-button.js';
 import { wordsEntry } from './words-entry.js';
 import { scanner } from './scan.js';
 import { caught } from '../diagnostics.js';
+import { holdFocus } from '../kit/focus.js';
 
 /**
- * @param {HTMLElement} root @param {() => void} done
+ * @param {HTMLElement} root @param {(restored?: boolean) => void} done restored: a backup was added
  * @param {{switching?: {file: {bytes: Uint8Array, name: string}|null, cancel: () => void},
  *   arrival?: {title: string, author: string}|null}} [opts]
  *   switching: from Profile, only the restore, maybe with a backup already chosen;
  *   arrival: a card from a link, waiting for the key it will be kept under
  */
 export function onboarding(root, done, opts = {}) {
-  const page = h('div', { class: 'onb' });
+  // Over Profile, it is a dialog: the keyboard and a screen reader stay in
+  // it, and Escape is its back button. As the first run, it is the page.
+  const page = h('div', { class: 'onb', ...(opts.switching ? { role: 'dialog', 'aria-modal': 'true', 'aria-label': t('onb.switch.title') } : {}) });
   root.append(page);
+  /** @type {() => void} */
+  let release = () => {};
+  /** What Escape does in the dialog: the back button's step. */
+  let escape = () => {};
+  const close = () => {
+    release();
+    page.remove();
+  };
 
   const logo = () => {
     const cv = /** @type {HTMLCanvasElement} */ (h('canvas', { class: 'logo', width: 8, height: 8 }));
@@ -43,18 +54,28 @@ export function onboarding(root, done, opts = {}) {
     const a = opts.arrival;
     const waiting = a ? h('p', { class: 'onb-arrival' }, t('onb.arrival', a.title, a.author)) : '';
     replace(page, logo(), h('h1', {}, t('onb.title')), h('p', {}, t('onb.lead')), waiting, h('div', { class: 'grow' }),
-      h('button', { class: 'btn key wide', onclick: create }, t('onb.create')),
+      h('button', { class: 'btn key wide', onclick: () => create() }, t('onb.create')),
       h('div', { style: { height: '8px' } }),
       h('button', { class: 'btn wide', onclick: restore }, t('onb.restore')));
   }
 
-  function create() {
-    const identity = app.core.Identity.fromSeed(crypto.getRandomValues(new Uint8Array(32)));
-    const next = /** @type {HTMLButtonElement} */ (h('button', { class: 'btn key wide', disabled: true, onclick: () => name(identity) }, t('onb.next')));
+  /** Why storing failed (the device full, most likely), in words; the journal has the rest. @param {unknown} e */
+  function failed(e) {
+    caught(e, 'onboarding');
+    return t(/** @type {any} */ (e)?.name === 'QuotaExceededError' ? 'err.storage-full' : 'journal.toast');
+  }
+
+  /** The back button of a first-run screen. @param {() => void} to */
+  const backTo = (to) => h('button', { class: 'btn wide', 'aria-label': t('onb.back'), onclick: to }, '←');
+
+  /** A new key's words. Nothing is stored until the nick: back is back. @param {any} [identity] the one shown before, coming back to it */
+  function create(identity = app.core.Identity.fromSeed(crypto.getRandomValues(new Uint8Array(32)))) {
+    const next = /** @type {HTMLButtonElement} */ (h('button', { class: 'btn key wide', disabled: true, onclick: () => name(identity, () => create(identity)) }, t('onb.next')));
     const ack = /** @type {HTMLInputElement} */ (h('input', { type: 'checkbox', onchange: () => (next.disabled = !ack.checked) }));
     replace(page, h('h1', {}, t('onb.words.title')), h('p', {}, t('onb.words.lead')),
       h('div', { class: 'word-grid' }, identity.words().split(' ').map((/** @type {string} */ w) => h('span', {}, w))),
-      h('label', { class: 'check' }, ack, t('onb.words.ack')), h('div', { class: 'grow' }), next);
+      h('label', { class: 'check' }, ack, t('onb.words.ack')), h('div', { class: 'grow' }), next,
+      h('div', { style: { height: '8px' } }), backTo(welcome));
   }
 
   /**
@@ -105,6 +126,7 @@ export function onboarding(root, done, opts = {}) {
         take(await backupBytes(f), f.name);
       } catch (e) {
         file = null;
+        caught(e, 'restore');
         fileError = reason('backup.err', e, /** @type {any} */ (e)?.message);
         paintFile(true);
         paint();
@@ -190,42 +212,70 @@ export function onboarding(root, done, opts = {}) {
         }
       }
       scan.stop();
-      await setIdentity(key);
-      if (opened) await applyBackup(opened);
+      try {
+        await setIdentity(key);
+        if (opened) await applyBackup(opened);
+      } catch (e) {
+        fileError = failed(e);
+        paintFile(true);
+        return paint();
+      }
       if (app.profile.nick) {
-        page.remove();
-        done();
+        close();
+        done(!!opened);
       } else name(key);
     }
 
     const back = () => {
       scan.stop();
       if (!opts.switching) return welcome();
-      page.remove();
+      close();
       opts.switching.cancel();
     };
+    escape = back;
     const switching = !!opts.switching;
     replace(page, h('h1', {}, t(switching ? 'onb.switch.title' : 'onb.restore.title')), h('p', {}, t(switching ? 'onb.switch.lead' : 'onb.restore.lead')),
       h('h2', {}, t('onb.restore.file')), fileBox, fileInput,
       h('h2', {}, t('onb.restore.key')), how.el, keyBox, status,
       h('div', { class: 'grow' }), go,
-      h('div', { style: { height: '8px' } }), h('button', { class: 'btn wide', 'aria-label': t('onb.back'), onclick: back }, '←'));
+      h('div', { style: { height: '8px' } }), backTo(back));
   }
 
-  /** The nick, for a new key or one restored without it. Whatever else the profile holds stays. @param {any} identity */
-  function name(identity) {
-    const nick = textLimit(/** @type {HTMLInputElement} */ (h('input', { autocomplete: 'nickname', placeholder: 'kitsu' })), LIMITS.name, 'chars');
-    const finish = async () => {
-      await setIdentity(identity);
-      await setProfile({ ...app.profile, nick: finished(nick.value) });
-      page.remove();
+  /**
+   * The nick, for a new key or one restored without it. Whatever else the
+   * profile holds stays. @param {any} identity @param {() => void} [back]
+   * the words again, for a new key (a restored one is stored already)
+   */
+  function name(identity, back) {
+    escape = () => {}; // the key is kept by now: from here only forward
+    const nick = textLimit(/** @type {HTMLInputElement} */ (h('input', { autocomplete: 'nickname', placeholder: 'kitsu', 'aria-label': t('onb.nick.title') })), LIMITS.name, 'chars');
+    // A nick is needed: it is on every card drawn and every card passed on.
+    const go = /** @type {HTMLButtonElement} */ (h('button', { class: 'btn key wide', disabled: true, onclick: finish }, t('onb.done')));
+    nick.addEventListener('input', () => { go.disabled = !finished(nick.value); });
+    const problem = h('p', { class: 'onb-status wrong', role: 'alert' });
+    // Once: a second tap while the first is storing would start the app twice.
+    async function finish() {
+      if (go.disabled) return;
+      go.disabled = true;
+      try {
+        await setIdentity(identity);
+        await setProfile({ ...app.profile, nick: finished(nick.value) });
+      } catch (e) {
+        problem.textContent = failed(e);
+        go.disabled = false;
+        return;
+      }
+      close();
       done();
-    };
+    }
     replace(page, h('h1', {}, t('onb.nick.title')), h('p', {}, t('onb.nick.lead')),
-      h('div', { class: 'field' }, nick), h('div', { class: 'grow' }), h('button', { class: 'btn key wide', onclick: finish }, t('onb.done')));
+      h('div', { class: 'field' }, nick), problem, h('div', { class: 'grow' }), go,
+      ...(back ? [h('div', { style: { height: '8px' } }), backTo(back)] : []));
     nick.focus();
   }
 
-  if (opts.switching) restore();
-  else welcome();
+  if (opts.switching) {
+    restore();
+    release = holdFocus(page, { escape: () => escape() });
+  } else welcome();
 }

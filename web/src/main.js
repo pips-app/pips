@@ -4,6 +4,7 @@
 
 import { install, attach, locate, onUncaught, journal } from './diagnostics.js';
 import { h } from './dom.js';
+import { holdFocus } from './kit/focus.js';
 import { loadCore, isDevHost } from './core.js';
 import { t, setLanguage, defaultLanguage } from './i18n.js';
 import { app, load, hasIdentity } from './state.js';
@@ -49,9 +50,9 @@ async function main() {
     document.querySelector('.halt')?.remove(); // the other tabs let go
   } catch (e) {
     const code = /** @type {any} */ (e)?.code;
-    if (code !== 'newer_data' && code !== 'upgrade_failed') throw e;
+    if (!['newer_data', 'upgrade_failed', 'store_unavailable'].includes(code)) throw e;
     journal.error(e, 'storage');
-    halt(code === 'newer_data' ? 'store.newer' : 'store.upgrade-failed');
+    halt(code === 'newer_data' ? 'store.newer' : code === 'upgrade_failed' ? 'store.upgrade-failed' : 'store.unavailable');
     return;
   }
   await attach();
@@ -78,6 +79,8 @@ async function main() {
       told = true;
       toast(t('journal.toast'), { label: t('journal.toast.go'), run: () => openJournal() });
     });
+    // Stored cards this version cannot open are said once a start, not hidden.
+    if (app.unreadable && !incoming) toast(t('store.unreadable', app.unreadable), { label: t('journal.toast.go'), run: () => openJournal() });
     take();
     // Another link opened while the app is up (the same tab, a new address).
     addEventListener('hashchange', () => { incoming = fromAddress(); take(); });
@@ -101,11 +104,14 @@ async function main() {
  */
 function halt(key, reload = true) {
   document.querySelectorAll('.halt').forEach((e) => e.remove());
-  document.body.append(h('div', { class: 'halt', role: 'alertdialog', 'aria-modal': 'true' },
+  const el = h('div', { class: 'halt', role: 'alertdialog', 'aria-modal': 'true', 'aria-label': t(`${key}.title`) },
     h('div', {}, h('h1', {}, t(`${key}.title`)), h('p', {}, t(key)),
       reload ? h('button', { class: 'btn key wide', onclick: () => freshReload() }, t('store.reload')) : '',
       // What went wrong can still be read and sent: the journal lives in memory until storage opens.
-      key === 'store.upgrade-failed' ? h('button', { class: 'btn wide', style: { marginTop: '8px' }, onclick: () => openJournal() }, t('journal.open')) : '')));
+      key === 'store.upgrade-failed' ? h('button', { class: 'btn wide', style: { marginTop: '8px' }, onclick: () => openJournal() }, t('journal.open')) : ''));
+  document.body.append(el);
+  // The keyboard and a screen reader are in it, not on the page beneath; there is no closing it.
+  holdFocus(el, { first: el.querySelector('button') });
 }
 
 /**

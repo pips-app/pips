@@ -64,7 +64,7 @@ export async function developerGroup() {
       await act();
     } catch (err) {
       caught(err, 'developer');
-      toast(`${t('err.generic')}: ${/** @type {any} */ (err)?.message ?? err}`);
+      toast(t('journal.toast')); // journaled above
     }
     paint();
   };
