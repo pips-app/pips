@@ -79,14 +79,14 @@ test('a half-space is typed as any letter: one at a time, through the field\'s c
 test('a full field refuses what is typed, where it is typed, and the caret stays after it', () => {
   // A letter typed in the middle of a full title: the title stays whole.
   const full = 'Ж'.repeat(32);
-  assert.deepEqual(keepTyped(full.slice(0, 10) + 'Ы' + full.slice(10), 11, 32, 'chars'), { value: full, caret: 10 });
+  assert.deepEqual(keepTyped(full.slice(0, 10) + 'Ы' + full.slice(10), 11, 32, 'chars'), { value: full, caret: 10, full: true });
   // A paste longer than the room: its tail goes, not the text after it.
-  assert.deepEqual(keepTyped('ab' + 'xyz' + 'cd', 5, 6, 'chars'), { value: 'abxycd', caret: 4 });
+  assert.deepEqual(keepTyped('ab' + 'xyz' + 'cd', 5, 6, 'chars'), { value: 'abxycd', caret: 4, full: true });
   // Bytes for an address: a Cyrillic letter is two.
-  assert.deepEqual(keepTyped('@abcд', 5, 5, 'bytes'), { value: '@abc', caret: 4 });
+  assert.deepEqual(keepTyped('@abcд', 5, 5, 'bytes'), { value: '@abc', caret: 4, full: true });
   // Cleaned on the way, the caret moved back by what was taken out before it.
-  assert.deepEqual(keepTyped('al\u200Bice', 4, 24, 'chars'), { value: 'alice', caret: 3 });
-  assert.deepEqual(keepTyped('alice', 5, 24, 'chars'), { value: 'alice', caret: 5 }, 'nothing to do');
+  assert.deepEqual(keepTyped('al\u200Bice', 4, 24, 'chars'), { value: 'alice', caret: 3, full: false });
+  assert.deepEqual(keepTyped('alice', 5, 24, 'chars'), { value: 'alice', caret: 5, full: false }, 'nothing to do');
 });
 
 test('the limits are the core\'s', async () => {

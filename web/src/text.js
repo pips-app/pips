@@ -147,17 +147,18 @@ const utf8 = new TextEncoder();
  * the next letter (`plainText`'s `typing`); `finished()` lets it go.
  * @param {string} value @param {number} caret in UTF-16 units, as the field gives it
  * @param {number} max @param {'chars'|'bytes'} unit
- * @returns {{value: string, caret: number}}
+ * @returns {{value: string, caret: number, full: boolean}} full: something typed did not fit
  */
 export function keepTyped(value, caret, max, unit) {
   const head = Array.from(plainText(value.slice(0, caret), true));
   const tail = Array.from(plainText(value.slice(caret), true));
   const size = unit === 'chars' ? () => head.length + tail.length : () => utf8.encode(head.join('') + tail.join('')).length;
+  const full = size() > max;
   while (size() > max) {
     if (head.length) head.pop();
     else tail.pop();
   }
   // Once more as one text: a joiner either side of the caret meets its neighbour.
   const kept = plainText(head.join('') + tail.join(''), true);
-  return { value: kept, caret: Math.min(head.join('').length, kept.length) };
+  return { value: kept, caret: Math.min(head.join('').length, kept.length), full };
 }

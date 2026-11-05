@@ -310,5 +310,12 @@ test('a link the card cannot carry is said under it, and the warning goes once t
   await link.fill('kitsu.art/shop'); // back to what is kept: nothing to save, nothing wrong
   await link.press('Tab');
   await until(async () => (await warning.textContent()) === '', 'the warning gone');
+  // A full field refuses one more letter, and says so with a shake.
+  const nick = p.locator('section.view:visible input[aria-label="Ник"]');
+  await nick.fill('ж'.repeat(24));
+  await nick.press('End');
+  await p.keyboard.type('ы');
+  assert.equal(await nick.inputValue(), 'ж'.repeat(24));
+  assert.equal(await p.locator('section.view:visible .field.shake').count(), 1, 'the field shaken');
   await p.context().close();
 });

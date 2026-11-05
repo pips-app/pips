@@ -13,7 +13,10 @@ import { t } from '../i18n.js';
 
 const W = 1080, H = 1440, PAD = 60;
 const ART = W - 2 * PAD; // the drawing's square
-const QR = 380; // the code's square, quiet zone included: 3+ px a module
+// The code's square, quiet zone included: below the drawing, never on it
+// (that ends at PAD + ART = 1020; the code starts at H − PAD − QR = 1040),
+// and 3+ px a module for the largest single code (version 19: 101 with its quiet zone).
+const QR = 340;
 const QUIET = 4;
 const GAP = 32; // between the name and the code
 /** Where things are on the picture: what the tests check it against. */
@@ -52,14 +55,19 @@ export async function cardPicture(card, envelope) {
 
   // The name and the artist, as on the card.
   g.textBaseline = 'top';
+  // The title and the name whole: a long one in smaller letters, not cut.
+  // Only below the smallest size — never, within the format's limits — is
+  // the rest cut with an ellipsis.
+  const room = textRight - PAD;
   g.fillStyle = shade.ink;
-  g.font = '600 64px Literata, Georgia, serif';
-  const lines = wrap(g, cardTitle(card), textRight - PAD, 2);
-  lines.forEach((l, i) => g.fillText(l, PAD, top + i * 74));
+  const size = fitted(g, (px) => `600 ${px}px Literata, Georgia, serif`, 64, 30, () => wrap(g, cardTitle(card), room, Infinity).length <= 2);
+  const lines = wrap(g, cardTitle(card), room, 2);
+  const step = Math.round(size * 1.16); // the line height: 74 at 64 px
+  lines.forEach((l, i) => g.fillText(l, PAD, top + i * step));
   g.fillStyle = shade.dim;
-  g.font = '500 32px "IBM Plex Sans", system-ui, sans-serif';
-  // A name of 24 wide characters is wider than the room beside the code.
-  g.fillText(card.author ? fit(g, `@${card.author}`, textRight - PAD) : '—', PAD, top + lines.length * 74 + 12);
+  const by = card.author ? `@${card.author}` : '—';
+  fitted(g, (px) => `500 ${px}px "IBM Plex Sans", system-ui, sans-serif`, 32, 18, () => g.measureText(by).width <= room);
+  g.fillText(fit(g, by, room), PAD, top + lines.length * step + 12);
   g.font = '400 26px "IBM Plex Sans", system-ui, sans-serif';
   g.fillText(t(plan.kind === 'single' ? 'picture.scan' : 'picture.file'), PAD, H - PAD - 26);
 
@@ -160,6 +168,21 @@ export function wrap(g, text, width, max) {
 
 /** What a person sees as single characters: an emoji or a flag is one. @param {string} s */
 const shown = (s) => Array.from(new Intl.Segmenter().segment(s), (x) => x.segment);
+
+/**
+ * Sets the largest font from `max` down to `min` px, 2 at a time, with which
+ * `fits` holds — else `min` — and returns its size.
+ * @param {CanvasRenderingContext2D} g @param {(px: number) => string} font
+ * @param {number} max @param {number} min @param {() => boolean} fits
+ */
+function fitted(g, font, max, min, fits) {
+  for (let px = max; px > min; px -= 2) {
+    g.font = font(px);
+    if (fits()) return px;
+  }
+  g.font = font(min);
+  return min;
+}
 
 /** The text as it is if it fits `width`, or cut with an ellipsis. @param {CanvasRenderingContext2D} g @param {string} text @param {number} width */
 const fit = (g, text, width) => (g.measureText(text).width <= width ? text : cut(g, text, width));
