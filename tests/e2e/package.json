@@ -4,7 +4,7 @@
   "description": "End-to-end tests of the Pips web app in a real browser: node:test + Playwright",
   "type": "module",
   "scripts": {
-    "test": "node --test --test-concurrency=1"
+    "test": "node --test --test-concurrency=1 --test-timeout=180000"
   },
   "devDependencies": {
     "playwright": "1.56.0"

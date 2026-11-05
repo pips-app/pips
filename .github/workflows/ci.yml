@@ -23,6 +23,8 @@ jobs:
   rust:
     name: Rust — format, lints, tests
     runs-on: ubuntu-24.04
+    # Far above a normal run: a hang ends here, not after GitHub's six hours.
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
       # Pinned: every Rust release adds lints, and CI should not turn red
@@ -41,6 +43,7 @@ jobs:
   audit:
     name: Dependencies — RustSec advisories
     runs-on: ubuntu-24.04
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
       - uses: taiki-e/install-action@v2
@@ -51,15 +54,18 @@ jobs:
   msrv:
     name: Rust 1.85.1 (declared minimum)
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@1.85.1
       - uses: Swatinem/rust-cache@v2
-      - run: cargo check --workspace --lib --bins
+      # The tests too: whoever builds with the declared minimum can run them.
+      - run: cargo check --workspace --all-targets
 
   site:
     name: Web — WebAssembly core, type check, site
     runs-on: ubuntu-24.04
+    timeout-minutes: 75
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/core
@@ -101,6 +107,7 @@ jobs:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: [rust, site]
     runs-on: ubuntu-24.04
+    timeout-minutes: 15
     permissions:
       pages: write
       id-token: write

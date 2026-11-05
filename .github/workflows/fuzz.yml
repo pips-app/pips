@@ -1,5 +1,5 @@
 # Fuzzing every parser of outside input (cargo-fuzz, libFuzzer, nightly).
-# A minute per target on each push and pull request; a quarter of an hour
+# A minute per target on each push to main and each pull request; a quarter of an hour
 # once a week. The corpus carries over between runs through the cache; a
 # crashing input is kept as an artifact.
 name: Fuzz
@@ -23,10 +23,11 @@ jobs:
   fuzz:
     name: Fuzz ${{ matrix.target }}
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
-        target: [card, envelope, base45, palette, raster, backup, carousel]
+        target: [card, envelope, base45, palette, raster, backup, carousel, link, scan]
     env:
       SECONDS_PER_TARGET: ${{ github.event_name == 'schedule' && 900 || 60 }}
     steps:

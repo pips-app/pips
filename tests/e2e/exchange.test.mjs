@@ -238,6 +238,22 @@ test('a numbered copy made out to someone who already has the card takes the pla
   const back = await backText(c);
   assert.match(back, /экземпляр 1 из 3 — выдан другому человеку/);
   assert.match(back, /@pixelfox → … → вам/);
+  // Then the artist gives this person a number of their own: it takes the
+  // place of the one seen on its way to someone else.
+  await tab(c, 'receive');
+  await c.click('text=Код получателя');
+  const rc2 = await photo(c, '.overlay .qr-box', env.dir, 'recipient-carol');
+  await c.click('.overlay .icon-btn');
+  await a.click('.top-sheet button:text("Экземпляр №")');
+  await a.click('text=Выдать №2');
+  await fromPicture(a, '.overlay', rc2);
+  await a.click('.dialog button:text-is("Выдать")');
+  const second = await photo(a, '.overlay .qr-box', env.dir, 'numbered-carol');
+  await a.click('.overlay >> text=Готово');
+  await tab(c, 'receive');
+  assert.equal(await toastAfter(c, () => fromPicture(c, 'section.view:visible', second)), 'Теперь у вас экземпляр 2 из 3 — он заменил прежнюю копию');
+  await c.locator('.turn:not([hidden])').waitFor();
+  assert.match(await backText(c), /экземпляр 2 из 3 — ваш/);
   for (const x of [a, b, c]) await x.context().close();
 });
 

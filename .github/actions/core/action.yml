@@ -5,7 +5,9 @@ description: Builds web/pkg with the wasm-bindgen CLI that matches Cargo.lock.
 runs:
   using: composite
   steps:
-    - uses: dtolnay/rust-toolchain@stable
+    # The same Rust as the Rust job in ci.yml: a new release should not
+    # change the core the browser tests run without a change here.
+    - uses: dtolnay/rust-toolchain@1.99.0
       with:
         targets: wasm32-unknown-unknown
     - uses: Swatinem/rust-cache@v2

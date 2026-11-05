@@ -20,7 +20,8 @@ test('a fault nobody caught is written down, told once, and can be read and sent
   await boom(); // the same again: one entry, counted
   const counted = () => p.evaluate(async () => (await import('/src/diagnostics.js')).journal.entries[0]?.count === 2);
   await until(counted, 'the second fault counted');
-  env.errors.splice(before); // thrown on purpose
+  // Thrown on purpose: those, and only those, are not the page's faults.
+  for (let i = env.errors.length - 1; i >= before; i--) if (env.errors[i].includes('boom in a test')) env.errors.splice(i, 1);
 
   // The toast leads to the journal.
   await p.click('.toast .text-btn');
@@ -136,6 +137,7 @@ test('stored data: an older layout is upgraded in place, a newer one is never hi
   const ctx = a.context();
   const b = await ctx.browser().newContext({ viewport: { width: 390, height: 844 }, locale: 'ru-RU' });
   const p = await b.newPage();
+  env.watch(p, 'oldfox again');
   await p.goto(`${env.url}sw.js`); // the same site, without the app (a plain text page)
   await p.evaluate((d) => new Promise((ok, fail) => {
     const req = indexedDB.open(d.name, 1);
@@ -173,6 +175,10 @@ test('stored data: an older layout is upgraded in place, a newer one is never hi
   await p.goto(env.url);
   assert.match(await p.locator('.halt').textContent(), /уже записаны более новой версией/);
   assert.equal(await p.locator('nav.tabs').count(), 0, 'no empty app over the data');
+  // Journaled as it should be (main.js): the one error this page was made to meet.
+  const met = env.errors.filter((e) => e.startsWith('oldfox again:'));
+  assert.deepEqual(met.map((e) => /newer_data/.test(e)), [true]);
+  env.errors.splice(env.errors.indexOf(met[0]), 1);
   await b.close();
   await ctx.close();
 });
@@ -197,7 +203,7 @@ test('a camera granted after the scanner was left is switched off at once', asyn
   await tab(p, 'collection'); // and away before the camera came
   await p.waitForTimeout(1200); // time itself: a camera granted late would have come by now
   const states = await p.evaluate(() => /** @type {any} */ (window).tracks?.map((t) => t.readyState) ?? []);
-  assert.ok(states.length <= 1, `asked for the camera once (${states.length})`);
+  assert.equal(states.length, 1, 'asked for the camera once — and asked: an empty list would pass for anything');
   assert.ok(states.every((s) => s === 'ended'), `no camera left on: ${states}`);
   await p.context().close();
 });
@@ -331,8 +337,9 @@ test('a monkey loose in the app finds nothing wrong', { timeout: 300_000 }, asyn
       }
       await p.waitForTimeout(60 + rnd(250));
     } catch (e) {
-      if (/a step hung/.test(String(/** @type {any} */ (e)?.message))) throw e;
-      /* a target gone before the tap: not a finding */
+      // The page changing under a step (a sheet closing, the view swapped
+      // while targets were read) is not a finding; anything else is.
+      if (!/Execution context was destroyed|Cannot find context with specified id/.test(String(/** @type {any} */ (e)?.message))) throw e;
     }
   }
   for (let i = 0; i < 6; i++) { await p.keyboard.press('Escape'); await still(p); }

@@ -135,6 +135,10 @@ test('a backup restores cards, notes and the copy log, only for its key', async 
   const restore = async (p, f) => {
     return toastAfter(p, () => choose(p, () => p.click('.group:has(h2:text("Резервная копия")) >> text=Восстановить'), f));
   };
+  // Restored onto the phone it came from: nothing in it is new here, and
+  // nothing is counted as changed since.
+  await restore(a, file);
+  assert.doesNotMatch(await status(), /изменений после неё/);
   const b = await env.phone('новый', await words(a));
   await tab(b, 'me');
   assert.equal(await restore(b, file), 'Восстановлено: 18');

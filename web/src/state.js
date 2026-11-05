@@ -150,11 +150,16 @@ export const daysLeft = (rec) => Math.max(1, TRASH_DAYS - Math.floor((Date.now()
 
 /**
  * Whether `got` is this person's numbered copy of a card kept as `have`
- * without one: the same picture (the same digest), but with a certificate
- * made out to this key. Someone else's numbered copy passed on is not.
- * @param {{cert?: Uint8Array|null}} have @param {{cert?: Uint8Array|null, edition?: {holder: string}|null}} got
+ * without one of their own: the same picture (the same digest), with a
+ * certificate made out to this key — where the one here is plain, or
+ * someone else's numbered copy seen on its way to them. One numbered copy
+ * of their own already here stays.
+ * @param {{edition?: {holder: string}|null}} have @param {{cert?: Uint8Array|null, edition?: {holder: string}|null}} got
  */
-const ownCopyOf = (have, got) => !have.cert && !!got.cert && got.edition?.holder === app.identity?.publicKey().hex;
+function ownCopyOf(have, got) {
+  const me = app.identity?.publicKey().hex;
+  return !!got.cert && got.edition?.holder === me && have.edition?.holder !== me;
+}
 
 /**
  * Keeps a card. One already here stays as it is — unless what came is
@@ -347,11 +352,14 @@ export async function applyBackup(b) {
         here.author = i.author ?? null;
       }
       const r = here.rec;
-      const note = r.note || c.note || '';
-      const tags = r.tags?.length ? r.tags : c.tags ?? [];
+      // What the backup adds to this card: a note or tags it has not got.
+      const takeNote = !r.note && !!c.note;
+      const takeTags = !r.tags?.length && !!c.tags?.length;
+      const note = takeNote ? c.note : r.note;
+      const tags = takeTags ? c.tags : r.tags;
       const editions = r.editions || c.editions ? joinLogs(r.editions, c.editions) : undefined;
       const more = (editions?.issued.length ?? 0) > (r.editions?.issued.length ?? 0);
-      if (numbered || note !== r.note || tags !== r.tags || more) {
+      if (numbered || takeNote || takeTags || more) {
         here.rec = { ...r, note, tags, ...(editions ? { editions } : {}) };
         await store.putCard(here.rec);
         await touch({ card: i.digest });

@@ -100,6 +100,16 @@ export async function setup() {
     const ran = (await p.coverage.stopJSCoverage()).filter((e) => new URL(e.url).pathname.startsWith('/src/'));
     await writeFile(join(/** @type {string} */ (COVERAGE), `${process.pid}-${measured++}.json`), JSON.stringify(ran.map(({ url, functions }) => ({ url, functions }))));
   }
+  /** Every error a page writes, and a missing core, go to `errors`: the file fails on them. @param {import('playwright').Page} p @param {string} name */
+  function watch(p, name) {
+    p.on('pageerror', (e) => errors.push(`${name}: ${e.message}`));
+    p.on('console', (m) => {
+      if (m.type() === 'error') errors.push(`${name}: ${m.text()}`);
+      // Without web/pkg the app falls back to a stub with no cryptography
+      // (core.js): a run on it would pass while proving nothing.
+      if (m.text().startsWith('pips: core not built')) errors.push(`${name}: the core in web/pkg did not load — run scripts/build-wasm.sh`);
+    });
+  }
   /** A fresh phone at its first screen; `desk`: a computer's screen instead; `scale`: device pixels to a CSS pixel. */
   async function blank(name, desk = false, scale = 1) {
     const viewport = desk ? { width: 1440, height: 900 } : { width: 390, height: 844 };
@@ -115,8 +125,7 @@ export async function setup() {
       ctx.close = async (...a) => { await keepCoverage(p); return close(...a); };
       phones.push(p);
     }
-    p.on('pageerror', (e) => errors.push(`${name}: ${e.message}`));
-    p.on('console', (m) => { if (m.type() === 'error') errors.push(`${name}: ${m.text()}`); });
+    watch(p, name);
     await p.goto(site.url);
     return p;
   }
@@ -138,7 +147,7 @@ export async function setup() {
     return p;
   }
   return {
-    phone, blank, dir, errors, url: site.url,
+    phone, blank, watch, dir, errors, url: site.url,
     async close() {
       for (const p of [...phones]) await keepCoverage(p); // phones still open as the file ends
       await browser.close();

@@ -241,4 +241,9 @@ fn scan_reads_what_matrix_draws() {
     let none: Vec<String> = Vec::new();
     assert_eq!(pips_qr::scan::read_rgba(&rgba[4..], side, side), none, "inconsistent size");
     assert_eq!(pips_qr::scan::read_rgba(&[], 0, 0), none);
+    // Refused before anything is allocated: more pixels than a camera frame
+    // holds, and sizes whose product does not fit.
+    let big = pips_qr::scan::MAX_PIXELS + 1;
+    assert_eq!(pips_qr::scan::read_rgba(&vec![0; big * 4], big, 1), none, "too many pixels");
+    assert_eq!(pips_qr::scan::read_rgba(&[], usize::MAX, 2), none, "a size that overflows");
 }

@@ -15,10 +15,11 @@ libfuzzer-sys = "0.4"
 pips-base45 = { path = "../crates/pips-base45" }
 pips-format = { path = "../crates/pips-format" }
 pips-palette = { path = "../crates/pips-palette" }
-pips-qr = { path = "../crates/pips-qr" }
+pips-qr = { path = "../crates/pips-qr", features = ["scan"] }
 pips-raster = { path = "../crates/pips-raster" }
 pips-sign = { path = "../crates/pips-sign" }
 pips-store = { path = "../crates/pips-store" }
+pips-wasm = { path = "../crates/pips-wasm" }
 
 [workspace]
 members = ["."]
@@ -71,6 +72,20 @@ bench = false
 [[bin]]
 name = "carousel"
 path = "fuzz_targets/carousel.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "link"
+path = "fuzz_targets/link.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "scan"
+path = "fuzz_targets/scan.rs"
 test = false
 doc = false
 bench = false
