@@ -16,7 +16,10 @@ const KIND_RECIPIENT: u8 = b'R';
 /// First byte of an envelope.
 const KIND_ENVELOPE: u8 = b'E';
 const VERSION: u8 = 1;
-const MAX_NICK: usize = 24;
+/// A nickname, in characters: as long as an author's name (see
+/// [`pips_format::text`]), at most four bytes each.
+const MAX_NICK: usize = pips_format::limits::MAX_AUTHOR;
+const MAX_NICK_BYTES: usize = MAX_NICK * pips_format::text::BYTES_PER_CHAR;
 
 fn concat(parts: &[&[u8]]) -> Vec<u8> {
     let mut v = Vec::with_capacity(parts.iter().map(|p| p.len()).sum());
@@ -27,8 +30,7 @@ fn concat(parts: &[&[u8]]) -> Vec<u8> {
 }
 
 fn check_nick(nick: &str) -> Result<(), Error> {
-    let ok = nick.len() <= MAX_NICK && !nick.chars().any(char::is_control) && nick.trim() == nick;
-    if ok {
+    if pips_format::text::plain(nick, MAX_NICK) {
         Ok(())
     } else {
         Err(Error::BadNick)
@@ -56,7 +58,7 @@ impl<'a> Reader<'a> {
     }
     fn nick(&mut self) -> Result<String, Error> {
         let n = usize::from(self.u8()?);
-        if n > MAX_NICK {
+        if n > MAX_NICK_BYTES {
             return Err(Error::BadNick);
         }
         let s = core::str::from_utf8(self.take(n)?).map_err(|_| Error::BadNick)?;
@@ -73,7 +75,7 @@ impl<'a> Reader<'a> {
 }
 
 fn push_nick(out: &mut Vec<u8>, nick: &str) {
-    #[allow(clippy::cast_possible_truncation)] // checked: at most 24
+    #[allow(clippy::cast_possible_truncation)] // checked: at most MAX_NICK_BYTES, under 256
     out.push(nick.len() as u8);
     out.extend_from_slice(nick.as_bytes());
 }
@@ -239,7 +241,8 @@ fn check_edition(edition: u16, of: u16) -> Result<(), Error> {
 pub struct RecipientCode {
     /// The key a certificate will name.
     pub key: PublicKey,
-    /// Shown to the author when scanning; up to 24 bytes.
+    /// Shown to the author when scanning; up to 24 characters, plain text
+    /// (see [`pips_format::text`]).
     pub nick: String,
 }
 
@@ -314,8 +317,9 @@ pub struct Opened {
 /// Wraps a card for transfer.
 ///
 /// `sender` is `Some((key, nick))` when the person handing the card on is not
-/// its author; it signs the card's identity, the certificate if any, and the
-/// nickname, so none of them can be swapped on the way.
+/// its author; it signs the card's identity, its author's key and signature,
+/// the certificate if any, and the nickname, so none of them can be swapped
+/// or stripped on the way.
 ///
 /// # Errors
 ///
@@ -408,8 +412,22 @@ pub fn open(bytes: &[u8]) -> Result<Opened, Error> {
     Ok(Opened { card, author, certificate, sender })
 }
 
+/// What a sender signs: the card, who signed it and how, the certificate
+/// if any, and their own nick. The card's identity (its digest) leaves the
+/// signature out on purpose — the same picture is one card however it is
+/// signed — so the author's key and signature are added here: without them
+/// anyone holding the envelope could re-sign the card as their own, or
+/// strip its signature, and the sender would seem to vouch for that.
 fn sender_message(card: &Card, cert: Option<&[u8; CERTIFICATE_LEN]>, nick: &str) -> Result<Vec<u8>, Error> {
     let mut m = concat(&[ENVELOPE_DOMAIN, &digest(card)?]);
+    match &card.signature {
+        Some(s) => {
+            m.push(1);
+            m.extend_from_slice(&s.public_key);
+            m.extend_from_slice(&s.bytes);
+        }
+        None => m.push(0),
+    }
     match cert {
         Some(b) => {
             m.push(1);

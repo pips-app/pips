@@ -138,6 +138,22 @@ fn weak_keys_are_refused() {
     assert_eq!(verify_card(&c), Err(Error::BadKey));
 }
 
+/// A key has one spelling. y + p (p = 2^255 - 19) names the same point as
+/// y, and for these y it is a valid, strong key — it used to be taken, the
+/// same key then comparing unequal to itself.
+#[test]
+fn a_key_written_a_second_way_is_refused() {
+    for y in [3u8, 4, 5, 6, 9, 10, 14, 15, 16, 18] {
+        // p + y, little-endian: 0x7FFF…FFED + y.
+        let mut b = [0xFF; 32];
+        b[31] = 0x7F;
+        b[0] = 0xED + y; // no carry: y < 0x13
+        assert_eq!(PublicKey::from_bytes(&b), Err(Error::BadKey), "y = {y}");
+    }
+    let real = key(1).public_key();
+    assert_eq!(PublicKey::from_bytes(&real.to_bytes()).unwrap(), real);
+}
+
 // ------------------------------------------------------------ certificates --
 
 #[test]
@@ -284,6 +300,34 @@ fn envelope_tampering_is_caught() {
 
 /// What the app's word entry relies on: the list is sorted, and a word's
 /// first four letters (all of it, if shorter) tell it from every other.
+/// A sender vouches for the card as it came to them, author and all: the
+/// same picture re-signed by someone else, or with its signature stripped,
+/// cannot be slipped under their signed "from".
+#[test]
+fn a_sender_vouches_for_the_author_too() {
+    let (alice, bob, mallory) = (key(1), key(2), key(3));
+    let original = signed(&alice);
+    let env = seal(&original, None, Some((&bob, "bob"))).unwrap();
+    assert_eq!(open(&env).unwrap().author.unwrap(), alice.public_key());
+
+    // The card in the envelope swapped for one of the same picture
+    // (the same digest), Bob's nick, key and signature kept.
+    let swapped = |other: &Card| {
+        let (payload, theirs) = (pips_format::encode(&original).unwrap(), pips_format::encode(other).unwrap());
+        let at = env.windows(payload.len()).position(|w| w == payload.as_slice()).unwrap();
+        let mut out = env[..at - 2].to_vec();
+        out.extend_from_slice(&u16::try_from(theirs.len()).unwrap().to_le_bytes());
+        out.extend_from_slice(&theirs);
+        out.extend_from_slice(&env[at + payload.len()..]);
+        out
+    };
+    assert_eq!(open(&swapped(&signed(&mallory))).unwrap_err(), Error::BadSignature, "re-signed by someone else");
+    assert_eq!(open(&swapped(&card())).unwrap_err(), Error::BadSignature, "the author's signature stripped");
+    // Sealed again by Mallory herself, it is honest: her card, her "from".
+    let o = open(&seal(&signed(&mallory), None, Some((&mallory, "mallory"))).unwrap()).unwrap();
+    assert_eq!((o.author.unwrap(), o.sender.unwrap().key), (mallory.public_key(), mallory.public_key()));
+}
+
 #[test]
 fn four_letters_name_a_word() {
     let list = word_list();
