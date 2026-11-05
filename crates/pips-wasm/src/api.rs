@@ -433,6 +433,11 @@ impl From<pips_format::Error> for ApiError {
         let code = match e {
             E::UnsupportedVersion(v) if newer(v) => "newer_version",
             E::UnknownCriticalFlag(_) | E::UnknownCriticalExtension | E::UnknownPalette(_) => "newer_version",
+            // A field the person typed, named so that the app can say which.
+            E::BadText(pips_format::Field::Title) => "bad_title",
+            E::BadText(pips_format::Field::Author) => "bad_author",
+            E::BadHandle => "bad_handle",
+            E::BadLink => "bad_site",
             _ => "invalid_card",
         };
         err(code, e)

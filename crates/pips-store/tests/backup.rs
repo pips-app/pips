@@ -334,14 +334,19 @@ fn a_version_1_body_opens_without_tags() {
 fn tags_follow_the_rules() {
     for (bad, why) in [
         ("", "empty"),
-        ("Cats", "capital"),
         ("two words", "space"),
+        ("two\u{3000}words", "a wide space"),
         ("#cats", "hash"),
+        ("ca\u{200B}ts", "something invisible"),
         ("ааааааааааааааааа", "over 32 bytes"),
     ] {
         assert!(pips_store::check_tag(bad).is_err(), "{why}");
     }
-    assert!(pips_store::check_tag("котики").is_ok());
+    // Case is the app's to keep, not a rule of the file: whether a letter is
+    // a capital is the compiler's Unicode tables, and a backup must open the same.
+    for good in ["котики", "\u{1D400}", "Cats", "\u{1F98A}"] {
+        assert!(pips_store::check_tag(good).is_ok(), "{good}");
+    }
     let mut b = sample();
     b.cards[1].tags = vec!["a".into(), "a".into()];
     let body = encode_body(&b).unwrap();

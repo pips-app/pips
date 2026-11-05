@@ -2,6 +2,8 @@
 // What is shown: the place, whose cards, the search words and tags, and
 // the order. Plain functions of plain data, so they run under node too.
 
+import { finished } from '../text.js';
+
 /** Most tags on one card, and the longest, in bytes: pips-store's limits.
  * On the back, two rows show what fits; the rest open from a "+N" chip. */
 export const MAX_TAGS = 16;
@@ -14,19 +16,21 @@ export const MAX_TAG_BYTES = 32;
 /** What these functions need of a card. @typedef {{state: Place, mine: boolean, received: number, title: string, author: string, tags: string[]}} Item */
 
 /**
- * A tag as stored: one lower-case word, '#' and spaces dropped or joined.
- * Empty when nothing is left. The same rules as pips-store's check_tag.
- * @param {string} s
+ * A tag as stored: one lower-case word of plain text (the format's rule,
+ * text.js), '#' and spaces dropped or joined. Empty when nothing is left.
+ * What pips-store's check_tag takes; lower case is the app's own, so that
+ * `#Cats` and `#cats` are one tag. @param {string} s
  */
 export function normalTag(s) {
-  const t = s.trim().replace(/^#+/, '').replace(/\s+/g, '-').replace(/#/g, '').replace(/\p{Cc}/gu, '').toLowerCase();
+  const t = finished(s).replace(/^#+/, '').replace(/\s+/g, '-').replace(/#/g, '').toLowerCase();
   const enc = new TextEncoder();
   let out = '';
   for (const ch of t) {
     if (enc.encode(out + ch).length > MAX_TAG_BYTES) break;
     out += ch;
   }
-  return out;
+  // Again once cut: a joiner the cut left at the end goes.
+  return finished(out);
 }
 
 /** The words of a query; words starting with '#' are tags. @param {string} q */

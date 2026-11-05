@@ -13,6 +13,8 @@ test('a tag is one lower-case word within 32 bytes, as pips-store checks it', ()
   assert.equal(normalTag('  #Ночные Совы '), 'ночные-совы');
   assert.equal(normalTag('##a#b'), 'ab');
   assert.equal(normalTag('   '), '');
+  assert.equal(normalTag('ко\u200Bты'), 'коты', 'nothing invisible, as the core refuses it');
+  assert.equal(normalTag('#\u{1D400}'), '\u{1D400}', 'a letter with no lower case stays as it is');
   assert.equal(new TextEncoder().encode(normalTag('я'.repeat(40))).length, 32, 'cut at a whole letter');
 });
 

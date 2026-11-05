@@ -242,9 +242,19 @@ fn render_and_palettes() {
 
 #[test]
 fn editor_errors_have_codes() {
+    // A field the person typed is named, so that the app can say which.
     let mut card = editor_card();
     card.link = "javascript:alert(1)".into();
-    assert_eq!(share_size(&card).unwrap_err().code, "invalid_card");
+    assert_eq!(share_size(&card).unwrap_err().code, "bad_site");
+    let mut card = editor_card();
+    card.title = "a\u{202E}b".into();
+    assert_eq!(share_size(&card).unwrap_err().code, "bad_title");
+    let mut card = editor_card();
+    card.author = " kitsu".into();
+    assert_eq!(share_size(&card).unwrap_err().code, "bad_author");
+    let mut card = editor_card();
+    card.handle = Some(HandleData { network: "telegram".into(), text: "two words".into() });
+    assert_eq!(share_size(&card).unwrap_err().code, "bad_handle");
     let mut card = editor_card();
     card.handle = Some(HandleData { network: "myspace".into(), text: "@x".into() });
     assert_eq!(share_size(&card).unwrap_err().code, "invalid_card");

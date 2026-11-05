@@ -588,9 +588,13 @@ fn tags(r: &mut Reader<'_>) -> Result<Vec<String>, Error> {
     Ok(out)
 }
 
-/// A tag is one word as the app writes it: 1..=[`MAX_TAG`] bytes, no
-/// spaces, control characters or `#`, and no capital letters, so `#Cats`
-/// and `#cats` can never be two tags.
+/// A tag is one word: 1..=[`MAX_TAG`] bytes of plain text (the format's
+/// rule, [`pips_format::text`]) with no space and no `#`.
+///
+/// Not checked: case. The app writes tags in lower case, so that `#Cats`
+/// and `#cats` are one tag, but whether a letter is a capital is a matter
+/// of the compiler's Unicode tables — and whether a backup opens must not
+/// be (`𝐀` was taken by the app and refused here).
 ///
 /// # Errors
 ///
@@ -599,8 +603,8 @@ pub fn check_tag(t: &str) -> Result<(), Error> {
     if t.is_empty() || t.len() > MAX_TAG {
         return Err(Error::Invalid("a tag is empty or too long"));
     }
-    if t.chars().any(|c| c.is_whitespace() || c.is_control() || c == '#' || c.is_uppercase()) {
-        return Err(Error::Invalid("a tag is not one lower-case word"));
+    if !pips_format::text::plain(t, MAX_TAG) || t.chars().any(|c| pips_format::text::space(c) || c == '#') {
+        return Err(Error::Invalid("a tag is not one word"));
     }
     Ok(())
 }
