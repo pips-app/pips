@@ -15,6 +15,9 @@ const W = 1080, H = 1440, PAD = 60;
 const ART = W - 2 * PAD; // the drawing's square
 const QR = 380; // the code's square, quiet zone included: 3+ px a module
 const QUIET = 4;
+const GAP = 32; // between the name and the code
+/** Where things are on the picture: what the tests check it against. */
+export const LAYOUT = Object.freeze({ width: W, height: H, pad: PAD, art: ART, code: QR, gap: GAP });
 
 /**
  * @param {any} card @param {Uint8Array} envelope what a code of this card carries
@@ -44,7 +47,7 @@ export async function cardPicture(card, envelope) {
   // The code, bottom right, when one code holds the card.
   const plan = app.core.qrPlan(envelope);
   const top = PAD + ART + 44;
-  const textRight = plan.kind === 'single' ? W - PAD - QR - 32 : W - PAD;
+  const textRight = plan.kind === 'single' ? W - PAD - QR - GAP : W - PAD;
   if (plan.kind === 'single') drawQr(g, plan.text, W - PAD - QR, H - PAD - QR, QR, codeColours(shade));
 
   // The name and the artist, as on the card.

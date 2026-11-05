@@ -381,7 +381,7 @@ test('the code on a card picture takes the paper’s colours and still reads, on
   const p = await env.phone('shadefox');
   const results = await p.evaluate(async () => {
     const s = await import('/src/state.js');
-    const { cardPicture } = await import('/src/ui/card-picture.js');
+    const { cardPicture, LAYOUT: L } = await import('/src/ui/card-picture.js');
     const { qrReader } = await import('/src/qrscan.js');
     const reader = await qrReader();
     const out = [];
@@ -408,7 +408,9 @@ test('the code on a card picture takes the paper’s colours and still reads, on
     const g = cv.getContext('2d');
     g.drawImage(img, 0, 0);
     const paper = g.getImageData(4, 4, 1, 1).data.join();
-    const gap = g.getImageData(1080 - 60 - 380 - 30, 1080, 28, 300).data; // W − PAD − QR − the gap's 32 px
+    // The gap's column, from under the drawing to the bottom margin.
+    const top = L.pad + L.art;
+    const gap = g.getImageData(L.width - L.pad - L.code - L.gap, top, L.gap, L.height - L.pad - top).data;
     let bare = true;
     for (let k = 0; k < gap.length; k += 4) if (gap.slice(k, k + 4).join() !== paper) bare = false;
     out.push(bare);
