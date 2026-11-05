@@ -177,7 +177,8 @@ test('stored data: an older layout is upgraded in place, a newer one is never hi
   assert.equal(await p.locator('nav.tabs').count(), 0, 'no empty app over the data');
   // Journaled as it should be (main.js): the one error this page was made to meet.
   const met = env.errors.filter((e) => e.startsWith('oldfox again:'));
-  assert.deepEqual(met.map((e) => /newer_data/.test(e)), [true]);
+  assert.deepEqual(met.filter((e) => !/newer_data/.test(e)), [], 'no error but the one this page was made to meet');
+  assert.equal(met.length, 1, 'that one, journaled');
   env.errors.splice(env.errors.indexOf(met[0]), 1);
   await b.close();
   await ctx.close();
