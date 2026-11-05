@@ -23,10 +23,11 @@ const COVERAGE = engine === chromium ? process.env.COVERAGE : undefined;
 let measured = 0;
 
 const WEB = new URL('../../web/', import.meta.url).pathname;
+/** Text with its encoding, as GitHub Pages sends it: Firefox reports a page without one as an error. */
 const TYPES = {
-  '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.wasm': 'application/wasm',
+  '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.wasm': 'application/wasm',
   '.json': 'application/json', '.webmanifest': 'application/manifest+json', '.svg': 'image/svg+xml',
-  '.png': 'image/png', '.woff2': 'font/woff2', '.txt': 'text/plain',
+  '.png': 'image/png', '.woff2': 'font/woff2', '.txt': 'text/plain; charset=utf-8',
 };
 
 /**
