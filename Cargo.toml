@@ -3,6 +3,8 @@
 # `cargo update` cannot quietly raise the minimum Rust.
 resolver = "3"
 members = ["crates/*"]
+# Copies of others' crates with a fix of ours, used through [patch] below.
+exclude = ["vendor"]
 
 [workspace.package]
 edition = "2021"
@@ -28,3 +30,9 @@ panic = "abort"
 # unoptimised so it debugs well.
 [profile.dev.package."*"]
 opt-level = 2
+
+# rqrr 0.11.0 with one fix (vendor/rqrr/PIPS.md): a camera frame could make
+# it panic, which WebAssembly cannot catch. Back to crates.io once a release
+# carries the fix.
+[patch.crates-io]
+rqrr = { path = "vendor/rqrr" }

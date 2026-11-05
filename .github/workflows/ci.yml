@@ -37,6 +37,8 @@ jobs:
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo test --workspace
+      # The fixed copy of rqrr (vendor/rqrr/PIPS.md): its own tests, the fix's among them.
+      - run: cargo test --manifest-path vendor/rqrr/Cargo.toml --lib
 
   # Known vulnerabilities and unsoundness in the dependencies (RustSec).
   # Not needed by the deploy: an advisory published tomorrow should show

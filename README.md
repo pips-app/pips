@@ -55,6 +55,7 @@ envelope.
 | `crates/pips-wasm` | one facade over all of the above for the web app |
 | `crates/pips-scan` | QR reading for browsers without `BarcodeDetector`, loaded on demand |
 | `web/` | the app: plain ES modules, no build step, strict CSP |
+| `vendor/rqrr` | the QR reader `pips-qr` uses, with one fix of ours (`PIPS.md`) |
 
 Each crate does one thing and is `no_std` where it can be; most come with a
 small command-line tool (`pips-card`, `pips-sign`, `pips-qr`, `pips-raster`,
@@ -122,7 +123,8 @@ AI assistants: [AGENTS.md](AGENTS.md). Plans for an Android app:
 
 ## Licence
 
-Code: [Apache-2.0](LICENSE). Fonts in `web/fonts`: SIL Open Font Licence
+Code: [Apache-2.0](LICENSE). `vendor/rqrr`: rqrr 0.11.0 with one fix of
+ours (see its `PIPS.md`), MIT or Apache-2.0, and ISC. Fonts in `web/fonts`: SIL Open Font Licence
 (see the files there). Test pictures in `crates/pips-raster/tests/aseprite`:
 MIT, from the asefile project. `web/dev/qrcode.js` (development only, not
 published): MIT, Kazuhiko Arase.
