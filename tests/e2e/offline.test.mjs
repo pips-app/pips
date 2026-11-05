@@ -17,7 +17,7 @@ import { cp, mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { chromium } from 'playwright';
-import { serve, photo, fromPicture, ownCard, act, tab, until } from './helpers.mjs';
+import { serve, photo, fromPicture, ownCard, act, tab, until, still } from './helpers.mjs';
 
 const ROOT = new URL('../../', import.meta.url).pathname;
 const firefox = process.env.BROWSER === 'firefox';
@@ -83,6 +83,8 @@ test('the published app installs, works with no network, and takes a new release
   // The QR reader is loaded only when first needed: it is there offline too.
   await fromPicture(p, 'section.view:visible', code);
   await p.locator('.toast >> text=Такая карточка уже есть').waitFor();
+  await p.locator('.turn:not([hidden])').waitFor(); // the card already here opens large
+  await still(p);
   await tab(p, 'give');
   await tab(p, 'me');
   await p.locator('section.view:visible >> text=Резервная копия').waitFor();
