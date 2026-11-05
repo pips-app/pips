@@ -219,8 +219,26 @@ test('a numbered copy made out to someone who already has the card takes the pla
   // And once more: nothing new now.
   await tab(b, 'receive');
   assert.equal(await toastAfter(b, () => fromPicture(b, 'section.view:visible', numbered)), 'Такая карточка уже есть');
-  await a.context().close();
-  await b.context().close();
+
+  // The copy with its certificate but no sender, as a tool outside the app
+  // can make it: the number is told as someone else's, and the path does not
+  // claim it came from the artist's own hands.
+  const stripped = await b.evaluate(async () => {
+    const s = await import('/src/state.js');
+    const { MAGIC } = await import('/src/links.js');
+    const [e] = [...s.app.cards.values()];
+    return [...MAGIC, ...s.app.identity.sealAsAuthor(e.rec.payload, e.rec.cert)];
+  });
+  const file = join(env.dir, 'no-sender.pips');
+  await writeFile(file, Uint8Array.from(stripped));
+  const c = await env.phone('carol');
+  await tab(c, 'receive');
+  await choose(c, () => c.click('section.view:visible >> text=Файл .pips'), file);
+  await c.locator('.turn:not([hidden])').waitFor();
+  const back = await backText(c);
+  assert.match(back, /экземпляр 1 из 3 — выдан другому человеку/);
+  assert.match(back, /@pixelfox → … → вам/);
+  for (const x of [a, b, c]) await x.context().close();
 });
 
 test('a card sent as a link opens the app and arrives, even before the first run', async () => {

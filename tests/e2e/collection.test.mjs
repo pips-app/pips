@@ -568,3 +568,23 @@ test('a feed card pulled down by a finger lies over the archive strip, before an
   assert.ok(await p.$eval('.on-stage.centre', (e) => !!e.closest('.stage-host')), 'back in its place in the feed');
   await p.context().close();
 });
+
+test('a title and a name of one long word stay on the card\'s back, clear of the pen, on a narrow phone', async () => {
+  const p = await env.phone('W'.repeat(24)); // the widest letter, as many as a name takes
+  await p.setViewportSize({ width: 320, height: 568 });
+  await tab(p, 'draw');
+  await ownCard(p, 'W'.repeat(32), env.dir);
+  await act(p, 'turn');
+  await still(p);
+  // The text's own extent, not its box: text runs out of a box it does not fit.
+  const box = (s) => p.locator(`.turn .back-face ${s}`).evaluate((e) => {
+    const r = document.createRange();
+    r.selectNodeContents(e);
+    return r.getBoundingClientRect().toJSON();
+  });
+  const [paper, title, name, pen] = await Promise.all(['.back-in', 'h3', '.by', '.pen'].map(box));
+  for (const [what, r] of [['the title', title], ['the name', name]]) {
+    assert.ok(r.left >= paper.left && r.right <= pen.left, `${what} ends before the pen: ${r.right} ≤ ${pen.left}`);
+  }
+  await p.context().close();
+});
