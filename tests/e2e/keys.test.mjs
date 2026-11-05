@@ -275,3 +275,23 @@ test('a backup is saved with a copy number given out on two phones, and after th
   assert.deepEqual(kept, { mine: false, copies: 2 });
   await save(a); // and here
 });
+
+test('the first run can step back before anything is kept, and a quick second tap on «Готово» starts the app once', async () => {
+  const p = await env.blank('backfox');
+  await p.click('text=Создать ключ');
+  await p.click('.onb button[aria-label="Назад"]');
+  await p.locator('text=У меня уже есть ключ').waitFor(); // the first screen again
+  await p.click('text=Создать ключ');
+  const shown = await p.locator('.word-grid').textContent();
+  await p.check('.check input');
+  await p.click('text=Дальше');
+  await p.click('.onb button[aria-label="Назад"]');
+  assert.equal(await p.locator('.word-grid').textContent(), shown, 'from the nick, the same words: the key is not made anew');
+  await p.check('.check input');
+  await p.click('text=Дальше');
+  await p.fill('.field input', 'backfox');
+  await p.dblclick('text=Готово');
+  await p.locator('nav.tabs').waitFor();
+  assert.equal(await p.locator('nav.tabs').count(), 1, 'one app');
+  await p.context().close();
+});

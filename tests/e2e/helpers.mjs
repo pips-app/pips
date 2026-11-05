@@ -3,7 +3,7 @@
 // screenshot) and opened "from picture" on another, exactly as a person
 // without a camera would do. The app's own QR reader does the reading.
 
-import { before, after } from 'node:test';
+import { before, after, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { readFile, mkdtemp, writeFile } from 'node:fs/promises';
@@ -29,12 +29,19 @@ const TYPES = {
   '.png': 'image/png', '.woff2': 'font/woff2', '.txt': 'text/plain',
 };
 
-/** Serves web/ on a free port of 127.0.0.1 (a dev host: samples allowed). */
-export async function serve() {
+/**
+ * Serves web/ on a free port of 127.0.0.1 (a dev host: samples allowed) —
+ * or, given `root`, whatever folder it names at each request (a published
+ * site, one release and then the next); none: no network, every connection
+ * dropped. @param {() => string|null} [root] a folder ending in /
+ */
+export async function serve(root = () => WEB) {
   const server = createServer(async (req, res) => {
     const path = normalize(decodeURIComponent(new URL(req.url ?? '/', 'http://x').pathname));
-    const file = join(WEB, path.endsWith('/') ? `${path}index.html` : path);
-    if (!file.startsWith(WEB)) return res.writeHead(403).end();
+    const base = root();
+    if (!base) return req.socket.destroy();
+    const file = join(base, path.endsWith('/') ? `${path}index.html` : path);
+    if (!file.startsWith(base)) return res.writeHead(403).end();
     try {
       const body = await readFile(file);
       res.writeHead(200, { 'content-type': TYPES[extname(file)] ?? 'application/octet-stream' }).end(body);
@@ -44,7 +51,7 @@ export async function serve() {
   });
   await new Promise((ok) => server.listen(0, '127.0.0.1', () => ok(undefined)));
   const { port } = /** @type {import('node:net').AddressInfo} */ (server.address());
-  return { url: `http://127.0.0.1:${port}/`, close: () => server.close() };
+  return { url: `http://127.0.0.1:${port}/`, port, close: () => server.close() };
 }
 
 /**
@@ -305,11 +312,17 @@ export function suite() {
   // When a name pattern leaves a file no test to run, node:test (22) starts
   // `before` and runs `after` without waiting for it: wait here, or the
   // browser opened meanwhile is never closed and the run never ends.
+  // A page's error fails the test it happened in, by name — a test that
+  // meets one on purpose takes it out of `errors` before it ends.
+  afterEach(() => {
+    const met = env.errors?.splice(0) ?? [];
+    assert.deepEqual(met, [], 'no errors in any page');
+  });
   after(async () => {
     await ready;
     if (!env.close) return;
     await env.close();
-    assert.deepEqual(env.errors, [], 'no errors in any page');
+    assert.deepEqual(env.errors, [], 'no errors in any page, nor as the browser closed');
   });
   return env;
 }

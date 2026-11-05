@@ -17,7 +17,7 @@
 // sets text on its own and may wrap a label elsewhere); in every browser
 // each screen is also checked for what is never right: a page wider than
 // the screen, controls on top of one another, a label that does not fit in
-// its button.
+// its button, a field with no name for a screen reader.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -77,6 +77,16 @@ async function spilling(p) {
   return seen.filter((c) => c.spills).map((c) => `«${c.label}»`);
 }
 
+/**
+ * Fields a screen reader could not name: no label tied to them, no
+ * aria-label. A placeholder is not a name (it goes once something is typed).
+ * @param {import('playwright').Page} p
+ */
+const nameless = (p) => p.$$eval(':is(input, select, textarea):not([type="hidden"], [type="file"])', (els) => els
+  .filter((e) => e.getClientRects().length && !e.closest('[hidden], [inert]'))
+  .filter((e) => !e.getAttribute('aria-label') && !e.getAttribute('aria-labelledby') && !(/** @type {HTMLInputElement} */ (e).labels?.length))
+  .map((e) => e.outerHTML.slice(0, 80)));
+
 /** A row as a line of its file: «label» height · «label» height. @param {[string, number][]} row */
 const line = (row) => row.map(([label, h]) => `«${label}» ${h}`).join(' · ');
 /** @param {string} text @returns {[string, number][][]} */
@@ -97,6 +107,7 @@ for (const [w, h] of SIZES) {
       assert.ok(await p.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `${name}: the page is no wider than the screen`);
       if (!sheet) assert.deepEqual(await overlaps(p), [], `${name}: nothing covers anything else`); // a sheet lies over the screen by design
       assert.deepEqual(await spilling(p), [], `${name}: every label fits in its control`);
+      assert.deepEqual(await nameless(p), [], `${name}: every field has a name to be read out`);
       if (!chromium) continue;
       const now = await rows(p);
       const file = new URL(`${name}-${w}.txt`, DIR);
@@ -115,3 +126,24 @@ for (const [w, h] of SIZES) {
     await p.context().close();
   });
 }
+
+// English is longer in places and shorter in others: on the narrowest phone,
+// the same checks of what is never right, every screen in English.
+test('every screen in English, on the narrowest phone: nothing spills, covers or goes unnamed', async () => {
+  const p = await env.phone('layoutfox');
+  await p.setViewportSize({ width: 320, height: 568 });
+  await tab(p, 'me');
+  await samples(p);
+  await tab(p, 'me'); // the samples are shown in the collection
+  await p.selectOption('section.view:visible select[aria-label="Язык"]', 'en'); // the app starts again, in English
+  await p.locator('html[lang="en"] nav.tabs').waitFor();
+  await p.evaluate(() => document.fonts.ready);
+  for (const [name, reach, sheet] of SCREENS) {
+    await reach(p);
+    assert.ok(await p.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `${name}: the page is no wider than the screen`);
+    if (!sheet) assert.deepEqual(await overlaps(p), [], `${name}: nothing covers anything else`);
+    assert.deepEqual(await spilling(p), [], `${name}: every label fits in its control`);
+    assert.deepEqual(await nameless(p), [], `${name}: every field has a name to be read out`);
+  }
+  await p.context().close();
+});

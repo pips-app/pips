@@ -10,7 +10,7 @@
 // (helpers.mjs), and Node's for the unit tests — the same format.
 // A line counts as run if any of its code ran; lines with no code
 // (blank, comments) are not counted. Code that ran in some page counts,
-// whatever the others did.
+// whatever the others did. A file no test loaded is listed at 0%.
 
 import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -75,6 +75,14 @@ function lines(text, ran) {
 /** The line a character offset falls on. @param {string} text @param {number} at */
 const lineOf = (text, at) => text.slice(0, at).split('\n').length;
 
+// Files no test loaded at all: a 0% that would otherwise not show. The stub
+// stands in for the core only where it was not built, which a run refuses.
+for (const path of (await readdir(join(WEB, 'src'), { recursive: true })).map((p) => `src/${p}`).filter((p) => p.endsWith('.js') && p !== 'src/stub-core.js' && !files.has(p))) {
+  const text = await readFile(join(WEB, path), 'utf8');
+  sources.set(path, text);
+  files.set(path, { ran: new Uint8Array(text.length), fns: new Map() });
+}
+
 const rows = [...files].map(([path, f]) => {
   const text = /** @type {string} */ (sources.get(path));
   const { code, hit } = lines(text, f.ran);
@@ -86,5 +94,6 @@ const pct = (/** @type {number} */ a, /** @type {number} */ b) => `${b ? Math.ro
 const code = rows.reduce((s, r) => s + r.code, 0), hit = rows.reduce((s, r) => s + r.hit, 0);
 const out = ['# What the tests ran', '', `${pct(hit, code)} of ${code} lines with code, in ${rows.length} files of web/src.`, ''];
 out.push('| File | Lines run | Functions never run |', '|---|---|---|');
-for (const r of rows) out.push(`| ${r.path} | ${pct(r.hit, r.code)} (${r.hit} of ${r.code}) | ${r.never.join(', ') || '—'} |`);
+for (const r of rows) out.push(`| ${r.path} | ${pct(r.hit, r.code)} (${r.hit} of ${r.code}) | ${r.hit ? r.never.join(', ') || '—' : 'never loaded'} |`);
+out.push('', 'Not measured: web/sw.js, the service worker — it runs outside the page, and only on a published site (not on the test server).');
 console.log(out.join('\n'));

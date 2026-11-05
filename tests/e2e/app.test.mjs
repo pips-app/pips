@@ -183,27 +183,64 @@ test('stored data: an older layout is upgraded in place, a newer one is never hi
   await ctx.close();
 });
 
+test('storage that fails to open stops the app with the reason; storage refused on purpose keeps it in memory, and says so', async () => {
+  // A collection on the device; then the browser's storage fails this once.
+  const a = await env.phone('storefox');
+  await a.addInitScript(() => {
+    indexedDB.open = () => { throw new DOMException('the disk said no', 'UnknownError'); };
+  });
+  await a.reload();
+  assert.match(await a.locator('.halt').textContent(), /Хранилище не открылось/);
+  assert.equal(await a.locator('nav.tabs').count(), 0, 'no empty first run over a collection');
+  const met = env.errors.filter((e) => e.startsWith('storefox:'));
+  assert.ok(met.length && met.every((e) => /store_unavailable|storage would not open/.test(e)), met.join('\n'));
+  for (const e of met) env.errors.splice(env.errors.indexOf(e), 1);
+  await a.context().close();
+  // A private window that refuses storage: the app runs in memory, and Profile says so.
+  const p = await env.blank('privatefox');
+  await p.locator('text=Создать ключ').waitFor(); // started: a reload now cuts nothing short
+  await p.addInitScript(() => {
+    indexedDB.open = () => { throw new DOMException('not here', 'InvalidStateError'); };
+  });
+  await p.reload();
+  await p.click('text=Создать ключ');
+  await p.check('.check input');
+  await p.click('text=Дальше');
+  await p.fill('.field input', 'privatefox');
+  await p.click('text=Готово');
+  await p.locator('nav.tabs').waitFor();
+  await tab(p, 'me');
+  await p.locator('section.view:visible >> text=Хранилище браузера недоступно').waitFor();
+  await p.context().close();
+});
+
 test('a camera granted after the scanner was left is switched off at once', async () => {
   const p = await env.phone('camfox');
   // A browser that takes its time to ask: the camera comes 600 ms after it was requested.
   await p.evaluate(() => {
     const w = /** @type {any} */ (window);
-    navigator.mediaDevices.getUserMedia = () => new Promise((ok) => setTimeout(() => {
-      const c = document.createElement('canvas');
-      c.width = c.height = 64;
-      c.getContext('2d').fillRect(0, 0, 64, 64);
-      const s = c.captureStream(5);
-      w.tracks = (w.tracks ?? []).concat(s.getTracks());
-      ok(s);
-    }, 600));
+    navigator.mediaDevices.getUserMedia = () => {
+      w.asked = (w.asked ?? 0) + 1; // counted as asked, not as it comes
+      return new Promise((ok) => setTimeout(() => {
+        const c = document.createElement('canvas');
+        c.width = c.height = 64;
+        c.getContext('2d').fillRect(0, 0, 64, 64);
+        const s = c.captureStream(5);
+        w.tracks = (w.tracks ?? []).concat(s.getTracks());
+        ok(s);
+      }, 600));
+    };
   });
   await tab(p, 'receive');
   await p.click('section.view:not([hidden]) .scanner-start');
   await p.click('section.view:not([hidden]) .scanner-start'); // twice, impatiently
   await tab(p, 'collection'); // and away before the camera came
-  await p.waitForTimeout(1200); // time itself: a camera granted late would have come by now
-  const states = await p.evaluate(() => /** @type {any} */ (window).tracks?.map((t) => t.readyState) ?? []);
-  assert.equal(states.length, 1, 'asked for the camera once — and asked: an empty list would pass for anything');
+  // The camera comes late; the moment it does, it is switched off.
+  const camera = () => p.evaluate(() => /** @type {any} */ (window).tracks?.map((t) => t.readyState) ?? []);
+  await until(async () => (await camera()).length > 0, 'the camera granted');
+  await until(async () => (await camera()).every((s) => s === 'ended'), 'the camera switched off');
+  assert.equal(await p.evaluate(() => /** @type {any} */ (window).asked), 1, 'asked for the camera once');
+  const states = await camera();
   assert.ok(states.every((s) => s === 'ended'), `no camera left on: ${states}`);
   await p.context().close();
 });
@@ -251,13 +288,15 @@ test('storage closed by the browser underneath the app: opened again, nothing fa
 // keys, drags — as a hurried or curious person would. It looks for what no
 // scripted journey thought of: any page error, any fault written in the
 // journal (both reach the console, which the hook after the tests checks),
-// and anything left open that Escape does not close. Same seed, same steps.
+// and anything left open that Escape does not close. Same seed, same steps;
+// another seed (MONKEY_SEED=…), another walk — every failure names its seed.
 test('a monkey loose in the app finds nothing wrong', { timeout: 300_000 }, async () => {
   const p = await env.phone('monkey');
   await tab(p, 'me');
   await samples(p);
   p.on('filechooser', () => {}); // a picker opened by a tap is left unanswered
-  let seed = 4;
+  const SEED = Number(process.env.MONKEY_SEED ?? 4);
+  let seed = SEED;
   const rnd = (n) => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed % n; };
   const KEYS = ['Escape', '+', '-', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Enter', ' ', 'Tab', 'z', 'Delete'];
   // Not these: they end the session (a new key), undo the setup (samples,
@@ -292,7 +331,7 @@ test('a monkey loose in the app finds nothing wrong', { timeout: 300_000 }, asyn
     const other = await Promise.race([fresh(), late(5000, 'a fresh page does not answer either')]).catch((x) => x.message);
     const after = await Promise.race([p.mouse.up().then(state), late(3000, 'still nothing')]).catch((x) => x.message);
     if (process.env.PIPS_TEST_OUT) await writeFile(join(process.env.PIPS_TEST_OUT, `monkey-${process.env.BROWSER ?? 'chromium'}-${Date.now()}.json`), JSON.stringify({ steps, page, other, after }, null, 1));
-    throw new Error(`a step hung; the last ones: ${done.slice(-6).join(' · ')}. Then: ${page}; ${other}; after letting go of the mouse: ${after}\nsteps: ${JSON.stringify(steps.slice(-30))}`);
+    throw new Error(`seed ${SEED}: a step hung; the last ones: ${done.slice(-6).join(' · ')}. Then: ${page}; ${other}; after letting go of the mouse: ${after}\nsteps: ${JSON.stringify(steps.slice(-30))}`);
   });
   const { width: W, height: H } = /** @type {{width: number, height: number}} */ (p.viewportSize());
   for (let step = 0; step < 250; step++) {
@@ -347,6 +386,6 @@ test('a monkey loose in the app finds nothing wrong', { timeout: 300_000 }, asyn
     const r = e.getBoundingClientRect(), cs = getComputedStyle(e);
     return r.width > 0 && r.height > 0 && r.top < innerHeight - 2 && r.bottom > 2 && cs.visibility !== 'hidden' && Number(cs.opacity) > 0.05 && !e.closest('[hidden]');
   }).map((e) => e.className));
-  assert.deepEqual(open, [], 'Escape closes whatever was left open');
+  assert.deepEqual(open, [], `seed ${SEED}: Escape closes whatever was left open`);
   await p.context().close();
 });

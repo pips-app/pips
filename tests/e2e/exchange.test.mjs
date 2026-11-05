@@ -31,25 +31,67 @@ test('a card goes from one phone to another and is checked on arrival', async ()
   assert.equal(await toastAfter(b, () => fromPicture(b, 'section.view:visible', code)), 'Такая карточка уже есть');
   assert.equal(await cards(b), 1);
 
-  // Passed on once more: the code names its last sender, not the hands
-  // before, so the path leaves a gap rather than claim a direct one.
+  // Passed on once more, from b's share sheet: the code names its last
+  // sender, not the hands before, so the path leaves a gap rather than
+  // claim a direct one.
   const c = await env.phone('lumen');
-  const relay = await b.evaluate(async () => {
+  await b.locator('.turn:not([hidden])').waitFor(); // the card already here opens large again
+  await act(b, 'share');
+  const relay = await photo(b, '.top-sheet .qr-box', env.dir, 'relay');
+  await tab(c, 'receive');
+  assert.equal(await toastAfter(c, () => fromPicture(c, 'section.view:visible', relay)), 'Карточка в коллекции');
+  await c.locator('.turn:not([hidden])').waitFor();
+  assert.match(await backText(c), /@pixelfox → … → @mossfern → вам/);
+  for (const p of [a, b, c]) await p.context().close();
+});
+
+test('a large card goes as a carousel of codes, and comes together from them one picture at a time', async () => {
+  const a = await env.phone('bigfox');
+  const b = await env.phone('bigmoss');
+  // Sixteen colours in no pattern a compressor likes: well past one code.
+  const PICO = [[0, 0, 0], [29, 43, 83], [126, 37, 83], [0, 135, 81], [171, 82, 54], [95, 87, 79], [194, 195, 199], [255, 241, 232],
+    [255, 0, 77], [255, 163, 0], [255, 236, 39], [0, 228, 54], [41, 173, 255], [131, 118, 156], [255, 119, 168], [255, 204, 170]];
+  let n = 7;
+  const noise = await png(env.dir, 'noise.png', 64, 64, () => { n = (n * 1103515245 + 12345) & 0x7fffffff; return [...PICO[(n >> 16) % 16], 255]; }); // the high bits: the low ones of this generator repeat every 16
+  await picture(a, noise);
+  await a.click('.overlay .btn.key'); // «На холст»
+  await a.locator('.overlay').waitFor({ state: 'detached' });
+  await a.fill('.ed-title', 'Шум');
+  await a.click('.ed-sign');
+  await a.locator('.turn:not([hidden])').waitFor();
+  await act(a, 'share');
+  assert.equal(await a.evaluate(async () => {
     const s = await import('/src/state.js');
     const [e] = [...s.app.cards.values()];
-    return s.app.core.qrPlan(s.app.identity.sealAsSender(e.rec.payload, s.app.profile.nick)).text;
+    return s.app.core.qrPlan(s.app.identity.sealAsAuthor(e.rec.payload, undefined)).kind;
+  }), 'carousel', 'too large for one code');
+
+  // The other phone reads the frames as they come round, a picture each,
+  // until the card is whole. Each frame read is answered with the count
+  // (set even when it stays the same — a frame may add nothing new): heard
+  // through the page, so that the next picture waits for that answer.
+  await tab(b, 'receive');
+  await b.evaluate(() => {
+    const w = /** @type {any} */ (window);
+    w.__parts = 0;
+    new MutationObserver(() => w.__parts++).observe(/** @type {Element} */ (document.querySelector('section.view:not([hidden]) .progress-wrap small')), { childList: true, characterData: true, subtree: true });
   });
-  await c.evaluate(async (text) => {
-    const s = await import('/src/state.js');
-    await s.receive(s.app.core.openEnvelope(s.app.core.classify(text).bytes));
-  }, relay);
-  await tab(c, 'collection');
-  assert.match(await c.evaluate(async () => {
-    const { cardBack } = await import('/src/collection/back.js');
-    const [e] = [...(await import('/src/state.js')).app.cards.values()];
-    return cardBack(e, { editing: false, onEdit() {}, onTag() {}, onAuthor() {} }).el.textContent;
-  }), /@pixelfox → … → @mossfern → вам/);
-  for (const p of [a, b, c]) await p.context().close();
+  const answered = () => b.evaluate(() => /** @type {any} */ (window).__parts);
+  let last = null;
+  for (let i = 0; (await cards(b)) === 0; i++) {
+    assert.ok(i < 80, 'the card comes together from the frames');
+    const file = await photo(a, '.top-sheet .qr-box', env.dir, `frame-${i}`);
+    const frame = await readFile(file);
+    if (last && frame.equals(last)) continue; // the same frame still on screen
+    last = frame;
+    const before = await answered();
+    await fromPicture(b, 'section.view:visible', file);
+    await until(async () => (await cards(b)) > 0 || (await answered()) > before, 'the frame answered');
+  }
+  await b.locator('.turn:not([hidden])').waitFor();
+  assert.match(await backText(b), /@bigfox → вам/);
+  await a.context().close();
+  await b.context().close();
 });
 
 test('a .pips file from before envelopes — a bare signed card — still opens, checked; a forged one does not', async () => {
@@ -103,6 +145,8 @@ test('a card from a newer version of Pips is said to be so — as a file, a link
     await writeFile(f, bytes);
     return toastAfter(b, () => choose(b, () => b.click('section.view:visible >> text=Файл .pips'), f));
   };
+  // A file cut short: damage, called a file's, not a code to scan again.
+  assert.match(await open(Uint8Array.from([...magic, ...envelope.slice(0, 40)]), 'cut.pips'), /Файл Pips повреждён/);
   assert.equal(await open(Uint8Array.from([...magic, ...newer]), 'newer.pips'), NEWER, 'a file');
   // A bundle laid out anew: B, then its layout.
   const bundle = await b.evaluate(async (e) => [...(await import('/src/bundle.js')).packBundle([Uint8Array.from(e)])], envelope);
@@ -139,6 +183,14 @@ test('damaged and forged codes are refused with their reason', async () => {
   assert.match(await paste(flip(60)), /Код Pips, но повреждён/);
   assert.match(await paste(flip(text.length - 3)), /Подпись не сходится/);
   assert.match(await paste('hello'), /Это не код Pips/);
+  // A link to the card, cut short by a messenger, pasted here: called what it is.
+  const link = await a.evaluate(async () => {
+    const s = await import('/src/state.js');
+    const [e] = [...s.app.cards.values()];
+    return s.app.core.cardLink('https://pips-app.github.io/pips/', s.app.identity.sealAsAuthor(e.rec.payload, undefined));
+  });
+  assert.match(await paste(link.slice(0, 80)), /Ссылка на карточку неполная/);
+  assert.match(await paste('https://example.com/#Section'), /Это не код Pips/, 'someone else\'s link is not ours');
   assert.equal(await cards(b), 0);
   await a.context().close();
   await b.context().close();
@@ -415,7 +467,7 @@ test('the code on a card picture takes the paper’s colours and still reads, on
   const p = await env.phone('shadefox');
   const results = await p.evaluate(async () => {
     const s = await import('/src/state.js');
-    const { cardPicture, LAYOUT: L } = await import('/src/ui/card-picture.js');
+    const { cardPicture, wrap, LAYOUT: L } = await import('/src/ui/card-picture.js');
     const { qrReader } = await import('/src/qrscan.js');
     const reader = await qrReader();
     const out = [];
@@ -448,9 +500,16 @@ test('the code on a card picture takes the paper’s colours and still reads, on
     let bare = true;
     for (let k = 0; k < gap.length; k += 4) if (gap.slice(k, k + 4).join() !== paper) bare = false;
     out.push(bare);
+    // A title with no spaces (Japanese, or one long word) takes both lines
+    // before it is cut, breaking between characters.
+    g.font = '600 64px Literata, Georgia, serif';
+    for (const title of ['夜明けの小さな灯りと遠い海の歌を聴く猫たち', 'W'.repeat(32)]) {
+      const lines = wrap(g, title, L.art - L.code - L.gap, 2);
+      out.push(lines.length === 2 && !lines[0].endsWith('…') && title.startsWith(lines.join('').replace(/…$/, '')));
+    }
     return out;
   });
-  assert.deepEqual(results, Array(17).fill(true), `every paper, at both sizes; a wide name in its room: ${results.map(Number).join('')}`);
+  assert.deepEqual(results, Array(19).fill(true), `every paper, at both sizes; a wide name in its room; titles with no spaces on two lines: ${results.map(Number).join('')}`);
   await p.context().close();
 });
 
