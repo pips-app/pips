@@ -107,15 +107,10 @@ export async function setup() {
     const ran = (await p.coverage.stopJSCoverage()).filter((e) => new URL(e.url).pathname.startsWith('/src/'));
     await writeFile(join(/** @type {string} */ (COVERAGE), `${process.pid}-${measured++}.json`), JSON.stringify(ran.map(({ url, functions }) => ({ url, functions }))));
   }
-  /** Every error a page writes, and a missing core, go to `errors`: the file fails on them. @param {import('playwright').Page} p @param {string} name */
+  /** Every error a page writes goes to `errors`: the test fails on it. @param {import('playwright').Page} p @param {string} name */
   function watch(p, name) {
     p.on('pageerror', (e) => errors.push(`${name}: ${e.message}`));
-    p.on('console', (m) => {
-      if (m.type() === 'error') errors.push(`${name}: ${m.text()}`);
-      // Without web/pkg the app falls back to a stub with no cryptography
-      // (core.js): a run on it would pass while proving nothing.
-      if (m.text().startsWith('pips: core not built')) errors.push(`${name}: the core in web/pkg did not load — run scripts/build-wasm.sh`);
-    });
+    p.on('console', (m) => { if (m.type() === 'error') errors.push(`${name}: ${m.text()}`); });
   }
   /** A fresh phone at its first screen; `desk`: a computer's screen instead; `scale`: device pixels to a CSS pixel. */
   async function blank(name, desk = false, scale = 1) {
@@ -134,6 +129,12 @@ export async function setup() {
     }
     watch(p, name);
     await p.goto(site.url);
+    // Without web/pkg the app falls back to a stub with no cryptography
+    // (core.js), and says so with a banner: a run on it would pass while
+    // proving nothing. Asked of the app once it has started — not of a
+    // warning, which a page left mid-load writes as well.
+    await p.locator(':is(.onb, nav.tabs, .halt)').first().waitFor();
+    if (await p.locator('.dev-banner').count()) errors.push(`${name}: the core in web/pkg did not load — run scripts/build-wasm.sh`);
     return p;
   }
   /** A fresh phone with a key; with `words`, restored instead of created. */
