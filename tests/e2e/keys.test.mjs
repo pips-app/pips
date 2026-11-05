@@ -6,7 +6,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { suite, photo, fromPicture, choose, tab, png, textMatching, samples, words, cards, picture, ownCard, act, still, toastAfter } from './helpers.mjs';
+import { suite, photo, fromPicture, choose, tab, png, textMatching, samples, words, cards, picture, ownCard, act, still, until, toastAfter } from './helpers.mjs';
 
 const env = suite();
 
@@ -279,13 +279,13 @@ test('a backup is saved with a copy number given out on two phones, and after th
 test('the first run can step back before anything is kept, and a quick second tap on «Готово» starts the app once', async () => {
   const p = await env.blank('backfox');
   await p.click('text=Создать ключ');
-  await p.click('.onb button[aria-label="Назад"]');
+  await p.click('.onb button:text-is("Назад")');
   await p.locator('text=У меня уже есть ключ').waitFor(); // the first screen again
   await p.click('text=Создать ключ');
   const shown = await p.locator('.word-grid').textContent();
   await p.check('.check input');
   await p.click('text=Дальше');
-  await p.click('.onb button[aria-label="Назад"]');
+  await p.click('.onb button:text-is("Назад")');
   assert.equal(await p.locator('.word-grid').textContent(), shown, 'from the nick, the same words: the key is not made anew');
   await p.check('.check input');
   await p.click('text=Дальше');
@@ -293,5 +293,22 @@ test('the first run can step back before anything is kept, and a quick second ta
   await p.dblclick('text=Готово');
   await p.locator('nav.tabs').waitFor();
   assert.equal(await p.locator('nav.tabs').count(), 1, 'one app');
+  await p.context().close();
+});
+
+test('a link the card cannot carry is said under it, and the warning goes once the link is as it was', async () => {
+  const p = await env.phone('linkfox');
+  await tab(p, 'me');
+  const link = p.locator('section.view:visible input[aria-label="Ссылка"]');
+  const warning = p.locator('section.view:visible .error');
+  await link.fill('kitsu.art/shop');
+  await link.press('Tab');
+  await until(async () => (await warning.textContent()) === '', 'a good link kept');
+  await link.fill('kitsu.art:8080/shop');
+  await link.press('Tab');
+  await until(async () => (await warning.textContent()) !== '', 'the bad link said');
+  await link.fill('kitsu.art/shop'); // back to what is kept: nothing to save, nothing wrong
+  await link.press('Tab');
+  await until(async () => (await warning.textContent()) === '', 'the warning gone');
   await p.context().close();
 });
