@@ -545,6 +545,25 @@ test('frames are cleared and deleted, the animation plays and takes its speed, a
   await p.context().close();
 });
 
+test('a title as long in Russian as in English, nothing invisible in it, and it signs', async () => {
+  const p = await env.phone('longfox');
+  await tab(p, 'draw');
+  await p.locator('.ed-art').waitFor();
+  const art = await p.locator('.ed-art').boundingBox();
+  await p.mouse.click(art.x + art.width / 2, art.y + art.height / 2);
+  // Typed in full, kept to 32 characters — not 16, as when it was counted in bytes.
+  await p.fill('.ed-title', 'Ж'.repeat(40));
+  assert.equal(await p.inputValue('.ed-title'), 'Ж'.repeat(32));
+  // A right-to-left override or a zero-width space is taken out as it comes in.
+  await p.fill('.ed-title', 'Сова\u200B в \u202Eночи');
+  assert.equal(await p.inputValue('.ed-title'), 'Сова в ночи');
+  await p.fill('.ed-title', 'Ж'.repeat(32));
+  await p.click('.ed-sign');
+  await p.locator('.turn:not([hidden])').waitFor();
+  assert.equal(await p.evaluate(async () => [...(await import('/src/state.js')).app.cards.values()][0]?.card.title), 'Ж'.repeat(32), 'signed as typed');
+  await p.context().close();
+});
+
 test('the selection works on the chosen layer only, and never on a hidden one', async () => {
   const p = await env.phone('selfox', undefined, true); // a computer: keys for select-all and Delete
   await tab(p, 'draw');

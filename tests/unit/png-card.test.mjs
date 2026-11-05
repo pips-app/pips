@@ -41,6 +41,23 @@ test('a card goes into a picture and comes out the same; the picture stays a PNG
   assert.equal(envelopeIn(png), null, 'a plain picture holds no card');
 });
 
+test('one way to read a picture: IHDR first, one card chunk, nothing after the end', () => {
+  const env = new Uint8Array([0x45, 1, 2, 3]);
+  const out = withEnvelope(tinyPng(), env);
+  assert.deepEqual([...envelopeIn(out)], [...env]);
+  // Where the card chunk is: its length, 'piPs', data, CRC.
+  const at = out.findIndex((_, i) => String.fromCharCode(...out.subarray(i, i + 4)) === 'piPs') - 4;
+  const len = new DataView(out.buffer).getUint32(at);
+  const chunk = out.slice(at, at + 12 + len);
+  const join = (...parts) => Uint8Array.from(parts.flatMap((p) => [...p]));
+  assert.equal(envelopeIn(join(out.subarray(0, at), chunk, out.subarray(at))), null, 'two card chunks');
+  assert.equal(envelopeIn(join(out, [0])), null, 'a byte after IEND');
+  // IHDR moved behind the card chunk: no longer a PNG as it must begin.
+  const ihdrEnd = 8 + 12 + new DataView(out.buffer).getUint32(8);
+  assert.equal(envelopeIn(join(out.subarray(0, 8), chunk, out.subarray(8, at), out.subarray(at + chunk.length))), null, 'IHDR not first');
+  assert.ok(ihdrEnd <= at);
+});
+
 test('a damaged or foreign file holds no card, and never throws', () => {
   const out = withEnvelope(tinyPng(), new Uint8Array([0x45, 1, 2, 3]));
   for (let i = 8; i < out.length; i++) {
@@ -59,4 +76,13 @@ test('a damaged or foreign file holds no card, and never throws', () => {
     assert.equal(envelopeIn(junk), null);
   }
   assert.throws(() => withEnvelope(new Uint8Array([1, 2, 3]), new Uint8Array([0x45])), /not a PNG/);
+});
+
+// The card chunk's bytes, pinned (see crates/pips-wasm/tests/vectors.rs for
+// why): length, 'piPs', layout 1, the envelope, CRC — just before IEND.
+test('a card picture\'s bytes never change', () => {
+  const png = Buffer.from('89504e470d0a1a0a0000000d494844520000000200000002080600000072b60d240000000049454e44ae426082', 'hex');
+  const out = withEnvelope(new Uint8Array(png), new Uint8Array([0x45, 1, 2, 3]));
+  assert.equal(Buffer.from(out).toString('hex'),
+    '89504e470d0a1a0a0000000d494844520000000200000002080600000072b60d24' + '00000005' + '70695073' + '01' + '45010203' + '4c3a2283' + '0000000049454e44ae426082');
 });

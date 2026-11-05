@@ -9,6 +9,7 @@ use sha2::{Digest as _, Sha256};
 
 use crate::flags::{ANIMATED, CRITICAL, OPAQUE, SIGNED};
 use crate::limits::{MAX_AUTHOR, MAX_EXTENSIONS, MAX_EXT_DATA, MAX_HANDLE, MAX_LINK, MAX_PAYLOAD, MAX_TITLE};
+use crate::text::BYTES_PER_CHAR;
 use crate::{validate, Animation, Card, Error, Extension, Field, Handle, Network, Palette, PaletteRef, Signature};
 use crate::{MAGIC, VERSION};
 
@@ -26,6 +27,11 @@ fn put_bytes(out: &mut Vec<u8>, b: &[u8]) {
     out.extend_from_slice(b);
 }
 
+/// The card version written here. A crate that learns a version 2 must
+/// keep writing 1 for version-1 cards, canonical form above all.
+const V1: u8 = 1;
+const _: () = assert!(crate::VERSION == V1, "a second version: decide what each card's own version is");
+
 fn write_header(c: &Card, out: &mut Vec<u8>, canonical: bool) {
     let mut flags = c.unknown_flags;
     if c.opaque {
@@ -37,7 +43,10 @@ fn write_header(c: &Card, out: &mut Vec<u8>, canonical: bool) {
     if !canonical && c.signature.is_some() {
         flags |= SIGNED;
     }
-    out.extend_from_slice(&[VERSION, flags, c.width, c.height]);
+    // A card of this version, in either form. The canonical form of a
+    // version-1 card begins with 1 forever, whatever later versions this
+    // crate learns to write: every signature over it depends on that.
+    out.extend_from_slice(&[V1, flags, c.width, c.height]);
     match c.palette {
         PaletteRef::Builtin(id) => out.push(id),
         PaletteRef::Inline(p) => {
@@ -59,7 +68,7 @@ fn write_header(c: &Card, out: &mut Vec<u8>, canonical: bool) {
     match &c.handle {
         None => out.push(0),
         Some(h) => {
-            out.push(h.network as u8);
+            out.push(h.network.byte());
             put_bytes(out, h.text.as_bytes());
         }
     }
@@ -225,8 +234,8 @@ pub fn decode(bytes: &[u8]) -> Result<Card, Error> {
         None
     };
 
-    let title = r.string(MAX_TITLE, Error::BadText(Field::Title))?;
-    let author = r.string(MAX_AUTHOR, Error::BadText(Field::Author))?;
+    let title = r.string(MAX_TITLE * BYTES_PER_CHAR, Error::BadText(Field::Title))?;
+    let author = r.string(MAX_AUTHOR * BYTES_PER_CHAR, Error::BadText(Field::Author))?;
     let handle = match r.u8()? {
         0 => None,
         b => {

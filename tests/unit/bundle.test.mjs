@@ -59,3 +59,12 @@ test('any bytes at all: a bundle is read or refused, never anything else', () =>
     assert.ok(out === null || (Array.isArray(out) && out.every((e) => e.length > 0 && e[0] === 0x45)));
   }
 });
+
+// The bytes of a bundle, pinned (see crates/pips-wasm/tests/vectors.rs for
+// why): magic, 'B', layout 1, count, then each envelope after its length —
+// all big-endian, as written since the first bundle. Never change these to
+// make a test pass; a change here breaks every bundle already sent.
+test('a bundle\'s bytes never change', () => {
+  const b = packBundle([env(3, 1), env(2, 7)]);
+  assert.equal(Buffer.from(b).toString('hex'), '50501a0a' + '42' + '01' + '0002' + '00000003' + '450101' + '00000002' + '4507');
+});

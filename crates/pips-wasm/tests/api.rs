@@ -157,6 +157,34 @@ fn a_newer_version_is_told_apart_from_damage() {
     let Scanned::Frame { bytes } = classify(&Carousel::new(&big).unwrap().frame_text(0)) else { panic!() };
     assert_eq!(Joiner::new().push(&with(&bytes, 1, 2)).unwrap_err().code, "newer_version");
     assert_eq!(Joiner::new().push(&with(&bytes, 1, 0)).unwrap_err().code, "bad_frame");
+    // A link: after the #, the first byte names what follows — 'E' (R in
+    // base64url), a card. 'I' (S) is some newer kind; 0x01 (A) is nothing.
+    let link = card_link("https://pips.example/c", &env).unwrap();
+    let kind = |c: char| link.replacen("#R", &format!("#{c}"), 1);
+    assert_eq!(code(parse_link(&kind('S'))), "newer_version");
+    assert_eq!(code(parse_link(&kind('A'))), "bad_link");
+    assert_eq!(parse_link(&link).unwrap(), env);
+}
+
+/// A scanned code is trimmed: one whose text began with Base45's space
+/// would lose it. That happens only for some kind-and-version pairs, which
+/// are therefore never used (listed at `classify`).
+#[test]
+fn no_code_begins_with_a_space() {
+    const SPACE: u32 = 36; // its place in the Base45 alphabet
+    let first = |kind: u8, version: u8| (u32::from(kind) * 256 + u32::from(version)) % 45;
+    let reserved = |kind: u8| (1..=255u8).filter(|&v| first(kind, v) == SPACE).collect::<Vec<_>>();
+    assert_eq!(reserved(b'E'), [12, 57, 102, 147, 192, 237]);
+    assert_eq!(reserved(b'F'), [26, 71, 116, 161, 206, 251]);
+    assert_eq!(reserved(b'R'), [14, 59, 104, 149, 194, 239]);
+    // Today's codes, as made: their text keeps its first character.
+    let me = id(1);
+    let env = me.seal_as_author(&me.sign_card(&editor_card()).unwrap(), None).unwrap();
+    let QrPlan::Single { text } = qr_plan(&env).unwrap() else { panic!() };
+    for t in [text, me.recipient_code("kitsu").unwrap()] {
+        assert!(!t.starts_with(' ') && !t.ends_with(' '), "{t:?}");
+    }
+    assert!(!reserved(b'E').contains(&env[1]));
 }
 
 #[test]

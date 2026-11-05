@@ -201,7 +201,8 @@ fn header_rules() {
     assert_eq!(patch(3, 129), Err(Error::BadDimensions));
     assert_eq!(patch(4, 12), Err(Error::UnknownPalette(12)));
     assert_eq!(patch(5, 16), Err(Error::BadFrame));
-    assert_eq!(patch(8, 9), Err(Error::BadHandle));
+    // A network byte past the known ones is a newer app's network, not an
+    // error: see a_network_from_a_newer_app_is_kept.
 }
 
 #[test]
@@ -246,8 +247,11 @@ fn text_rules() {
         f(&mut c);
         encode(&c)
     };
-    assert!(with(&|c| c.title = "ж".repeat(16)).is_ok());
-    assert_eq!(with(&|c| c.title = "ж".repeat(17)), Err(Error::BadText(Field::Title)));
+    // In characters, the same for every script.
+    assert!(with(&|c| c.title = "ж".repeat(32)).is_ok());
+    assert_eq!(with(&|c| c.title = "ж".repeat(33)), Err(Error::BadText(Field::Title)));
+    assert!(with(&|c| c.author = "w".repeat(24)).is_ok());
+    assert_eq!(with(&|c| c.author = "щ".repeat(25)), Err(Error::BadText(Field::Author)));
     assert_eq!(with(&|c| c.title = " lead".into()), Err(Error::BadText(Field::Title)));
     assert_eq!(with(&|c| c.author = "a\u{202E}b\n".into()), Err(Error::BadText(Field::Author)));
     assert_eq!(
@@ -259,6 +263,38 @@ fn text_rules() {
     h[6] = 1;
     h.insert(7, 0xFF);
     assert_eq!(decode(&with_pixels(&h, &[0; 4])), Err(Error::BadText(Field::Title)));
+}
+
+/// A network a newer app added does not make the card unreadable: it is
+/// kept exactly (the card is signed with it) and read as "other".
+#[test]
+fn a_network_from_a_newer_app_is_kept() {
+    let mut c = Card::new(2, 2);
+    c.handle = Some(Handle { network: Network::Later(42), text: "@kitsu".into() });
+    let bytes = encode(&c).unwrap();
+    let back = decode(&bytes).unwrap();
+    assert_eq!(back.handle.as_ref().unwrap().network, Network::Later(42));
+    assert_eq!(encode(&back).unwrap(), bytes, "the same bytes again: a signature still holds");
+    assert_eq!(Network::from_byte(0), None, "0 is no handle");
+    assert_eq!(Network::from_byte(8), Some(Network::Other));
+}
+
+/// Nothing invisible or reordering; emoji whole. The same cases the app's
+/// own cleaning is checked against.
+#[test]
+fn plain_text_cases() {
+    let cases = include_str!("data/plain-text.txt");
+    let mut n = 0;
+    for line in cases.lines().filter(|l| !l.starts_with('#')) {
+        let (mark, text) = line.split_once('\t').unwrap();
+        assert_eq!(pips_format::text::plain(text, 32), mark == "+", "{text:?}");
+        n += 1;
+    }
+    assert!(n > 20);
+    // And it is what a card's fields take.
+    let mut c = Card::new(2, 2);
+    c.author = "\u{202E}ecila".into();
+    assert_eq!(encode(&c), Err(Error::BadText(Field::Author)));
 }
 
 #[test]

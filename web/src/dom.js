@@ -2,6 +2,8 @@
 // Building DOM without innerHTML. Card text comes from strangers, so every
 // string becomes a text node; only the icon constants below are markup.
 
+import { plainText, fitChars } from './text.js';
+
 /**
  * @param {string} tag
  * @param {Record<string, any>} [props]
@@ -112,14 +114,18 @@ export function icon(name) {
 }
 
 /**
- * Keeps an input within `max` bytes of UTF-8, the unit card limits are in
- * (a Cyrillic letter is two). `maxLength` counts characters, so it cannot.
+ * Keeps an input to the format's text rule (text.js: nothing invisible or
+ * reordering) and to its limit: in characters for titles and names, the
+ * same room in every script; in bytes of UTF-8 for a handle or a link,
+ * which are addresses (LIMITS in text.js). `maxLength` counts UTF-16
+ * units, so it can do neither.
  * @template {HTMLInputElement|HTMLTextAreaElement} T
- * @param {T} input @param {number} max @returns {T}
+ * @param {T} input @param {number} max @param {'chars'|'bytes'} unit @returns {T}
  */
-export function byteLimit(input, max) {
+export function textLimit(input, max, unit) {
   input.addEventListener('input', () => {
-    const v = fitBytes(input.value, max);
+    const clean = plainText(input.value);
+    const v = unit === 'chars' ? fitChars(clean, max) : fitBytes(clean, max);
     if (v !== input.value) input.value = v;
   });
   return input;

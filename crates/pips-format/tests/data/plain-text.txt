@@ -1,0 +1,33 @@
+# Plain text: the cases the core (pips_format::text::plain) and the app
+# (plainText in web/src/dom.js) are both checked against, at 32 characters.
+# A line is "+" (taken as it is) or "-" (refused), a tab, then the text,
+# written as it is — the invisible characters are really there.
++	alice
++	Лис у костра
++	名前
++	👩‍💻
++	🏳️‍🌈
++	👨‍👩‍👧
++	🏴󠁧󠁢󠁳󠁣󠁴󠁿
++	café
++	жжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжж
++	@kitsu и 🦊
+-	жжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжж
+-	 lead
+-	trail 
+-	a‮b
+-	‮ecila
+-	al​ice
+-	al‍ice
+-	1‍2
+-	‍👩
+-	👩‍
+-	a⁦b⁩
+-	﻿alice
+-	soft­hyphen
+-	ㅤ
+-	aㅤb
+-	a󠁧
+-	x‎y
+-	a	b
+-	ab

@@ -1,7 +1,8 @@
 // @ts-check
 // Me: identity, what goes on the back of your cards, secrets, settings.
 
-import { h, replace, byteLimit } from '../dom.js';
+import { h, replace, textLimit } from '../dom.js';
+import { LIMITS } from '../text.js';
 import { t, reason, language, date } from '../i18n.js';
 import { app, setProfile, makeBackup, restoreBackup, lastBackup, backupBytes } from '../state.js';
 import { isPersisted, persist, setMeta, memoryOnly } from '../store.js';
@@ -25,12 +26,12 @@ export function meView() {
   async function render() {
     const key = app.identity.publicKey();
     const p = app.profile;
-    const nick = byteLimit(/** @type {HTMLInputElement} */ (h('input', { value: p.nick, autocomplete: 'nickname' })), 24);
+    const nick = textLimit(/** @type {HTMLInputElement} */ (h('input', { value: p.nick, autocomplete: 'nickname' })), LIMITS.name, 'chars');
     // The network is the handle's prefix, in the same field: with no name
     // after it, it reads as an empty field, not as a choice already made.
     const network = /** @type {HTMLSelectElement} */ (h('select', { class: 'net', 'aria-label': t('me.network') }, NETWORKS.map((n) => h('option', { value: n, selected: p.handle?.network === n }, n))));
-    const handle = byteLimit(/** @type {HTMLInputElement} */ (h('input', { value: p.handle?.text ?? '', placeholder: t('me.handle.ph'), autocomplete: 'off', 'aria-label': t('me.handle.ph') })), 48);
-    const link = byteLimit(/** @type {HTMLInputElement} */ (h('input', { value: p.link, placeholder: 'kitsu.art', autocomplete: 'off', inputMode: 'url' })), 64);
+    const handle = textLimit(/** @type {HTMLInputElement} */ (h('input', { value: p.handle?.text ?? '', placeholder: t('me.handle.ph'), autocomplete: 'off', 'aria-label': t('me.handle.ph') })), LIMITS.handle, 'bytes');
+    const link = textLimit(/** @type {HTMLInputElement} */ (h('input', { value: p.link, placeholder: 'kitsu.art', autocomplete: 'off', inputMode: 'url' })), LIMITS.link, 'bytes');
     const error = h('div', { class: 'error' });
     const saved = h('span', { class: 'saved-mark', 'aria-live': 'polite' });
     const secret = h('div', { class: 'secret' });

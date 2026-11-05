@@ -21,7 +21,8 @@
 // This file puts them together, keeps them in step with the picture,
 // keeps the draft, and signs.
 
-import { h, icon, byteLimit, shake } from '../dom.js';
+import { h, icon, textLimit, shake } from '../dom.js';
+import { LIMITS } from '../text.js';
 import { t, date } from '../i18n.js';
 import { app, addOwn } from '../state.js';
 import { getMeta, setMeta } from '../store.js';
@@ -81,7 +82,7 @@ export function editorView() {
 
   // ---------------------------------------------------------- the parts --
   const canvas = createCanvas();
-  const title = byteLimit(/** @type {HTMLInputElement} */ (h('input', { class: 'ed-title', placeholder: t('ed.title.ph'), autocomplete: 'off', 'aria-label': t('ed.title') })), 32);
+  const title = textLimit(/** @type {HTMLInputElement} */ (h('input', { class: 'ed-title', placeholder: t('ed.title.ph'), autocomplete: 'off', 'aria-label': t('ed.title') })), LIMITS.title, 'chars');
   const byline = h('i', {});
   const card = h('div', { class: 'frame ed-card' }, h('div', { class: 'face front' }, canvas.el, h('div', { class: 'cap' }, title, byline)));
 

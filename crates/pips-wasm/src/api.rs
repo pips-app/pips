@@ -981,6 +981,13 @@ pub enum Scanned {
 
 /// Recognises scanned text: Base45 codes, Pips links (from printed cards)
 /// and paper keys.
+///
+/// The text is trimmed, which a code survives: Base45's space never ends a
+/// code (the last character of a group is at most 32), and begins one only
+/// when its first two bytes — kind and version — call for it. So these
+/// versions are never to be used: 12, 57, 102, 147, 192, 237 for 'E';
+/// 26, 71, 116, 161, 206, 251 for 'F'; 14, 59, 104, 149, 194, 239 for 'R'
+/// (a test keeps them).
 #[must_use]
 pub fn classify(text: &str) -> Scanned {
     let text = text.trim();
@@ -1043,10 +1050,14 @@ pub fn parse_link(url: &str) -> Result<Vec<u8>> {
     }
     let fragment = url.split_once('#').map(|(_, f)| f).ok_or_else(|| err("bad_link", "no card in link"))?;
     let bytes = b64::decode(fragment).ok_or_else(|| err("bad_link", "damaged link"))?;
-    if bytes.first() != Some(&b'E') {
-        return Err(err("bad_link", "no card in link"));
+    // The first byte names what follows, as in a code: a card's envelope,
+    // 'E'. Another capital letter is something a newer app puts in a link,
+    // so it is said to be that — not a broken link.
+    match bytes.first() {
+        Some(b'E') => Ok(bytes),
+        Some(b'A'..=b'Z') => Err(err("newer_version", "a newer kind of link")),
+        _ => Err(err("bad_link", "no card in link")),
     }
-    Ok(bytes)
 }
 
 // ---------------------------------------------------------------------- QR --

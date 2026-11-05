@@ -8,7 +8,8 @@
 // present one (a key made by mistake on a new phone, say); the cards on
 // the device stay.
 
-import { h, replace, byteLimit, shake } from '../dom.js';
+import { h, replace, textLimit, shake } from '../dom.js';
+import { LIMITS } from '../text.js';
 import { t, reason } from '../i18n.js';
 import { app, setIdentity, setProfile, applyBackup, backupBytes } from '../state.js';
 import { segmented } from '../kit/segmented.js';
@@ -213,7 +214,7 @@ export function onboarding(root, done, opts = {}) {
 
   /** The nick, for a new key or one restored without it. Whatever else the profile holds stays. @param {any} identity */
   function name(identity) {
-    const nick = byteLimit(/** @type {HTMLInputElement} */ (h('input', { autocomplete: 'nickname', placeholder: 'kitsu' })), 24);
+    const nick = textLimit(/** @type {HTMLInputElement} */ (h('input', { autocomplete: 'nickname', placeholder: 'kitsu' })), LIMITS.name, 'chars');
     const finish = async () => {
       await setIdentity(identity);
       await setProfile({ ...app.profile, nick: nick.value.trim() });

@@ -238,8 +238,14 @@ fn what_seal_writes_always_opens() {
     let mut b = sample();
     b.profile.link = "Kitsu.art".into();
     assert_eq!(seal(&b, &key(1), NONCE), Err(Error::Invalid("the profile breaks the card rules")));
+    // A nick is counted in characters: 23 Cyrillic ones fit, 25 do not,
+    // and nothing invisible.
     let mut b = sample();
-    b.profile.nick = "очень-очень-длинный-ник".into(); // 44 bytes
+    b.profile.nick = "очень-очень-длинный-ник".into();
+    assert!(seal(&b, &key(1), NONCE).is_ok());
+    b.profile.nick = "очень-очень-длинный-никнейм".into();
+    assert!(seal(&b, &key(1), NONCE).is_err());
+    b.profile.nick = "ali\u{200B}ce".into();
     assert!(seal(&b, &key(1), NONCE).is_err());
 }
 

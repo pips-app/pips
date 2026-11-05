@@ -28,7 +28,7 @@
 //!
 //! ```text
 //! created_ms   u64
-//! nick         str8                 ≤ 24 bytes
+//! nick         str8                 ≤ 24 characters, plain text
 //! network      u8                   0 = no handle
 //!   handle     str8                 (cond)
 //! link         str8                 card rules
@@ -124,7 +124,7 @@ pub struct Backup {
 /// The back of the person's own cards.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct Profile {
-    /// Author name, ≤ 24 bytes.
+    /// Author name, ≤ 24 characters (see [`pips_format::text`]).
     pub nick: String,
     /// One social handle.
     pub handle: Option<Handle>,
@@ -198,7 +198,7 @@ pub struct Issued {
 pub struct Sender {
     /// Their key.
     pub key: [u8; 32],
-    /// The nick they gave, ≤ 24 bytes.
+    /// The nick they gave, ≤ 24 characters (see [`pips_format::text`]).
     pub nick: String,
 }
 
@@ -350,7 +350,7 @@ pub fn encode(b: &Backup) -> Result<Vec<u8>, Error> {
     match &b.profile.handle {
         None => w.push(0),
         Some(h) => {
-            w.push(h.network as u8);
+            w.push(h.network.byte());
             str8(&mut w, &h.text)?;
         }
     }
@@ -543,8 +543,8 @@ fn entry(r: &mut Reader<'_>, version: u8) -> Result<Entry, Error> {
         let key = r.array()?;
         PublicKey::from_bytes(&key).map_err(|_| Error::Invalid("a sender key is not a key"))?;
         let nick = r.str8()?;
-        if nick.len() > pips_format::limits::MAX_AUTHOR {
-            return Err(Error::Invalid("a sender nick is too long"));
+        if !pips_format::text::plain(&nick, pips_format::limits::MAX_AUTHOR) {
+            return Err(Error::Invalid("a sender nick is not a nick"));
         }
         Some(Sender { key, nick })
     } else {
@@ -621,8 +621,8 @@ fn issue_log(r: &mut Reader<'_>) -> Result<IssueLog, Error> {
         let holder = r.array()?;
         PublicKey::from_bytes(&holder).map_err(|_| Error::Invalid("a holder key is not a key"))?;
         let nick = r.str8()?;
-        if nick.len() > pips_format::limits::MAX_AUTHOR {
-            return Err(Error::Invalid("a holder nick is too long"));
+        if !pips_format::text::plain(&nick, pips_format::limits::MAX_AUTHOR) {
+            return Err(Error::Invalid("a holder nick is not a nick"));
         }
         // In order of number; the same number again only to another holder.
         let same = copies.iter().rev().take_while(|c| c.edition == edition);
