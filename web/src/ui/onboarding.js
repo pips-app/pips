@@ -9,7 +9,7 @@
 // the device stay.
 
 import { h, replace, textLimit, shake } from '../dom.js';
-import { LIMITS } from '../text.js';
+import { LIMITS, finished } from '../text.js';
 import { t, reason } from '../i18n.js';
 import { app, setIdentity, setProfile, applyBackup, backupBytes } from '../state.js';
 import { segmented } from '../kit/segmented.js';
@@ -217,7 +217,7 @@ export function onboarding(root, done, opts = {}) {
     const nick = textLimit(/** @type {HTMLInputElement} */ (h('input', { autocomplete: 'nickname', placeholder: 'kitsu' })), LIMITS.name, 'chars');
     const finish = async () => {
       await setIdentity(identity);
-      await setProfile({ ...app.profile, nick: nick.value.trim() });
+      await setProfile({ ...app.profile, nick: finished(nick.value) });
       page.remove();
       done();
     };

@@ -1051,10 +1051,12 @@ pub fn parse_link(url: &str) -> Result<Vec<u8>> {
     let fragment = url.split_once('#').map(|(_, f)| f).ok_or_else(|| err("bad_link", "no card in link"))?;
     let bytes = b64::decode(fragment).ok_or_else(|| err("bad_link", "damaged link"))?;
     // The first byte names what follows, as in a code: a card's envelope,
-    // 'E'. Another capital letter is something a newer app puts in a link,
-    // so it is said to be that — not a broken link.
+    // 'E'. A capital letter this version does not know is something a newer
+    // app puts in a link, so it is said to be that — not a broken link. One
+    // it knows (a recipient code, a carousel frame) is no link's.
     match bytes.first() {
         Some(b'E') => Ok(bytes),
+        Some(b'R' | &pips_qr::carousel::KIND) => Err(err("bad_link", "not a card")),
         Some(b'A'..=b'Z') => Err(err("newer_version", "a newer kind of link")),
         _ => Err(err("bad_link", "no card in link")),
     }

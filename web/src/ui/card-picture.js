@@ -144,11 +144,12 @@ function wrap(g, text, width, max) {
 const fit = (g, text, width) => (g.measureText(text).width <= width ? text : cut(g, text, width));
 
 /**
- * The text cut, whole characters at a time (never half an emoji), until it
- * fits `width` with an ellipsis after it. @param {CanvasRenderingContext2D} g @param {string} text @param {number} width
+ * The text cut, a whole visible character at a time — never half an emoji
+ * or a flag — until it fits `width` with an ellipsis after it.
+ * @param {CanvasRenderingContext2D} g @param {string} text @param {number} width
  */
 function cut(g, text, width) {
-  const chars = Array.from(text);
-  while (chars.length && g.measureText(`${chars.join('')}…`).width > width) chars.pop();
-  return `${chars.join('')}…`;
+  const shown = Array.from(new Intl.Segmenter().segment(text), (x) => x.segment);
+  while (shown.length && g.measureText(`${shown.join('')}…`).width > width) shown.pop();
+  return `${shown.join('')}…`;
 }

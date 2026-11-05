@@ -163,6 +163,10 @@ fn a_newer_version_is_told_apart_from_damage() {
     let kind = |c: char| link.replacen("#R", &format!("#{c}"), 1);
     assert_eq!(code(parse_link(&kind('S'))), "newer_version");
     assert_eq!(code(parse_link(&kind('A'))), "bad_link");
+    // What this version knows — a recipient code ('R'), a carousel frame
+    // ('F') — is no link's, and not called newer.
+    assert_eq!(code(parse_link("https://pips.example/#UgE")), "bad_link");
+    assert_eq!(code(parse_link("https://pips.example/#RgE")), "bad_link");
     assert_eq!(parse_link(&link).unwrap(), env);
 }
 

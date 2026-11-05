@@ -305,12 +305,14 @@ fn plain_text_cases() {
 
 /// Every character, in the contexts that the rule tells apart — between
 /// letters, at the start, after and before a joiner of emoji and of Arabic,
-/// before a variation selector — folded into one number (FNV-1a). The app
+/// before a variation selector or a joiner at the end, in a flag's tags,
+/// between and after Mongolian letters, as a keycap's base — folded into
+/// one number (FNV-1a). The app
 /// computes the same over its own lists (tests/unit/text.test.mjs): if
 /// either list moves by one character, the numbers part.
 #[test]
 fn plain_text_fingerprint() {
-    let contexts: [(&str, &str); 7] = [
+    let contexts: [(&str, &str); 14] = [
         ("a", "b"),
         ("", "a"),
         ("\u{1F642}\u{200D}", ""),
@@ -318,16 +320,23 @@ fn plain_text_fingerprint() {
         ("", "\u{FE0F}"),
         ("\u{628}\u{200C}", ""),
         ("", "\u{200C}\u{628}"),
+        ("\u{1F3F4}\u{E0067}", "\u{E007F}"),
+        ("\u{1F642}\u{200C}", ""),
+        ("\u{2764}", "\u{200D}\u{1F525}"),
+        ("", "\u{200D}"),
+        ("\u{1820}", "\u{1820}"),
+        ("", "\u{FE0F}\u{20E3}"),
+        ("\u{1820}", ""),
     ];
     let mut hash: u32 = 0x811c_9dc5;
     for c in (0..=0x10_FFFF).filter_map(char::from_u32) {
-        let mut bits = 0u8;
+        let mut bits = 0u32;
         for (i, (before, after)) in contexts.iter().enumerate() {
             if pips_format::text::plain(&format!("{before}{c}{after}"), 32) {
                 bits |= 1 << i;
             }
         }
-        hash = (hash ^ u32::from(bits)).wrapping_mul(0x0100_0193);
+        hash = (hash ^ bits).wrapping_mul(0x0100_0193);
     }
     let pinned = include_str!("data/plain-text.txt").lines().find_map(|l| l.strip_prefix("=\t")).unwrap();
     assert_eq!(format!("{hash:08x}"), pinned);

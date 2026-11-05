@@ -4,7 +4,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { plainText, fitChars, LIMITS } from '../../web/src/text.js';
+import { plainText, finished, fitChars, LIMITS } from '../../web/src/text.js';
 
 const crate = new URL('../../crates/pips-format/', import.meta.url);
 
@@ -28,7 +28,11 @@ test('the cases the core is checked against: taken as they are, or cleaned', asy
 // trim while typing, so the start is checked as a save would: by trim().
 test('every character is taken or refused as the core does', async () => {
   const pinned = /^=\t(\w+)$/m.exec(await readFile(new URL('tests/data/plain-text.txt', crate), 'utf8'))?.[1];
-  const contexts = [['a', 'b'], ['', 'a'], ['\u{1F642}\u200D', ''], ['', '\u200D\u{1F642}'], ['', '\uFE0F'], ['\u0628\u200C', ''], ['', '\u200C\u0628']];
+  const contexts = [
+    ['a', 'b'], ['', 'a'], ['\u{1F642}\u200D', ''], ['', '\u200D\u{1F642}'], ['', '\uFE0F'], ['\u0628\u200C', ''], ['', '\u200C\u0628'],
+    ['\u{1F3F4}\u{E0067}', '\u{E007F}'], ['\u{1F642}\u200C', ''], ['\u2764', '\u200D\u{1F525}'], ['', '\u200D'], ['\u1820', '\u1820'],
+    ['', '\uFE0F\u20E3'], ['\u1820', ''],
+  ];
   let hash = 0x811c9dc5;
   for (let c = 0; c <= 0x10ffff; c++) {
     if (c >= 0xd800 && c <= 0xdfff) continue;
@@ -50,6 +54,11 @@ test('cleaning takes out only what is refused, and leaves what it typed between'
   assert.equal(plainText('a\uFE0F\u200D\u{1F642}'), 'a\u{1F642}', 'a joiner whose neighbour went goes too');
   assert.equal(plainText('\u{1F642}\u200D\u200B\u{1F642}'), '\u{1F642}\u200D\u{1F642}', 'what was between goes, the join stays');
   assert.equal(plainText('\u{1F469}\u200D'), '\u{1F469}', 'a joiner at the end, as a cut leaves it');
+  assert.equal(plainText('\u0645\u06CC\u200C', true), '\u0645\u06CC\u200C', 'a half-space being typed waits for the letter after it');
+  assert.equal(plainText('a\u200C', true), 'a', '…where a letter after it could join');
+  assert.equal(finished('\u0645\u06CC\u200C '), '\u0645\u06CC', 'and goes if none came');
+  assert.equal(finished('\u0D28\u0D4D\u200D'), '\u0D28\u0D4D\u200D', 'a chillu ends a word');
+  assert.equal(plainText('a\uD800b'), 'ab', 'a lone surrogate, which would be saved as U+FFFD');
   assert.equal(plainText('\u{1F3F4}\u{E0067}\u{E0062}'), '\u{1F3F4}', 'a flag cut short stays bare');
   const long = 'a\u200B'.repeat(200_000);
   const t0 = performance.now();
@@ -58,6 +67,13 @@ test('cleaning takes out only what is refused, and leaves what it typed between'
   assert.equal(plainText('\u{1F469}‍\u{1F4BB}'), '\u{1F469}‍\u{1F4BB}', 'an emoji whole');
   assert.equal(plainText('Лис '), 'Лис ', 'a space typed before the next word stays');
   assert.equal(fitChars('\u{1F98A}'.repeat(30), 24), '\u{1F98A}'.repeat(24), 'characters, not UTF-16 units');
+});
+
+test('a half-space is typed as any letter: one at a time, through the field\'s cleaning', () => {
+  let v = '';
+  for (const ch of '\u0645\u06CC\u200C\u062E\u0648\u0627\u0647\u0645') v = plainText(fitChars(plainText(v + ch, true), 24), true);
+  assert.equal(v, '\u0645\u06CC\u200C\u062E\u0648\u0627\u0647\u0645');
+  assert.equal(finished(v), v);
 });
 
 test('the limits are the core\'s', async () => {

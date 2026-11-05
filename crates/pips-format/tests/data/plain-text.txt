@@ -5,7 +5,7 @@
 # The line "=" is the fingerprint of every character in the contexts the
 # rule tells apart (see plain_text_fingerprint in tests/format.rs): both
 # must reach it, so that their lists are the same to the last character.
-=	ba510a2e
+=	41723ce1
 +	alice
 +	Лис у костра
 +	名前
@@ -61,3 +61,23 @@
 -	م‌
 -	‍ب
 -	❤️️
++	അവന്‍ പോയി
++	ന്‍
++	ᠬᠠᠷ᠎ᠠ
++	ᠠ᠋
++	င်‍္က
++	#️⃣
++	↔️
++	❤️‍🔥
++	🏳️‍⚧️
++	🏴󠁧󠁢󠁿
++	🏴󠁧󠁢󠁳󠁣󠁴󠁴󠁿
+-	a￰lice
+-	alice1️
+-	→‍→
+-	⠁‍⠁
+-	∀️
+-	a᠎b
+-	᠋
+-	a‍ b
+-	م‌ خ

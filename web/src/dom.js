@@ -124,9 +124,10 @@ export function icon(name) {
  */
 export function textLimit(input, max, unit) {
   input.addEventListener('input', () => {
-    // Cleaned again once cut: a cut can end on a joiner, or in a flag's tags.
+    // Cleaned again once cut: a cut can end in a flag's tags. Being typed, a
+    // joiner at the end waits for the next letter; finished() lets it go.
     const fit = unit === 'chars' ? fitChars : fitBytes;
-    const v = plainText(fit(plainText(input.value), max));
+    const v = plainText(fit(plainText(input.value, true), max), true);
     if (v !== input.value) input.value = v;
   });
   return input;

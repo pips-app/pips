@@ -2,7 +2,7 @@
 // Me: identity, what goes on the back of your cards, secrets, settings.
 
 import { h, replace, textLimit } from '../dom.js';
-import { LIMITS } from '../text.js';
+import { LIMITS, finished } from '../text.js';
 import { t, reason, language, date } from '../i18n.js';
 import { app, setProfile, makeBackup, restoreBackup, lastBackup, backupBytes } from '../state.js';
 import { isPersisted, persist, setMeta, memoryOnly } from '../store.js';
@@ -52,8 +52,8 @@ export function meView() {
     const save = async () => {
       clearTimeout(timer);
       const next = {
-        nick: nick.value.trim(),
-        handle: handle.value.trim() ? { network: network.value, text: handle.value.trim() } : null,
+        nick: finished(nick.value),
+        handle: finished(handle.value) ? { network: network.value, text: finished(handle.value) } : null,
         link: normalLink(link.value),
       };
       if (JSON.stringify(next) === JSON.stringify({ nick: app.profile.nick, handle: app.profile.handle ?? null, link: app.profile.link })) return;

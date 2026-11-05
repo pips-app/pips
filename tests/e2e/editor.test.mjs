@@ -557,6 +557,10 @@ test('a title as long in Russian as in English, nothing invisible in it, and it 
   // A right-to-left override or a zero-width space is taken out as it comes in.
   await p.fill('.ed-title', 'Сова\u200B в \u202Eночи');
   assert.equal(await p.inputValue('.ed-title'), 'Сова в ночи');
+  // A Persian half-space is typed before the letter it keeps apart, one key at a time.
+  await p.fill('.ed-title', '');
+  await p.type('.ed-title', '\u0645\u06CC\u200C\u062E\u0648\u0627\u0647\u0645');
+  assert.equal(await p.inputValue('.ed-title'), '\u0645\u06CC\u200C\u062E\u0648\u0627\u0647\u0645');
   await p.fill('.ed-title', 'Ж'.repeat(32));
   await p.click('.ed-sign');
   await p.locator('.turn:not([hidden])').waitFor();
