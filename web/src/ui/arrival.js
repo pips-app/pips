@@ -11,18 +11,35 @@ import { caught } from '../diagnostics.js';
 import { cardTitle } from './card.js';
 
 /** Core error codes meaning "well-formed, but a signature does not check out". */
-export const FORGED = new Set(['bad_signature', 'bad_key', 'not_author', 'bad_edition', 'unsigned']);
+const FORGED = new Set(['bad_signature', 'bad_key', 'not_author', 'bad_edition', 'unsigned']);
+
+/**
+ * Why a card was not taken, in the same words wherever it came from: made
+ * by a newer app (update, do not ask again), forged, the device full — or
+ * else what the way it came calls damage (`otherwise`, an i18n key).
+ * @param {unknown} e what was thrown @param {string} otherwise
+ */
+export function refusal(e, otherwise) {
+  const { code, name } = /** @type {any} */ (e) ?? {};
+  if (name === 'QuotaExceededError') return t('err.storage-full'); // the card checked out; the device could not keep it
+  return t(code === 'newer_version' ? 'receive.newer' : FORGED.has(code) ? 'receive.forged' : otherwise);
+}
 
 /** @param {{status: string, digest: string}} r */
 export function arrived(r) {
   go('collection', { open: r.digest });
-  toast(t(r.status === 'added' ? 'receive.got' : 'receive.dup'));
+  const e = app.cards.get(r.digest)?.rec.edition;
+  // A numbered copy of a card already here took its place: said, with its number.
+  if (r.status === 'numbered' && e) toast(t('receive.numbered', t('back.edition', e.edition, e.of)));
+  else toast(t(r.status === 'added' ? 'receive.got' : 'receive.dup'));
 }
 
+/** What damage is called, by the way the card came: a code is scanned again, a link was most likely cut short, a file changed on the way. */
+const DAMAGED = { code: 'receive.damaged', link: 'link.bad', file: 'receive.file-damaged' };
+
 /**
- * Opens, checks and keeps an envelope. A damaged one from a link was most
- * likely cut short on the way, and is called that.
- * @param {Uint8Array} envelope @param {'link'|'code'} [via]
+ * Opens, checks and keeps an envelope.
+ * @param {Uint8Array} envelope @param {keyof typeof DAMAGED} [via]
  * @returns {Promise<boolean>} whether it was taken
  */
 export async function arrive(envelope, via = 'code') {
@@ -31,10 +48,7 @@ export async function arrive(envelope, via = 'code') {
     return true;
   } catch (e) {
     caught(e, 'arrival');
-    const code = /** @type {any} */ (e)?.code;
-    // A card that checked out but could not be kept: the device is full, not the code damaged.
-    if (/** @type {any} */ (e)?.name === 'QuotaExceededError') toast(t('err.storage-full'));
-    else toast(t(FORGED.has(code) ? 'receive.forged' : via === 'link' ? 'link.bad' : 'receive.damaged'));
+    toast(refusal(e, DAMAGED[via]));
     return false;
   }
 }
@@ -62,16 +76,23 @@ export function peek(envelope) {
  * @param {Uint8Array[]} envelopes @param {number} [failed] files already found to hold no card, counted with the rest
  */
 export async function arriveMany(envelopes, failed = 0) {
-  if (envelopes.length === 1 && !failed) return void (await arrive(envelopes[0]));
+  if (envelopes.length === 1 && !failed) return void (await arrive(envelopes[0], 'file'));
   // Damaged or forged, a card not taken is counted the same: one line cannot say which was which.
   let added = 0, had = 0, bad = failed;
   for (const env of envelopes) {
     try {
       const r = await receive(app.core.openEnvelope(env));
-      if (r.status === 'added') added++; else had++;
+      if (r.status === 'duplicate') had++; else added++; // a numbered copy over a plain one is a card gained
     } catch (e) {
+      // The device full: no use going on, and said as such.
+      if (/** @type {any} */ (e)?.name === 'QuotaExceededError') {
+        caught(e, 'arrival');
+        go('collection');
+        return toast(t('err.storage-full'));
+      }
       bad++;
-      if (!(/** @type {any} */ (e)?.code)) caught(e, 'arrival'); // a code is an expected answer; anything else is worth the journal
+      // The core's refusals carry a code in words; anything else is worth the journal.
+      if (typeof (/** @type {any} */ (e)?.code) !== 'string') caught(e, 'arrival');
     }
   }
   go('collection');

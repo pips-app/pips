@@ -1,5 +1,6 @@
 # Fuzzing every parser of outside input (cargo-fuzz, libFuzzer, nightly).
-# A minute per target on each push and pull request; a quarter of an hour
+# A minute per target on each push to main and each pull request (unstable
+# is checked through its pull request into main); a quarter of an hour
 # once a week. The corpus carries over between runs through the cache; a
 # crashing input is kept as an artifact.
 name: Fuzz
@@ -23,19 +24,24 @@ jobs:
   fuzz:
     name: Fuzz ${{ matrix.target }}
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
-        target: [card, envelope, base45, palette, raster, backup, carousel]
+        target: [card, envelope, base45, palette, raster, backup, carousel, link, scan]
     env:
       SECONDS_PER_TARGET: ${{ github.event_name == 'schedule' && 900 || 60 }}
     steps:
       - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@nightly
+      # Pinned, as ci.yml pins stable: a red run should mean a change here,
+      # not a new nightly. Raise it on purpose.
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: nightly-2026-11-05
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: fuzz
-      - run: cargo install cargo-fuzz --locked
+      - run: cargo install cargo-fuzz --locked --version 0.13.2
       - uses: actions/cache@v6
         with:
           path: fuzz/corpus/${{ matrix.target }}

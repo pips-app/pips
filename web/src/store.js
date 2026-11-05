@@ -52,8 +52,14 @@ export async function open(name) {
     await openDb(name);
   } catch (e) {
     // Data that is there but cannot be used as it is must not be hidden
-    // behind an empty app; only a browser without storage falls back.
+    // behind an empty app; only a browser without storage falls back: none
+    // at all, or one that refuses it on purpose (a private window, storage
+    // turned off). Anything else — the browser's storage failing this once
+    // — may stand in front of a whole collection: the app stops and says so,
+    // rather than start empty over it.
     if (['newer_data', 'upgrade_failed'].includes(/** @type {any} */ (e)?.code)) throw e;
+    const refused = !globalThis.indexedDB || ['SecurityError', 'InvalidStateError'].includes(/** @type {any} */ (e)?.name);
+    if (!refused) throw Object.assign(new Error('storage would not open', { cause: e }), { code: 'store_unavailable' });
     console.warn('pips: IndexedDB unavailable, keeping data in memory', e);
     memoryOnly = true;
   }
@@ -200,8 +206,6 @@ export const setMeta = async (key, value) => (memoryOnly ? void mem.meta.set(key
 
 /** @returns {Promise<CardRecord[]>} */
 export const allCards = async () => (memoryOnly ? [...mem.cards.values()] : read('cards', (c) => c.getAll()));
-/** @param {string} digest @returns {Promise<CardRecord|undefined>} */
-export const getCard = async (digest) => (memoryOnly ? mem.cards.get(digest) : read('cards', (c) => c.get(digest)));
 /** @param {CardRecord} rec */
 export const putCard = async (rec) => (memoryOnly ? void mem.cards.set(rec.digest, rec) : write('cards', (c) => c.put(rec)));
 /** @param {string} digest */

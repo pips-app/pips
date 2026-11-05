@@ -15,6 +15,9 @@ const W = 1080, H = 1440, PAD = 60;
 const ART = W - 2 * PAD; // the drawing's square
 const QR = 380; // the code's square, quiet zone included: 3+ px a module
 const QUIET = 4;
+const GAP = 32; // between the name and the code
+/** Where things are on the picture: what the tests check it against. */
+export const LAYOUT = Object.freeze({ width: W, height: H, pad: PAD, art: ART, code: QR, gap: GAP });
 
 /**
  * @param {any} card @param {Uint8Array} envelope what a code of this card carries
@@ -44,7 +47,7 @@ export async function cardPicture(card, envelope) {
   // The code, bottom right, when one code holds the card.
   const plan = app.core.qrPlan(envelope);
   const top = PAD + ART + 44;
-  const textRight = plan.kind === 'single' ? W - PAD - QR - 32 : W - PAD;
+  const textRight = plan.kind === 'single' ? W - PAD - QR - GAP : W - PAD;
   if (plan.kind === 'single') drawQr(g, plan.text, W - PAD - QR, H - PAD - QR, QR, codeColours(shade));
 
   // The name and the artist, as on the card.
@@ -55,7 +58,8 @@ export async function cardPicture(card, envelope) {
   lines.forEach((l, i) => g.fillText(l, PAD, top + i * 74));
   g.fillStyle = shade.dim;
   g.font = '500 32px "IBM Plex Sans", system-ui, sans-serif';
-  g.fillText(card.author ? `@${card.author}` : '—', PAD, top + lines.length * 74 + 12);
+  // A name of 24 wide characters is wider than the room beside the code.
+  g.fillText(card.author ? fit(g, `@${card.author}`, textRight - PAD) : '—', PAD, top + lines.length * 74 + 12);
   g.font = '400 26px "IBM Plex Sans", system-ui, sans-serif';
   g.fillText(t(plan.kind === 'single' ? 'picture.scan' : 'picture.file'), PAD, H - PAD - 26);
 
@@ -120,27 +124,53 @@ const luma = (c) => {
 /** @param {number[]} a @param {number[]} b */
 const contrast = (a, b) => { const [x, y] = [luma(a), luma(b)].sort((p, q) => q - p); return (x + 0.05) / (y + 0.05); };
 
-/** The text in at most `max` lines of `width`, the last cut with an ellipsis. @param {CanvasRenderingContext2D} g @param {string} text @param {number} width @param {number} max */
-function wrap(g, text, width, max) {
-  const words = text.split(/\s+/), lines = [];
+/**
+ * The text in at most `max` lines of `width`, a cut one ending with an
+ * ellipsis. Lines break between words; a word wider than a line — a title
+ * in Japanese, which has no spaces, or one long name — between its
+ * characters. @param {CanvasRenderingContext2D} g @param {string} text @param {number} width @param {number} max
+ */
+export function wrap(g, text, width, max) {
+  /** @type {string[]} */
+  const lines = [];
   let line = '';
-  for (const w of words) {
+  for (const w of text.split(/\s+/)) {
     const next = line ? `${line} ${w}` : w;
-    if (g.measureText(next).width <= width || !line) line = next;
-    else { lines.push(line); line = w; }
+    if (g.measureText(next).width <= width) {
+      line = next;
+      continue;
+    }
+    if (line) lines.push(line);
+    line = '';
+    for (const ch of shown(w)) {
+      if (line && g.measureText(line + ch).width > width) {
+        lines.push(line);
+        line = ch;
+      } else line += ch;
+    }
   }
   if (line) lines.push(line);
+  // The last line shown says that more was cut.
   if (lines.length > max) {
     lines.length = max;
-    let last = lines[max - 1];
-    while (last && g.measureText(`${last}…`).width > width) last = last.slice(0, -1);
-    lines[max - 1] = `${last}…`;
+    lines[max - 1] = cut(g, lines[max - 1], width);
   }
-  // A single word longer than the room is cut too.
-  return lines.map((l) => {
-    if (g.measureText(l).width <= width) return l;
-    let s = l;
-    while (s && g.measureText(`${s}…`).width > width) s = s.slice(0, -1);
-    return `${s}…`;
-  });
+  return lines.map((l) => fit(g, l, width));
+}
+
+/** What a person sees as single characters: an emoji or a flag is one. @param {string} s */
+const shown = (s) => Array.from(new Intl.Segmenter().segment(s), (x) => x.segment);
+
+/** The text as it is if it fits `width`, or cut with an ellipsis. @param {CanvasRenderingContext2D} g @param {string} text @param {number} width */
+const fit = (g, text, width) => (g.measureText(text).width <= width ? text : cut(g, text, width));
+
+/**
+ * The text cut, a whole visible character at a time — never half an emoji
+ * or a flag — until it fits `width` with an ellipsis after it.
+ * @param {CanvasRenderingContext2D} g @param {string} text @param {number} width
+ */
+function cut(g, text, width) {
+  const chars = shown(text);
+  while (chars.length && g.measureText(`${chars.join('')}…`).width > width) chars.pop();
+  return `${chars.join('')}…`;
 }

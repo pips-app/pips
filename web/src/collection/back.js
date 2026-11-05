@@ -33,13 +33,16 @@ export function cardBack(entry, o) {
   const fact = (/** @type {string} */ k, /** @type {any} */ v, /** @type {string} */ cls = '') => facts.append(h('dt', {}, k), h('dd', { class: cls }, v));
   // A code names only its last sender, not the hands before: between the
   // artist and a sender who is not the artist, there may have been others.
+  // A copy made out to someone else has been in their hands at least, even
+  // when no sender is named: it is not from the artist's hands to these.
+  const me = app.identity.publicKey().hex;
   const via = rec.from && rec.from.key !== author?.hex;
+  const gap = via || (!rec.from && rec.edition && rec.edition.holder !== me);
   const chain = rec.mine
     ? t('back.yours')
-    : [by, via ? '…' : null, via ? `@${rec.from?.nick}` : null, t('back.to-you')].filter(Boolean).join(' → ');
-  fact(t('back.k.path'), via ? h('span', { title: t('back.path.gap') }, chain) : chain);
+    : [by, gap ? '…' : null, via ? `@${rec.from?.nick}` : null, t('back.to-you')].filter(Boolean).join(' → ');
+  fact(t('back.k.path'), gap ? h('span', { title: t('back.path.gap') }, chain) : chain);
   fact(t('back.k.when'), date(rec.received, { day: 'numeric', month: 'long', year: 'numeric' }));
-  const me = app.identity.publicKey().hex;
   if (rec.edition) {
     const ed = rec.edition;
     fact(t('back.k.copy'), `${t('back.edition', ed.edition, ed.of)} — ${ed.holder === me ? t('back.edition-yours') : t('back.edition-not-yours')}`);

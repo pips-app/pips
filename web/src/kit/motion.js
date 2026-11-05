@@ -88,6 +88,8 @@ export function frameLoop() {
       last = performance.now();
       requestAnimationFrame(tick);
     },
+    /** Whether anything is moving on it now (the browser tests wait for this to end). */
+    get running() { return running; },
   };
 }
 

@@ -2,6 +2,8 @@
 // Building DOM without innerHTML. Card text comes from strangers, so every
 // string becomes a text node; only the icon constants below are markup.
 
+import { keepTyped } from './text.js';
+
 /**
  * @param {string} tag
  * @param {Record<string, any>} [props]
@@ -112,16 +114,26 @@ export function icon(name) {
 }
 
 /**
- * Keeps an input within `max` bytes of UTF-8, the unit card limits are in
- * (a Cyrillic letter is two). `maxLength` counts characters, so it cannot.
+ * Keeps an input to the format's text rule (text.js: nothing invisible or
+ * reordering) and to its limit: in characters for titles and names, the
+ * same room in every script; in bytes of UTF-8 for a handle or a link,
+ * which are addresses (LIMITS in text.js). `maxLength` counts UTF-16
+ * units, so it can do neither.
  * @template {HTMLInputElement|HTMLTextAreaElement} T
- * @param {T} input @param {number} max @returns {T}
+ * @param {T} input @param {number} max @param {'chars'|'bytes'} unit @returns {T}
  */
-export function byteLimit(input, max) {
-  input.addEventListener('input', () => {
-    const v = fitBytes(input.value, max);
-    if (v !== input.value) input.value = v;
-  });
+export function textLimit(input, max, unit) {
+  const keep = () => {
+    const r = keepTyped(input.value, input.selectionStart ?? input.value.length, max, unit);
+    if (r.value === input.value) return;
+    input.value = r.value;
+    input.setSelectionRange(r.caret, r.caret);
+  };
+  // Not while a word is being composed (a phone's keyboard, Japanese or
+  // Chinese input): changing the field then breaks the composition. Once
+  // it is in, the field is kept as any typing is.
+  input.addEventListener('input', (e) => { if (!(/** @type {InputEvent} */ (e).isComposing)) keep(); });
+  input.addEventListener('compositionend', keep);
   return input;
 }
 

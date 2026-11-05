@@ -10,22 +10,28 @@ import { toast } from './shell.js';
 import { scanner } from './scan.js';
 import { caught } from '../diagnostics.js';
 import { showRecipientCode } from './edition.js';
-import { FORGED, arrived, arrive, arriveMany } from './arrival.js';
-import { MAGIC } from '../links.js';
+import { arrived, arrive, arriveMany, refusal } from './arrival.js';
+import { MAGIC, PUBLISHED, linkBase } from '../links.js';
 import { isPng, envelopeIn } from '../png-card.js';
-import { isBundle, unpackBundle } from '../bundle.js';
+import { isBundle, bundleIsNewer, unpackBundle } from '../bundle.js';
 
 /** The first byte of an envelope (pips-wasm). */
 const ENVELOPE = 0x45; // 'E'
 /** Larger than any file of cards (a thousand of them at most, bundle.js). */
 const MAX_FILE = 16 * 1024 * 1024;
+/** Larger than any file of one card: a card is at most 64 KiB
+ * (pips_format::MAX_PAYLOAD), and its envelope adds the signatures. */
+const MAX_ONE = 70 * 1024;
+/** The same code seen again by the camera within this is the same look at
+ * it; held longer, it is answered again — a toast missed is said once more. */
+const REPEAT_MS = 2500;
 
 export function receiveView() {
   const scan = scanner((text, from) => handle(text, from.picture), undefined, { onEnvelope: (env) => { stopCamera(); arrive(env); } });
   const bar = h('i');
   const progress = h('div', { class: 'progress', hidden: true }, bar);
   const fileInput = /** @type {HTMLInputElement} */ (h('input', { type: 'file', accept: '.pips,application/octet-stream,image/png', multiple: true, hidden: true, onchange: () => fromFile() }));
-  const linkInput = /** @type {HTMLInputElement} */ (h('input', { type: 'url', placeholder: t('receive.paste.placeholder'), autocomplete: 'off' }));
+  const linkInput = /** @type {HTMLInputElement} */ (h('input', { type: 'url', placeholder: t('receive.paste.placeholder'), autocomplete: 'off', 'aria-label': t('receive.paste.placeholder') }));
   const progressText = h('small', {});
   const el = h('section', { class: 'view' },
     h('div', { class: 'bar' }, h('div', { class: 'title' }, h('h1', {}, t('receive.title')))),
@@ -84,10 +90,11 @@ export function receiveView() {
       return env ? { envelopes: [env] } : { problem: 'receive.no-card-in-picture' };
     }
     if (isBundle(bytes)) {
+      if (bundleIsNewer(bytes)) return { problem: 'receive.newer' };
       const all = unpackBundle(bytes);
       return all ? { envelopes: all } : { problem: 'receive.file-damaged' };
     }
-    if (bytes.length > 70 * 1024 || !MAGIC.every((b, i) => bytes[i] === b)) return { problem: 'receive.not-pips' };
+    if (bytes.length > MAX_ONE || !MAGIC.every((b, i) => bytes[i] === b)) return { problem: 'receive.not-pips' };
     const body = bytes.subarray(MAGIC.length);
     // A file holds what a code holds — an envelope, every signature in it
     // checked — or, from before envelopes, a bare signed card.
@@ -105,7 +112,14 @@ export function receiveView() {
     const one = got.length === 1 ? got[0] : null;
     if (one && 'problem' in one) return toast(t(one.problem));
     if (one && 'payload' in one) {
-      try { done(await receivePayload(one.payload)); } catch { toast(t('receive.not-pips')); }
+      // A bare card from before envelopes, refused for what it is, as any
+      // file is: it is a Pips file, so «not Pips» would not be true.
+      try {
+        done(await receivePayload(one.payload));
+      } catch (e) {
+        caught(e, 'receive');
+        toast(refusal(e, 'receive.file-damaged'));
+      }
       return;
     }
     // Several files: a bare card from long ago, or a file with nothing in it, counts as not taken.
@@ -116,16 +130,25 @@ export function receiveView() {
     await arriveMany(envelopes, failed);
   }
 
-  /** @param {string} text */
   /** @param {string} text @param {boolean} [picked] chosen by the person now (a picture, a paste): never a repeat */
   async function handle(text, picked = false) {
     // A camera sees the same code many times a second; a picture chosen
     // again is chosen on purpose, and answered again.
     const now = Date.now();
-    if (!picked && text === lastText && now - lastAt < 2500) return;
+    if (!picked && text === lastText && now - lastAt < REPEAT_MS) return;
     lastText = text;
     lastAt = now;
 
+    // A link to a card, pasted: one cut short on the way is called that,
+    // as when it is opened.
+    if ([PUBLISHED, linkBase(location)].some((b) => text.startsWith(`${b}#`))) {
+      try {
+        return await accept(app.core.parseLink(text));
+      } catch (e) {
+        caught(e, 'receive');
+        return toast(refusal(e, 'link.bad'));
+      }
+    }
     let looksPips = false;
     try {
       const s = app.core.classify(text);
@@ -157,8 +180,7 @@ export function receiveView() {
     } catch (e) {
       // A damaged or forged code lands here: openEnvelope checks every signature.
       caught(e, 'receive');
-      const code = /** @type {any} */ (e)?.code;
-      toast(t(FORGED.has(code) ? 'receive.forged' : looksPips ? 'receive.damaged' : 'receive.not-pips'));
+      toast(refusal(e, looksPips ? 'receive.damaged' : 'receive.not-pips'));
     }
   }
 

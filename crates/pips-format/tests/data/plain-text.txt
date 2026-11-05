@@ -1,0 +1,83 @@
+# Plain text: the cases the core (pips_format::text::plain) and the app
+# (plainText in web/src/text.js) are both checked against, at 32 characters.
+# A line is "+" (taken as it is) or "-" (refused), a tab, then the text,
+# written as it is — the invisible characters are really there.
+# The line "=" is the fingerprint of every character in the contexts the
+# rule tells apart (see plain_text_fingerprint in tests/format.rs): both
+# must reach it, so that their lists are the same to the last character.
+=	41723ce1
++	alice
++	Лис у костра
++	名前
++	👩‍💻
++	🏳️‍🌈
++	👨‍👩‍👧
++	🏴󠁧󠁢󠁳󠁣󠁴󠁿
++	café
++	жжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжж
++	@kitsu и 🦊
+-	жжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжж
+-	 lead
+-	trail 
+-	a‮b
+-	‮ecila
+-	al​ice
+-	al‍ice
+-	1‍2
+-	‍👩
+-	👩‍
+-	a⁦b⁩
+-	﻿alice
+-	soft­hyphen
+-	ㅤ
+-	aㅤb
+-	a󠁧
+-	x‎y
+-	a	b
+-	ab
++	می‌خواهم
++	क्‍ष
++	❤️
++	1️⃣
++	©️
++	👁️‍🗨️
++	🏴‍☠️
++	🧑🏽‍💻
++	🏴
+-	a‌b
+-	a️
+-	a︀
+-	a󠄀
+-	a͏b
+-	a឴
+-	a᠋b
+-	⠀
+-	a b
+-	🏴󠁧󠁿
+-	🏴󠁧󠁢󠁳󠁣󠁴󠁴󠁴󠁿
+-	🏴󠁧󠁢
+-	🏴󠁇󠁂󠁿
+-	󠁧󠁢󠁿
+-	م‌
+-	‍ب
+-	❤️️
++	അവന്‍ പോയി
++	ന്‍
++	ᠬᠠᠷ᠎ᠠ
++	ᠠ᠋
++	င်‍္က
++	#️⃣
++	↔️
++	❤️‍🔥
++	🏳️‍⚧️
++	🏴󠁧󠁢󠁿
++	🏴󠁧󠁢󠁳󠁣󠁴󠁴󠁿
+-	a￰lice
+-	alice1️
+-	→‍→
+-	⠁‍⠁
+-	∀️
+-	a᠎b
+-	᠋
+-	a‍ b
+-	م‌ خ

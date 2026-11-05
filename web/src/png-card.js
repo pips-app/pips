@@ -73,11 +73,13 @@ export function withEnvelope(png, envelope) {
 
 /**
  * The envelope a PNG carries, or null: not a PNG, none in it, or one
- * that does not hold together. @param {Uint8Array} bytes
+ * that does not hold together. Two would be two ways to read one picture
+ * (another reader might take the other), so a picture with two holds none.
+ * @param {Uint8Array} bytes
  */
 export function envelopeIn(bytes) {
-  const chunks = walk(bytes);
-  const c = chunks?.find((x) => x.type === TYPE);
+  const ours = walk(bytes)?.filter((x) => x.type === TYPE) ?? [];
+  const c = ours.length === 1 ? ours[0] : null;
   if (!c || c.length < 2 || c.length > MAX_DATA) return null;
   const data = bytes.subarray(c.at + 8, c.at + 8 + c.length);
   if (data[0] !== LAYOUT) return null;
@@ -86,7 +88,8 @@ export function envelopeIn(bytes) {
 
 /**
  * The chunks of a PNG — where each starts and ends, its type and length —
- * or null if the file is not one, or breaks off, or a CRC is wrong.
+ * or null if the file is not one: no IHDR first, a break, a wrong CRC, or
+ * anything after IEND.
  * @param {Uint8Array} b
  * @returns {{type: string, at: number, end: number, length: number}[] | null}
  */
@@ -102,9 +105,10 @@ function walk(b) {
     const type = String.fromCharCode(b[at + 4], b[at + 5], b[at + 6], b[at + 7]);
     if (!/^[A-Za-z]{4}$/.test(type)) return null;
     if (crc32(b.subarray(at + 4, at + 8 + length)) !== u32(b, at + 8 + length)) return null;
+    if (out.length === 0 && type !== 'IHDR') return null;
     out.push({ type, at, end, length });
     at = end;
-    if (type === 'IEND') break;
+    if (type === 'IEND') return at === b.length ? out : null;
   }
-  return out.some((c) => c.type === 'IEND') ? out : null;
+  return null;
 }

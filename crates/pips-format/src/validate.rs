@@ -4,10 +4,9 @@
 use crate::limits::{MAX_EXTENSIONS, MAX_EXT_DATA, MAX_EXT_TAG};
 use crate::{Card, Error, Extension, Field};
 
-/// Printable text without control characters or surrounding whitespace.
+/// Plain text (see [`crate::text`]) of at most `max` characters.
 pub fn text(s: &str, max: usize, field: Field) -> Result<(), Error> {
-    let ok = s.len() <= max && !s.chars().any(char::is_control) && s.trim() == s;
-    if ok {
+    if crate::text::plain(s, max) {
         Ok(())
     } else {
         Err(Error::BadText(field))
@@ -17,7 +16,8 @@ pub fn text(s: &str, max: usize, field: Field) -> Result<(), Error> {
 pub fn handle(s: &str) -> Result<(), Error> {
     let ok = !s.is_empty()
         && s.len() <= crate::limits::MAX_HANDLE
-        && !s.chars().any(|c| c.is_control() || c.is_whitespace());
+        && !s.chars().any(char::is_whitespace)
+        && crate::text::plain(s, crate::limits::MAX_HANDLE);
     if ok {
         Ok(())
     } else {
@@ -106,6 +106,9 @@ pub fn card(c: &Card) -> Result<(), Error> {
     text(&c.title, MAX_TITLE, Field::Title)?;
     text(&c.author, MAX_AUTHOR, Field::Author)?;
     if let Some(h) = &c.handle {
+        if !h.network.valid() {
+            return Err(Error::BadHandle);
+        }
         handle(&h.text)?;
     }
     link(&c.link)?;

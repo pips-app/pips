@@ -83,11 +83,13 @@ impl PublicKey {
     ///
     /// # Errors
     ///
-    /// [`Error::BadKey`] for bytes that are not a point on the curve, or are
-    /// a small-order point, under which signatures prove nothing.
+    /// [`Error::BadKey`] for bytes that are not a point on the curve, are
+    /// a small-order point, under which signatures prove nothing, or are a
+    /// second spelling of a point (a coordinate past the field's prime):
+    /// one key, one way to write it, so the same key always compares equal.
     pub fn from_bytes(bytes: &[u8; 32]) -> Result<Self, Error> {
         let key = VerifyingKey::from_bytes(bytes).map_err(|_| Error::BadKey)?;
-        if key.is_weak() {
+        if key.is_weak() || key.to_edwards().compress().to_bytes() != *bytes {
             return Err(Error::BadKey);
         }
         Ok(Self(*bytes))

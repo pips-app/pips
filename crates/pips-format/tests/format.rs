@@ -201,7 +201,8 @@ fn header_rules() {
     assert_eq!(patch(3, 129), Err(Error::BadDimensions));
     assert_eq!(patch(4, 12), Err(Error::UnknownPalette(12)));
     assert_eq!(patch(5, 16), Err(Error::BadFrame));
-    assert_eq!(patch(8, 9), Err(Error::BadHandle));
+    // A network byte past the known ones is a newer app's network, not an
+    // error: see a_network_from_a_newer_app_is_kept.
 }
 
 #[test]
@@ -246,8 +247,11 @@ fn text_rules() {
         f(&mut c);
         encode(&c)
     };
-    assert!(with(&|c| c.title = "ж".repeat(16)).is_ok());
-    assert_eq!(with(&|c| c.title = "ж".repeat(17)), Err(Error::BadText(Field::Title)));
+    // In characters, the same for every script.
+    assert!(with(&|c| c.title = "ж".repeat(32)).is_ok());
+    assert_eq!(with(&|c| c.title = "ж".repeat(33)), Err(Error::BadText(Field::Title)));
+    assert!(with(&|c| c.author = "w".repeat(24)).is_ok());
+    assert_eq!(with(&|c| c.author = "щ".repeat(25)), Err(Error::BadText(Field::Author)));
     assert_eq!(with(&|c| c.title = " lead".into()), Err(Error::BadText(Field::Title)));
     assert_eq!(with(&|c| c.author = "a\u{202E}b\n".into()), Err(Error::BadText(Field::Author)));
     assert_eq!(
@@ -259,6 +263,83 @@ fn text_rules() {
     h[6] = 1;
     h.insert(7, 0xFF);
     assert_eq!(decode(&with_pixels(&h, &[0; 4])), Err(Error::BadText(Field::Title)));
+}
+
+/// A network a newer app added does not make the card unreadable: it is
+/// kept exactly (the card is signed with it) and read as "other".
+#[test]
+fn a_network_from_a_newer_app_is_kept() {
+    let mut c = Card::new(2, 2);
+    c.handle = Some(Handle { network: Network::Later(42), text: "@kitsu".into() });
+    let bytes = encode(&c).unwrap();
+    let back = decode(&bytes).unwrap();
+    assert_eq!(back.handle.as_ref().unwrap().network, Network::Later(42));
+    // A byte this version knows, or 0, is not a later network: it would read
+    // back as another one, or as no handle.
+    for b in [0, 3, 8] {
+        c.handle = Some(Handle { network: Network::Later(b), text: "@kitsu".into() });
+        assert_eq!(encode(&c), Err(Error::BadHandle), "{b}");
+    }
+    assert_eq!(encode(&back).unwrap(), bytes, "the same bytes again: a signature still holds");
+    assert_eq!(Network::from_byte(0), None, "0 is no handle");
+    assert_eq!(Network::from_byte(8), Some(Network::Other));
+}
+
+/// Nothing invisible or reordering; emoji whole. The same cases the app's
+/// own cleaning is checked against.
+#[test]
+fn plain_text_cases() {
+    let cases = include_str!("data/plain-text.txt");
+    let mut n = 0;
+    for line in cases.lines().filter(|l| !l.starts_with('#') && !l.starts_with('=')) {
+        let (mark, text) = line.split_once('\t').unwrap();
+        assert_eq!(pips_format::text::plain(text, 32), mark == "+", "{text:?}");
+        n += 1;
+    }
+    assert!(n > 20);
+    // And it is what a card's fields take.
+    let mut c = Card::new(2, 2);
+    c.author = "\u{202E}ecila".into();
+    assert_eq!(encode(&c), Err(Error::BadText(Field::Author)));
+}
+
+/// Every character, in the contexts that the rule tells apart — between
+/// letters, at the start, after and before a joiner of emoji and of Arabic,
+/// before a variation selector or a joiner at the end, in a flag's tags,
+/// between and after Mongolian letters, as a keycap's base — folded into
+/// one number (FNV-1a). The app
+/// computes the same over its own lists (tests/unit/text.test.mjs): if
+/// either list moves by one character, the numbers part.
+#[test]
+fn plain_text_fingerprint() {
+    let contexts: [(&str, &str); 14] = [
+        ("a", "b"),
+        ("", "a"),
+        ("\u{1F642}\u{200D}", ""),
+        ("", "\u{200D}\u{1F642}"),
+        ("", "\u{FE0F}"),
+        ("\u{628}\u{200C}", ""),
+        ("", "\u{200C}\u{628}"),
+        ("\u{1F3F4}\u{E0067}", "\u{E007F}"),
+        ("\u{1F642}\u{200C}", ""),
+        ("\u{2764}", "\u{200D}\u{1F525}"),
+        ("", "\u{200D}"),
+        ("\u{1820}", "\u{1820}"),
+        ("", "\u{FE0F}\u{20E3}"),
+        ("\u{1820}", ""),
+    ];
+    let mut hash: u32 = 0x811c_9dc5;
+    for c in (0..=0x10_FFFF).filter_map(char::from_u32) {
+        let mut bits = 0u32;
+        for (i, (before, after)) in contexts.iter().enumerate() {
+            if pips_format::text::plain(&format!("{before}{c}{after}"), 32) {
+                bits |= 1 << i;
+            }
+        }
+        hash = (hash ^ bits).wrapping_mul(0x0100_0193);
+    }
+    let pinned = include_str!("data/plain-text.txt").lines().find_map(|l| l.strip_prefix("=\t")).unwrap();
+    assert_eq!(format!("{hash:08x}"), pinned);
 }
 
 #[test]

@@ -11,6 +11,8 @@ One target per parser of outside input, for cargo-fuzz (nightly Rust):
 | `raster` | PNG / Aseprite, then the app's import | an imported picture is a valid card |
 | `backup` | backup bodies and whole files | |
 | `carousel` | a stream of carousel frames | |
+| `link` | scanned text and links: what they are, the card a link carries | a link or a code read as a card gives an envelope |
+| `scan` | camera frames for the QR reader | |
 
 ```sh
 cargo install cargo-fuzz

@@ -20,10 +20,10 @@
 //! frame       u8      frame shade, 0..=15
 //! frames      u8      (cond: animated) 2..=64
 //! delay_ms    u16     (cond: animated) 20..=5000
-//! title       u8+B    0..=32 bytes UTF-8
-//! author      u8+B    0..=24 bytes UTF-8
-//! handle      u8      network, 0 = none:
-//!   text      u8+B      (cond) 1..=48 bytes
+//! title       u8+B    0..=32 characters, plain text (see [`text`])
+//! author      u8+B    0..=24 characters, plain text
+//! handle      u8      network, 0 = none; 9..=255 a newer app's, kept:
+//!   text      u8+B      (cond) 1..=48 bytes, plain, no spaces
 //! link        u8+B    0..=64 bytes: https URL without "https://"
 //! ext_count   u8      0..=16, sorted by tag, tags unique
 //!   tag_head  u8        bit 7 critical, bits 0-6 tag length 1..=24
@@ -39,7 +39,18 @@
 //! sample artwork the unpacked form compressed smaller than four-bit
 //! packing in 21 cases of 22, and a third smaller than five-bit packing.
 //!
-//! A `.pips` file is the payload after the magic [`MAGIC`].
+//! A `.pips` file is [`MAGIC`], then one byte that names what follows:
+//!
+//! ```text
+//! 'E' (0x45)  an envelope (pips-sign): what the app writes for one card
+//! 'B' (0x42)  a bundle of envelopes (the app's bundle.js), several cards
+//! 0x01        a bare payload — a version-1 card, as this crate's
+//!             encode_file writes and the first app versions did
+//! ```
+//!
+//! So a card version must never be 0x42 or 0x45, nor another capital
+//! letter (kept for kinds to come); a newer app's kind or card version is
+//! told as such, not as damage.
 //!
 //! # Hostile input
 //!
@@ -62,6 +73,7 @@
 extern crate alloc;
 
 mod codec;
+pub mod text;
 mod validate;
 
 use alloc::string::String;
@@ -89,15 +101,16 @@ pub mod limits {
     pub const MAX_FRAME_SHADE: u8 = 15;
     /// Most raw pixel bytes (`width * height * frames`).
     pub const MAX_PIXELS: usize = 256 * 1024;
-    /// Largest whole payload.
-    pub const MAX_PAYLOAD: usize = 64 * 1024;
-    /// Text limits, in bytes.
+    /// Largest whole payload: what an envelope's 16-bit length can carry.
+    pub const MAX_PAYLOAD: usize = 65_535;
+    /// Title, in characters (see [`crate::text`]): the same room in every
+    /// script, at most four bytes each.
     pub const MAX_TITLE: usize = 32;
-    /// See [`MAX_TITLE`].
+    /// Author's name, and every nickname, in characters. See [`MAX_TITLE`].
     pub const MAX_AUTHOR: usize = 24;
-    /// See [`MAX_TITLE`].
+    /// Handle, in bytes: a handle is an address (`@name`), without spaces.
     pub const MAX_HANDLE: usize = 48;
-    /// See [`MAX_TITLE`].
+    /// Link, in bytes: ASCII only (see the link rule).
     pub const MAX_LINK: usize = 64;
     /// Extension limits.
     pub const MAX_EXTENSIONS: usize = 16;
@@ -193,17 +206,22 @@ pub struct Handle {
 
 /// Networks a handle can belong to. The byte values are part of the format.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[repr(u8)]
 #[allow(missing_docs)]
 pub enum Network {
-    Telegram = 1,
-    Instagram = 2,
-    X = 3,
-    Bluesky = 4,
-    Mastodon = 5,
-    Vk = 6,
-    TikTok = 7,
-    Other = 8,
+    Telegram,
+    Instagram,
+    X,
+    Bluesky,
+    Mastodon,
+    Vk,
+    TikTok,
+    Other,
+    /// A network a newer app knows (bytes 9 to 255): kept as it came, since
+    /// the card is signed with it, and shown as [`Network::Other`]. A new
+    /// network is then no reason for an older app to refuse the card.
+    /// `Later` with a byte of a known network, or 0, is not a network:
+    /// writing it is refused ([`Network::valid`]).
+    Later(u8),
 }
 
 impl Network {
@@ -211,6 +229,7 @@ impl Network {
     #[must_use]
     pub const fn from_byte(b: u8) -> Option<Self> {
         Some(match b {
+            0 => return None,
             1 => Self::Telegram,
             2 => Self::Instagram,
             3 => Self::X,
@@ -219,8 +238,31 @@ impl Network {
             6 => Self::Vk,
             7 => Self::TikTok,
             8 => Self::Other,
-            _ => return None,
+            b => Self::Later(b),
         })
+    }
+
+    /// Whether it is what its byte reads back as: not `Later` with the byte
+    /// of a network this version knows, nor with 0, which means no handle.
+    #[must_use]
+    pub const fn valid(self) -> bool {
+        !matches!(self, Self::Later(0..=8))
+    }
+
+    /// Its format byte.
+    #[must_use]
+    pub const fn byte(self) -> u8 {
+        match self {
+            Self::Telegram => 1,
+            Self::Instagram => 2,
+            Self::X => 3,
+            Self::Bluesky => 4,
+            Self::Mastodon => 5,
+            Self::Vk => 6,
+            Self::TikTok => 7,
+            Self::Other => 8,
+            Self::Later(b) => b,
+        }
     }
 }
 

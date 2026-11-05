@@ -416,9 +416,31 @@ impl ApiError {
     }
 }
 
+/// Every structure the core reads is at version 1 today — card, envelope,
+/// certificate, recipient code, carousel frame. So a higher version, a flag
+/// or extension marked as not to be skipped that this core does not know,
+/// or a built-in palette it does not have yet, were made by a newer app:
+/// said as such (`newer_version`), not as damage. Version 0 is no version
+/// at all, so damage.
+const fn newer(version: u8) -> bool {
+    version > 1
+}
+const _: () = assert!(pips_format::VERSION == 1, "newer() assumes every structure is at version 1");
+
 impl From<pips_format::Error> for ApiError {
     fn from(e: pips_format::Error) -> Self {
-        err("invalid_card", e)
+        use pips_format::Error as E;
+        let code = match e {
+            E::UnsupportedVersion(v) if newer(v) => "newer_version",
+            E::UnknownCriticalFlag(_) | E::UnknownCriticalExtension | E::UnknownPalette(_) => "newer_version",
+            // A field the person typed, named so that the app can say which.
+            E::BadText(pips_format::Field::Title) => "bad_title",
+            E::BadText(pips_format::Field::Author) => "bad_author",
+            E::BadHandle => "bad_handle",
+            E::BadLink => "bad_site",
+            _ => "invalid_card",
+        };
+        err(code, e)
     }
 }
 
@@ -433,6 +455,8 @@ impl From<pips_sign::Error> for ApiError {
             E::NotAuthor => "not_author",
             E::BadEdition => "bad_edition",
             E::BadNick => "bad_nick",
+            E::UnsupportedVersion(v) if newer(v) => "newer_version",
+            E::UnknownFlag(_) => "newer_version",
             _ => "invalid_code",
         };
         err(code, e)
@@ -962,6 +986,13 @@ pub enum Scanned {
 
 /// Recognises scanned text: Base45 codes, Pips links (from printed cards)
 /// and paper keys.
+///
+/// The text is trimmed, which a code survives: Base45's space never ends a
+/// code (the last character of a group is at most 32), and begins one only
+/// when its first two bytes — kind and version — call for it. So these
+/// versions are never to be used: 12, 57, 102, 147, 192, 237 for 'E';
+/// 26, 71, 116, 161, 206, 251 for 'F'; 14, 59, 104, 149, 194, 239 for 'R'
+/// (a test keeps them).
 #[must_use]
 pub fn classify(text: &str) -> Scanned {
     let text = text.trim();
@@ -1024,10 +1055,16 @@ pub fn parse_link(url: &str) -> Result<Vec<u8>> {
     }
     let fragment = url.split_once('#').map(|(_, f)| f).ok_or_else(|| err("bad_link", "no card in link"))?;
     let bytes = b64::decode(fragment).ok_or_else(|| err("bad_link", "damaged link"))?;
-    if bytes.first() != Some(&b'E') {
-        return Err(err("bad_link", "no card in link"));
+    // The first byte names what follows, as in a code: a card's envelope,
+    // 'E'. A capital letter this version does not know is something a newer
+    // app puts in a link, so it is said to be that — not a broken link. One
+    // it knows (a recipient code, a carousel frame) is no link's.
+    match bytes.first() {
+        Some(b'E') => Ok(bytes),
+        Some(b'R' | &pips_qr::carousel::KIND) => Err(err("bad_link", "not a card")),
+        Some(b'A'..=b'Z') => Err(err("newer_version", "a newer kind of link")),
+        _ => Err(err("bad_link", "no card in link")),
     }
-    Ok(bytes)
 }
 
 // ---------------------------------------------------------------------- QR --
@@ -1152,9 +1189,14 @@ impl Joiner {
     /// # Errors
     ///
     /// `bad_frame`; for a frame from another carousel the app may start a
-    /// new joiner.
+    /// new joiner. `newer_version` for a frame of a carousel version this
+    /// core does not read.
     pub fn push(&mut self, frame: &[u8]) -> Result<JoinProgress> {
-        match self.0.push(frame).map_err(|e| err("bad_frame", e))? {
+        let refused = |e: pips_qr::carousel::FrameError| {
+            let newer = matches!(e, pips_qr::carousel::FrameError::UnsupportedVersion(v) if newer(v));
+            err(if newer { "newer_version" } else { "bad_frame" }, e)
+        };
+        match self.0.push(frame).map_err(refused)? {
             Progress::Partial { have, need } => Ok(JoinProgress::Partial { have, need }),
             Progress::Done(bytes) => Ok(JoinProgress::Done { bytes }),
         }

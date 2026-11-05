@@ -22,12 +22,13 @@ import { FRAME_SHADES, cardTitle } from '../ui/card.js';
 
 /**
  * A copy of a card to hand on: one's own goes out signed by its author;
- * someone else's, as a copy passed on by this person (their nick on it).
+ * someone else's, as a copy passed on by this person — their nick on it,
+ * or, with none set, their key's short form: who it is, not a made-up name.
  * @param {import('../state.js').Entry} entry
  */
 export const copyEnvelope = (entry) => (entry.rec.mine
   ? app.identity.sealAsAuthor(entry.rec.payload, undefined)
-  : app.identity.sealAsSender(entry.rec.payload, app.profile.nick || 'pips'));
+  : app.identity.sealAsSender(entry.rec.payload, app.profile.nick || app.identity.publicKey().short));
 
 /**
  * Fills `body` and returns a function that stops what keeps running

@@ -11,6 +11,7 @@
 
 import { T, composite } from './model.js';
 import { rgb } from './color.js';
+import { finished } from '../text.js';
 
 /**
  * @param {import('./model.js').Doc} doc
@@ -56,7 +57,7 @@ export function toCard(doc, by) {
     card: {
       width: doc.size, height: doc.size, opaque: !empty, palette, frame: doc.shade,
       frames: shown.length, delay_ms: animated ? doc.delay : 0,
-      title: doc.title.trim(), author: by.nick, handle: by.handle ?? null, link: by.link ?? '', pixels,
+      title: finished(doc.title), author: by.nick, handle: by.handle ?? null, link: by.link ?? '', pixels,
     },
   };
 }

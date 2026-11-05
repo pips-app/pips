@@ -1,0 +1,24 @@
+# The app's core in WebAssembly, built into web/pkg: what the site ships and
+# the browser tests run on. Shared by CI and the repeated browser tests.
+name: Pips core in WebAssembly
+description: Builds web/pkg with the wasm-bindgen CLI that matches Cargo.lock.
+runs:
+  using: composite
+  steps:
+    # The same Rust as the Rust job in ci.yml: a new release should not
+    # change the core the browser tests run without a change here.
+    - uses: dtolnay/rust-toolchain@1.99.0
+      with:
+        targets: wasm32-unknown-unknown
+    - uses: Swatinem/rust-cache@v2
+    # The CLI must match the wasm-bindgen library version in Cargo.lock
+    # exactly; build-wasm.sh checks it again.
+    - name: wasm-bindgen-cli
+      shell: bash
+      run: |
+        want=$(awk '/^name = "wasm-bindgen"$/ { getline; gsub(/version = |"/, ""); print; exit }' Cargo.lock)
+        have=$(wasm-bindgen --version 2>/dev/null | awk '{ print $2 }' || true)
+        [ "$have" = "$want" ] || cargo install wasm-bindgen-cli --version "$want" --locked
+    - name: Build
+      shell: bash
+      run: scripts/build-wasm.sh

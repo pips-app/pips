@@ -35,7 +35,7 @@ export async function showRecipientCode() {
 export function editionPanel(digest) {
   const log = editionLog(digest);
   const n = log.issued.length;
-  const run = /** @type {HTMLInputElement} */ (h('input', { type: 'number', min: '1', max: '65535', inputMode: 'numeric', placeholder: t('edition.run.open') }));
+  const run = /** @type {HTMLInputElement} */ (h('input', { type: 'number', min: '1', max: '65535', inputMode: 'numeric', placeholder: t('edition.run.open'), 'aria-label': t('edition.run') }));
   const runOf = () => (n ? log.of : Math.min(65535, Math.max(0, Math.floor(Number(run.value) || 0))));
   const following = nextNumber(log);
   const out = log.of > 0 && following > log.of;
@@ -88,7 +88,7 @@ function scanRecipient(digest, of) {
     } catch (e) {
       done = false;
       caught(e, 'edition');
-      toast(/** @type {any} */ (e)?.code === 'run_out' ? t('edition.run-out') : `${t('err.generic')}: ${/** @type {any} */ (e)?.message ?? e}`);
+      toast(/** @type {any} */ (e)?.code === 'run_out' ? t('edition.run-out') : t('journal.toast')); // the rest journaled above
     }
   }, t('edition.point'));
   const sh = sheet(t('edition.scan.title'), () => s.stop());

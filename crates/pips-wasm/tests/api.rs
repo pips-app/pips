@@ -116,6 +116,81 @@ fn large_card_over_carousel() {
     assert_eq!(open_envelope(&joined).unwrap().card, card);
 }
 
+/// The code a refusal comes with.
+fn code<T>(r: Result<T, pips_wasm::api::ApiError>) -> &'static str {
+    r.map(drop).unwrap_err().code
+}
+
+/// What a newer app made is said as such — not as damage — so the person
+/// knows to update, not to ask for the card again. Version 0 is damage.
+#[test]
+fn a_newer_version_is_told_apart_from_damage() {
+    let me = id(1);
+    let payload = me.sign_card(&editor_card()).unwrap();
+    let env = me.seal_as_author(&payload, None).unwrap();
+    let with = |b: &[u8], at: usize, v: u8| {
+        let mut b = b.to_vec();
+        b[at] = v;
+        b
+    };
+    // A card: its version byte, a flag not to be skipped, a palette not built in yet.
+    assert_eq!(code(inspect_card(&with(&payload, 0, 2))), "newer_version");
+    assert_eq!(code(inspect_card(&with(&payload, 0, 0))), "invalid_card");
+    // The fifth byte is the palette: version, flags, width, height, palette.
+    assert_eq!(code(inspect_card(&with(&payload, 4, 200))), "newer_version");
+    // An envelope: its version byte, then a flag this core does not know.
+    assert_eq!(env[0], b'E');
+    assert_eq!(code(open_envelope(&with(&env, 1, 2))), "newer_version");
+    assert_eq!(code(open_envelope(&with(&env, 1, 0))), "invalid_code");
+    assert_eq!(code(open_envelope(&with(&env, 2, env[2] | 0x80))), "newer_version");
+    // A carousel frame of a newer carousel.
+    let mut card = editor_card();
+    (card.width, card.height) = (64, 64);
+    let mut s = 1u32;
+    card.pixels = (0..64 * 64)
+        .map(|_| {
+            s = s.wrapping_mul(1_103_515_245).wrapping_add(12_345);
+            u8::try_from(s >> 27).unwrap()
+        })
+        .collect();
+    let big = me.seal_as_author(&me.sign_card(&card).unwrap(), None).unwrap();
+    let Scanned::Frame { bytes } = classify(&Carousel::new(&big).unwrap().frame_text(0)) else { panic!() };
+    assert_eq!(Joiner::new().push(&with(&bytes, 1, 2)).unwrap_err().code, "newer_version");
+    assert_eq!(Joiner::new().push(&with(&bytes, 1, 0)).unwrap_err().code, "bad_frame");
+    // A link: after the #, the first byte names what follows — 'E' (R in
+    // base64url), a card. 'I' (S) is some newer kind; 0x01 (A) is nothing.
+    let link = card_link("https://pips.example/c", &env).unwrap();
+    let kind = |c: char| link.replacen("#R", &format!("#{c}"), 1);
+    assert_eq!(code(parse_link(&kind('S'))), "newer_version");
+    assert_eq!(code(parse_link(&kind('A'))), "bad_link");
+    // What this version knows — a recipient code ('R'), a carousel frame
+    // ('F') — is no link's, and not called newer.
+    assert_eq!(code(parse_link("https://pips.example/#UgE")), "bad_link");
+    assert_eq!(code(parse_link("https://pips.example/#RgE")), "bad_link");
+    assert_eq!(parse_link(&link).unwrap(), env);
+}
+
+/// A scanned code is trimmed: one whose text began with Base45's space
+/// would lose it. That happens only for some kind-and-version pairs, which
+/// are therefore never used (listed at `classify`).
+#[test]
+fn no_code_begins_with_a_space() {
+    const SPACE: u32 = 36; // its place in the Base45 alphabet
+    let first = |kind: u8, version: u8| (u32::from(kind) * 256 + u32::from(version)) % 45;
+    let reserved = |kind: u8| (1..=255u8).filter(|&v| first(kind, v) == SPACE).collect::<Vec<_>>();
+    assert_eq!(reserved(b'E'), [12, 57, 102, 147, 192, 237]);
+    assert_eq!(reserved(b'F'), [26, 71, 116, 161, 206, 251]);
+    assert_eq!(reserved(b'R'), [14, 59, 104, 149, 194, 239]);
+    // Today's codes, as made: their text keeps its first character.
+    let me = id(1);
+    let env = me.seal_as_author(&me.sign_card(&editor_card()).unwrap(), None).unwrap();
+    let QrPlan::Single { text } = qr_plan(&env).unwrap() else { panic!() };
+    for t in [text, me.recipient_code("kitsu").unwrap()] {
+        assert!(!t.starts_with(' ') && !t.ends_with(' '), "{t:?}");
+    }
+    assert!(!reserved(b'E').contains(&env[1]));
+}
+
 #[test]
 fn links_round_trip_and_refuse_tampering() {
     let me = id(1);
@@ -167,9 +242,19 @@ fn render_and_palettes() {
 
 #[test]
 fn editor_errors_have_codes() {
+    // A field the person typed is named, so that the app can say which.
     let mut card = editor_card();
     card.link = "javascript:alert(1)".into();
-    assert_eq!(share_size(&card).unwrap_err().code, "invalid_card");
+    assert_eq!(share_size(&card).unwrap_err().code, "bad_site");
+    let mut card = editor_card();
+    card.title = "a\u{202E}b".into();
+    assert_eq!(share_size(&card).unwrap_err().code, "bad_title");
+    let mut card = editor_card();
+    card.author = " kitsu".into();
+    assert_eq!(share_size(&card).unwrap_err().code, "bad_author");
+    let mut card = editor_card();
+    card.handle = Some(HandleData { network: "telegram".into(), text: "two words".into() });
+    assert_eq!(share_size(&card).unwrap_err().code, "bad_handle");
     let mut card = editor_card();
     card.handle = Some(HandleData { network: "myspace".into(), text: "@x".into() });
     assert_eq!(share_size(&card).unwrap_err().code, "invalid_card");

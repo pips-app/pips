@@ -6,7 +6,11 @@
   padding-left: max(20px, calc((100% - 1100px) / 2 + 16px)); padding-right: max(16px, calc((100% - 1100px) / 2 + 16px));
   background: linear-gradient(var(--void) calc(100% - 8px), #1a1b2100); pointer-events: none; } /* solid under the line below the title too */
 .collection-bar > * { pointer-events: auto; }
-.collection-bar .sub { display: flex; gap: 8px; align-items: center; min-height: 18px; white-space: nowrap; overflow: hidden; }
+.collection-bar .sub { display: flex; gap: 8px; align-items: center; min-height: 18px; white-space: nowrap; overflow: hidden; container-type: inline-size; }
+/* The word after the count, only where the longest line with it fits:
+   «по авторам · 1234 карточки» is 157 px at the 12 px of .sub. Narrower
+   (320 and 360 px phones), the number alone, rather than a cut word. */
+@container (max-width: 160px) { .level-word { display: none; } }
 .level-switch { border: 0; background: none; padding: 0; font: inherit; color: inherit; text-align: left;
   display: block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .level-switch:disabled { cursor: default; }
@@ -76,8 +80,10 @@
    room instead. */
 .back-in header { display: flex; gap: .6em; align-items: flex-start; }
 .back-in header > div { flex: 1; min-width: 0; }
-.back-in h3 { margin: 0; font: 600 1.5em/1.1 var(--serif); color: var(--shade-ink); text-wrap: balance; }
-.back-in .by { margin-top: .2em; color: var(--shade-dim); }
+/* A title or name of one long word (32 and 24 characters are allowed) breaks
+   rather than running under the pen and off the card. */
+.back-in h3 { margin: 0; font: 600 1.5em/1.1 var(--serif); color: var(--shade-ink); text-wrap: balance; overflow-wrap: anywhere; }
+.back-in .by { margin-top: .2em; color: var(--shade-dim); overflow-wrap: anywhere; }
 .back-in .pen { position: relative; flex: none; width: 2.6em; height: 2.6em; margin: -.3em -.4em 0 0; border: 0; border-radius: 50%; padding: 0; display: grid; place-items: center;
   background: color-mix(in srgb, var(--shade-ink) 8%, transparent); color: var(--shade-ink); }
 .back-in .pen .i { width: 1.3em; height: 1.3em; }

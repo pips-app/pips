@@ -1,12 +1,14 @@
 // @ts-check
 // Me: identity, what goes on the back of your cards, secrets, settings.
 
-import { h, replace, byteLimit } from '../dom.js';
+import { h, replace, textLimit } from '../dom.js';
+import { LIMITS, finished } from '../text.js';
 import { t, reason, language, date } from '../i18n.js';
 import { app, setProfile, makeBackup, restoreBackup, lastBackup, backupBytes } from '../state.js';
 import { isPersisted, persist, setMeta, memoryOnly } from '../store.js';
 import { toast, ask } from './shell.js';
 import { qrText } from './qr.js';
+import { download } from './send.js';
 import { identicon } from '../kit/identicon.js';
 import { BLANK_CARD } from './card.js';
 import { onboarding } from './onboarding.js';
@@ -21,20 +23,28 @@ export function meView() {
   const el = h('section', { class: 'view' },
     h('div', { class: 'bar' }, h('div', { class: 'title' }, h('h1', {}, t('me.title')))),
     h('div', { class: 'scroll' }, body));
+  /** A pause in typing long enough to keep what was typed. */
+  const SAVE_MS = 700;
+  /** Keeps a change still waiting for its pause; the profile's, once drawn. */
+  let flush = () => {};
+  // The app put away (another app, the screen off): a change typed just
+  // before is kept now — a phone may end the page without a word.
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') flush(); });
 
   async function render() {
     const key = app.identity.publicKey();
     const p = app.profile;
-    const nick = byteLimit(/** @type {HTMLInputElement} */ (h('input', { value: p.nick, autocomplete: 'nickname' })), 24);
+    const nick = textLimit(/** @type {HTMLInputElement} */ (h('input', { value: p.nick, autocomplete: 'nickname', 'aria-label': t('me.nick') })), LIMITS.name, 'chars');
     // The network is the handle's prefix, in the same field: with no name
     // after it, it reads as an empty field, not as a choice already made.
     const network = /** @type {HTMLSelectElement} */ (h('select', { class: 'net', 'aria-label': t('me.network') }, NETWORKS.map((n) => h('option', { value: n, selected: p.handle?.network === n }, n))));
-    const handle = byteLimit(/** @type {HTMLInputElement} */ (h('input', { value: p.handle?.text ?? '', placeholder: t('me.handle.ph'), autocomplete: 'off', 'aria-label': t('me.handle.ph') })), 48);
-    const link = byteLimit(/** @type {HTMLInputElement} */ (h('input', { value: p.link, placeholder: 'kitsu.art', autocomplete: 'off', inputMode: 'url' })), 64);
+    const handle = textLimit(/** @type {HTMLInputElement} */ (h('input', { value: p.handle?.text ?? '', placeholder: t('me.handle.ph'), autocomplete: 'off', 'aria-label': t('me.handle.ph') })), LIMITS.handle, 'bytes');
+    const link = textLimit(/** @type {HTMLInputElement} */ (h('input', { value: p.link, placeholder: 'kitsu.art', autocomplete: 'off', inputMode: 'url', 'aria-label': t('me.link') })), LIMITS.link, 'bytes');
     const error = h('div', { class: 'error' });
     const saved = h('span', { class: 'saved-mark', 'aria-live': 'polite' });
     const secret = h('div', { class: 'secret' });
     const lang = /** @type {HTMLSelectElement} */ (h('select', {
+      'aria-label': t('me.language'),
       onchange: async () => {
         await setMeta('language', lang.value);
         // In memory-only mode a reload would lose everything: apply on next start.
@@ -50,9 +60,10 @@ export function meView() {
     let timer = 0;
     const save = async () => {
       clearTimeout(timer);
+      timer = 0;
       const next = {
-        nick: nick.value.trim(),
-        handle: handle.value.trim() ? { network: network.value, text: handle.value.trim() } : null,
+        nick: finished(nick.value),
+        handle: finished(handle.value) ? { network: network.value, text: finished(handle.value) } : null,
         link: normalLink(link.value),
       };
       if (JSON.stringify(next) === JSON.stringify({ nick: app.profile.nick, handle: app.profile.handle ?? null, link: app.profile.link })) return;
@@ -60,7 +71,8 @@ export function meView() {
       try {
         app.core.shareSize({ ...BLANK_CARD, author: next.nick, handle: next.handle, link: next.link });
       } catch (e) {
-        error.textContent = /** @type {any} */ (e).message ?? t('err.generic');
+        if (!/^bad_/.test(/** @type {any} */ (e)?.code)) caught(e, 'profile'); // a field refused is an answer; anything else, worth the journal
+        error.textContent = reason('me.err', e);
         return;
       }
       error.textContent = '';
@@ -72,10 +84,11 @@ export function meView() {
       saved.classList.add('on');
     };
     for (const f of [nick, handle, link]) {
-      f.addEventListener('input', () => { clearTimeout(timer); timer = window.setTimeout(save, 700); });
+      f.addEventListener('input', () => { clearTimeout(timer); timer = window.setTimeout(save, SAVE_MS); });
       f.addEventListener('change', save);
     }
     network.addEventListener('change', save);
+    flush = () => { if (timer) save(); };
     const idNick = h('b', {}, p.nick || '—');
 
     // Each button shows its secret and, pressed again, hides it; only one
@@ -135,9 +148,10 @@ export function meView() {
     const own = [...app.cards.values()].filter((e) => e.rec.mine).length;
     if (own && !(await ask(t('me.switch.confirm', own), { yes: t('me.switch.go'), danger: true }))) return;
     const before = app.identity.publicKey().hex;
-    onboarding(document.body, () => {
+    onboarding(document.body, (restored) => {
       render();
-      toast(app.identity.publicKey().hex === before ? t('me.switch.same') : t('me.switch.done'));
+      const same = app.identity.publicKey().hex === before;
+      toast(t(same ? (restored ? 'me.switch.same' : 'me.switch.same-bare') : 'me.switch.done'));
     }, { switching: { file, cancel: () => {} } });
   }
 
@@ -194,11 +208,7 @@ async function backupGroup(switchKey) {
     try {
       const { bytes } = await makeBackup();
       const day = new Date().toISOString().slice(0, 10);
-      const a = /** @type {HTMLAnchorElement} */ (h('a', { href: URL.createObjectURL(new Blob([new Uint8Array(bytes)], { type: 'application/octet-stream' })), download: `pips-${day}.pipsbak` }));
-      document.body.append(a);
-      a.click();
-      a.remove();
-      setTimeout(() => URL.revokeObjectURL(a.href), 10_000);
+      download(new File([new Uint8Array(bytes)], `pips-${day}.pipsbak`, { type: 'application/octet-stream' }));
       toast(t('backup.saved'));
     } catch (e) {
       caught(e, 'backup');

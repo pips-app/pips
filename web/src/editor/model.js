@@ -165,13 +165,50 @@ function join(a, b) {
   return { k: 'group', items: [a, b] };
 }
 
+/** The draft's version: 3 since its history is kept as a list (see `history.save`). */
+export const DRAFT_VERSION = 3;
+
 /**
- * A draft kept before layers and holds (version 1: `frames` of one cel
- * each, steps without a layer), as it is now. Pure: the draft as stored is
- * left alone. @param {any} d `{v, doc, history, ...}` @returns {any}
+ * A draft kept by an older version, as it is now, a version at a time.
+ * Pure: the draft as stored is left alone. @param {any} d `{v, doc, history, ...}` @returns {any}
  */
 export function upgradeDraft(d) {
-  if (d?.v !== 1) return d;
+  if (d?.v === 1) d = layered(d);
+  if (d?.v === 2) d = listed(d);
+  return d;
+}
+
+/**
+ * Version 2 from 3: the history's tree from nested steps to a list. Walked
+ * with a list of its own, not by recursion: the nesting is as deep as the
+ * session was long. @param {any} d @returns {any}
+ */
+function listed(d) {
+  if (!d.history) return { ...d, v: 3 };
+  /** @type {any[]} */
+  const nodes = [];
+  let at = -1;
+  // The path to the current step, as places among kids, walked down from the root.
+  /** @type {any} */
+  let target = d.history.tree;
+  for (const i of d.history.at) target = target.k[i];
+  /** @type {[any, number][]} */
+  const todo = [[d.history.tree, -1]];
+  while (todo.length) {
+    const [n, p] = /** @type {[any, number]} */ (todo.pop());
+    if (n === target) at = nodes.length;
+    const here = nodes.length;
+    nodes.push({ e: n.e, l: n.l, f: n.f, t: n.t, x: n.x, p });
+    for (let i = n.k.length - 1; i >= 0; i--) todo.push([n.k[i], here]);
+  }
+  return { ...d, v: 3, history: { nodes, at } };
+}
+
+/**
+ * Version 1 to 2: a draft kept before layers and holds (`frames` of one cel
+ * each, steps without a layer). @param {any} d @returns {any}
+ */
+function layered(d) {
   /** @param {any} e @returns {any} */
   const step = (e) => {
     if (!e) return e;
@@ -443,10 +480,11 @@ export function createModel(doc, opts = {}) {
     // -------------------------------------------------------------- undo --
     undo: () => moved(history.undo()),
     redo: () => moved(history.redo()),
-    /** @param {any} n a step of history.line() */
+    /** @param {any} n a step of history.line() @returns {boolean} whether it was still there to go to */
     goTo(n) {
-      history.goTo(n);
+      if (!history.goTo(n)) return false;
       changed({ frame: n.frame, whole: true });
+      return true;
     },
   };
   return api;

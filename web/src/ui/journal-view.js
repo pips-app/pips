@@ -11,6 +11,7 @@ import { journal, fullReport } from '../diagnostics.js';
 import { VERSION } from '../version.js';
 import { fullSheet } from '../kit/full-sheet.js';
 import { toast } from './shell.js';
+import { download } from './send.js';
 
 /**
  * `fn` at most once per quarter second, however often it is asked for: the
@@ -99,10 +100,6 @@ async function send() {
     toast(t('journal.copied'));
     return;
   } catch { /* no clipboard here: a file instead */ }
-  const a = /** @type {HTMLAnchorElement} */ (h('a', { href: URL.createObjectURL(new Blob([text], { type: 'text/plain' })), download: 'pips-report.txt' }));
-  document.body.append(a);
-  a.click();
-  a.remove();
-  setTimeout(() => URL.revokeObjectURL(a.href), 10_000);
+  download(new File([text], 'pips-report.txt', { type: 'text/plain' }));
   toast(t('journal.saved'));
 }

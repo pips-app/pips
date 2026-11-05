@@ -28,7 +28,7 @@
 //!
 //! ```text
 //! created_ms   u64
-//! nick         str8                 ≤ 24 bytes
+//! nick         str8                 ≤ 24 characters, plain text
 //! network      u8                   0 = no handle
 //!   handle     str8                 (cond)
 //! link         str8                 card rules
@@ -44,10 +44,12 @@
 //!   certificate [105]               (cond) checked against the card
 //!   sender     [32] key + str8 nick (cond)
 //!   note       bytes16              ≤ MAX_NOTE, UTF-8
-//!   issue log  (cond, own cards only) the author's count of copies issued:
+//!   issue log  (cond, signed cards) the author's log of copies issued:
 //!     of       u16                  run size, 0 for open
-//!     count    u16                  copies issued, numbered 1..=count
+//!     count    u16                  copies in the log
 //!     copies:  edition u16, day u32, holder [32], nick str8
+//!              numbers from 1 up, never down, none past the run; one
+//!              number twice only for two holders
 //!   tags       u8 count ≤ MAX_TAGS, then each str8 ≤ MAX_TAG    (version 2)
 //! ```
 //!
@@ -55,7 +57,14 @@
 //! have none.
 //!
 //! The issue log matters as much as the cards: without it a restored
-//! device would start numbering copies from 1 again.
+//! device would start numbering copies from 1 again. It is the logs of
+//! all the author's devices joined, so it may skip a number (issued
+//! elsewhere, not yet joined here) or hold one twice (the same key on two
+//! phones, each giving it out): both happened, and both must be kept so
+//! the number is never given out again. It stays on a card after the key
+//! changes — the card is then a former self's, not "mine" — so switching
+//! back loses nothing. A backup holding either opens only in an app from
+//! November 2026 on, which is also the first able to write one.
 //!
 //! Decoding is strict like every Pips parser: every length is checked
 //! before use, reserved bits must be zero, nothing may follow the last
@@ -115,7 +124,7 @@ pub struct Backup {
 /// The back of the person's own cards.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct Profile {
-    /// Author name, ≤ 24 bytes.
+    /// Author name, ≤ 24 characters (see [`pips_format::text`]).
     pub nick: String,
     /// One social handle.
     pub handle: Option<Handle>,
@@ -153,18 +162,21 @@ pub struct Entry {
     pub sender: Option<Sender>,
     /// The person's own note.
     pub note: String,
-    /// For own cards: the copies issued so far.
+    /// For cards this person signed, now or with a former key: the copies
+    /// issued so far.
     pub issued: Option<IssueLog>,
     /// The person's tags, for finding cards: see [`check_tag`].
     pub tags: Vec<String>,
 }
 
-/// The copies of an own card the author has issued.
+/// The copies of a card its author has issued, from every device of theirs.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IssueLog {
     /// Run size, 0 for an open run.
     pub of: u16,
-    /// Every copy, in order: `copies[i].edition == i + 1`.
+    /// Every copy, by number, from 1 up and none past the run. A number may
+    /// be missing (issued on a device not joined yet) or twice, to two
+    /// holders (one key on two phones): see the module documentation.
     pub copies: Vec<Issued>,
 }
 
@@ -186,7 +198,7 @@ pub struct Issued {
 pub struct Sender {
     /// Their key.
     pub key: [u8; 32],
-    /// The nick they gave, ≤ 24 bytes.
+    /// The nick they gave, ≤ 24 characters (see [`pips_format::text`]).
     pub nick: String,
 }
 
@@ -337,8 +349,9 @@ pub fn encode(b: &Backup) -> Result<Vec<u8>, Error> {
     str8(&mut w, &b.profile.nick)?;
     match &b.profile.handle {
         None => w.push(0),
+        Some(h) if !h.network.valid() => return Err(Error::Invalid("unknown network")),
         Some(h) => {
-            w.push(h.network as u8);
+            w.push(h.network.byte());
             str8(&mut w, &h.text)?;
         }
     }
@@ -531,8 +544,8 @@ fn entry(r: &mut Reader<'_>, version: u8) -> Result<Entry, Error> {
         let key = r.array()?;
         PublicKey::from_bytes(&key).map_err(|_| Error::Invalid("a sender key is not a key"))?;
         let nick = r.str8()?;
-        if nick.len() > pips_format::limits::MAX_AUTHOR {
-            return Err(Error::Invalid("a sender nick is too long"));
+        if !pips_format::text::plain(&nick, pips_format::limits::MAX_AUTHOR) {
+            return Err(Error::Invalid("a sender nick is not a nick"));
         }
         Some(Sender { key, nick })
     } else {
@@ -547,8 +560,8 @@ fn entry(r: &mut Reader<'_>, version: u8) -> Result<Entry, Error> {
         return Err(Error::Invalid("an own card without a signature"));
     }
     let issued = if flags & 1 << 6 != 0 {
-        if !mine {
-            return Err(Error::Invalid("an issue log on someone else's card"));
+        if author.is_none() {
+            return Err(Error::Invalid("an issue log on an unsigned card"));
         }
         Some(issue_log(r)?)
     } else {
@@ -575,9 +588,13 @@ fn tags(r: &mut Reader<'_>) -> Result<Vec<String>, Error> {
     Ok(out)
 }
 
-/// A tag is one word as the app writes it: 1..=[`MAX_TAG`] bytes, no
-/// spaces, control characters or `#`, and no capital letters, so `#Cats`
-/// and `#cats` can never be two tags.
+/// A tag is one word: 1..=[`MAX_TAG`] bytes of plain text (the format's
+/// rule, [`pips_format::text`]) with no space and no `#`.
+///
+/// Not checked: case. The app writes tags in lower case, so that `#Cats`
+/// and `#cats` are one tag, but whether a letter is a capital is a matter
+/// of the compiler's Unicode tables — and whether a backup opens must not
+/// be (`𝐀` was taken by the app and refused here).
 ///
 /// # Errors
 ///
@@ -586,8 +603,8 @@ pub fn check_tag(t: &str) -> Result<(), Error> {
     if t.is_empty() || t.len() > MAX_TAG {
         return Err(Error::Invalid("a tag is empty or too long"));
     }
-    if t.chars().any(|c| c.is_whitespace() || c.is_control() || c == '#' || c.is_uppercase()) {
-        return Err(Error::Invalid("a tag is not one lower-case word"));
+    if !pips_format::text::plain(t, MAX_TAG) || t.chars().any(|c| pips_format::text::space(c) || c == '#') {
+        return Err(Error::Invalid("a tag is not one word"));
     }
     Ok(())
 }
@@ -599,21 +616,26 @@ fn issue_log(r: &mut Reader<'_>) -> Result<IssueLog, Error> {
     if n.saturating_mul(39) > r.0.len() {
         return Err(SHORT);
     }
-    if of != 0 && n > usize::from(of) {
-        return Err(Error::Invalid("more copies than the run"));
-    }
-    let mut copies = Vec::with_capacity(n);
-    for i in 0..n {
+    let mut copies: Vec<Issued> = Vec::with_capacity(n);
+    for _ in 0..n {
         let edition = u16::from_le_bytes(r.array()?);
-        if usize::from(edition) != i + 1 {
-            return Err(Error::Invalid("copies out of order"));
+        if edition == 0 || (of != 0 && edition > of) {
+            return Err(Error::Invalid("a copy number outside the run"));
         }
         let day = u32::from_le_bytes(r.array()?);
         let holder = r.array()?;
         PublicKey::from_bytes(&holder).map_err(|_| Error::Invalid("a holder key is not a key"))?;
         let nick = r.str8()?;
-        if nick.len() > pips_format::limits::MAX_AUTHOR {
-            return Err(Error::Invalid("a holder nick is too long"));
+        if !pips_format::text::plain(&nick, pips_format::limits::MAX_AUTHOR) {
+            return Err(Error::Invalid("a holder nick is not a nick"));
+        }
+        // In order of number; the same number again only to another holder.
+        let same = copies.iter().rev().take_while(|c| c.edition == edition);
+        if copies.last().is_some_and(|c| c.edition > edition) {
+            return Err(Error::Invalid("copies out of order"));
+        }
+        if same.clone().any(|c| c.holder == holder) {
+            return Err(Error::Invalid("a copy listed twice"));
         }
         copies.push(Issued { edition, day, holder, nick });
     }

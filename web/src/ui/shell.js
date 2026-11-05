@@ -63,6 +63,8 @@ export function go(name, arg) {
 
 export const currentView = () => current;
 
+/** How long a toast stays: read at a glance; with a button, long enough to reach for it. */
+const TOAST_MS = 2400, TOAST_ACTION_MS = 5000;
 const toastText = h('span');
 const toastAction = h('button', { class: 'text-btn' });
 const toastEl = h('div', { class: 'toast', role: 'status', hidden: true }, toastText, toastAction);
@@ -83,7 +85,7 @@ export function toast(text, action) {
   // with them would jump while it is read (a series of moves updates it).
   toastEl.hidden = false;
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => (toastEl.hidden = true), action ? 5000 : 2400);
+  toastTimer = setTimeout(() => (toastEl.hidden = true), action ? TOAST_ACTION_MS : TOAST_MS);
 }
 
 /**

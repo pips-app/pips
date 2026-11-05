@@ -2,3 +2,6 @@
 **/*.rs.bk
 /web/pkg/
 /_site/
+/tests/e2e/results-*/
+/vendor/*/target
+/vendor/*/Cargo.lock

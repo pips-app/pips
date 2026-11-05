@@ -1,5 +1,6 @@
-# Checks every push and pull request; publishes the app to GitHub Pages
-# from main. Pages must be set to "GitHub Actions" in the repository
+# Checks every push to main and every pull request — unstable through its
+# pull request into main, or by hand (Run workflow) — and publishes the app
+# to GitHub Pages from main. Pages must be set to "GitHub Actions" in the repository
 # settings (Settings → Pages → Source).
 name: CI
 
@@ -23,6 +24,8 @@ jobs:
   rust:
     name: Rust — format, lints, tests
     runs-on: ubuntu-24.04
+    # Far above a normal run: a hang ends here, not after GitHub's six hours.
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
       # Pinned: every Rust release adds lints, and CI should not turn red
@@ -34,6 +37,8 @@ jobs:
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo test --workspace
+      # The fixed copy of rqrr (vendor/rqrr/PIPS.md): its own tests, the fix's among them.
+      - run: cargo test --manifest-path vendor/rqrr/Cargo.toml --lib
 
   # Known vulnerabilities and unsoundness in the dependencies (RustSec).
   # Not needed by the deploy: an advisory published tomorrow should show
@@ -41,6 +46,7 @@ jobs:
   audit:
     name: Dependencies — RustSec advisories
     runs-on: ubuntu-24.04
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
       - uses: taiki-e/install-action@v2
@@ -51,29 +57,27 @@ jobs:
   msrv:
     name: Rust 1.85.1 (declared minimum)
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@1.85.1
       - uses: Swatinem/rust-cache@v2
-      - run: cargo check --workspace --lib --bins
+      # The tests too: whoever builds with the declared minimum can run them.
+      - run: cargo test --workspace
 
   site:
     name: Web — WebAssembly core, type check, site
     runs-on: ubuntu-24.04
+    timeout-minutes: 75
     steps:
       - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: ./.github/actions/core
+      # One Node for every step here, the browser tests' own.
+      - uses: actions/setup-node@v7
         with:
-          targets: wasm32-unknown-unknown
-      - uses: Swatinem/rust-cache@v2
-      # The CLI must match the wasm-bindgen library version in Cargo.lock
-      # exactly; build-wasm.sh checks it again.
-      - name: wasm-bindgen-cli
-        run: |
-          want=$(awk '/^name = "wasm-bindgen"$/ { getline; gsub(/version = |"/, ""); print; exit }' Cargo.lock)
-          have=$(wasm-bindgen --version 2>/dev/null | awk '{ print $2 }' || true)
-          [ "$have" = "$want" ] || cargo install wasm-bindgen-cli --version "$want" --locked
-      - run: scripts/build-wasm.sh
+          node-version: 24
+          cache: npm
+          cache-dependency-path: tests/e2e/package-lock.json
       - name: Type-check the app
         run: npx --yes -p typescript@5.9.3 tsc -p web/jsconfig.json
       # The interface's plain parts (layout, filters, springs), without a browser.
@@ -81,11 +85,6 @@ jobs:
         run: node --test --test-reporter=spec --test-reporter-destination=stdout --test-reporter=./tests/gh-annotate.mjs --test-reporter-destination=stdout tests/unit/*.test.mjs
       # The app's journeys in a real browser, with the core just built:
       # import, exchange by QR, refusals, numbered copies, backups.
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 24
-          cache: npm
-          cache-dependency-path: tests/e2e/package-lock.json
       - name: Browser tests
         working-directory: tests/e2e
         env:
@@ -112,6 +111,7 @@ jobs:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: [rust, site]
     runs-on: ubuntu-24.04
+    timeout-minutes: 15
     permissions:
       pages: write
       id-token: write

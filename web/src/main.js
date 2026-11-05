@@ -4,11 +4,12 @@
 
 import { install, attach, locate, onUncaught, journal } from './diagnostics.js';
 import { h } from './dom.js';
+import { holdFocus } from './kit/focus.js';
 import { loadCore, isDevHost } from './core.js';
 import { t, setLanguage, defaultLanguage } from './i18n.js';
 import { app, load, hasIdentity } from './state.js';
 import { cardInAddress } from './links.js';
-import { arrive, peek } from './ui/arrival.js';
+import { arrive, peek, refusal } from './ui/arrival.js';
 import { getMeta, onReplaced, onBlocked } from './store.js';
 import { mountShell, go, toast, currentView } from './ui/shell.js';
 import { openJournal } from './ui/journal-view.js';
@@ -49,9 +50,9 @@ async function main() {
     document.querySelector('.halt')?.remove(); // the other tabs let go
   } catch (e) {
     const code = /** @type {any} */ (e)?.code;
-    if (code !== 'newer_data' && code !== 'upgrade_failed') throw e;
+    if (!['newer_data', 'upgrade_failed', 'store_unavailable'].includes(code)) throw e;
     journal.error(e, 'storage');
-    halt(code === 'newer_data' ? 'store.newer' : 'store.upgrade-failed');
+    halt(code === 'newer_data' ? 'store.newer' : code === 'upgrade_failed' ? 'store.upgrade-failed' : 'store.unavailable');
     return;
   }
   await attach();
@@ -78,18 +79,20 @@ async function main() {
       told = true;
       toast(t('journal.toast'), { label: t('journal.toast.go'), run: () => openJournal() });
     });
+    // Stored cards this version cannot open are said once a start, not hidden.
+    if (app.unreadable && !incoming) toast(t('store.unreadable', app.unreadable), { label: t('journal.toast.go'), run: () => openJournal() });
     take();
     // Another link opened while the app is up (the same tab, a new address).
     addEventListener('hashchange', () => { incoming = fromAddress(); take(); });
   };
   /** The card from a link, now that there is a key to keep it under. */
   const take = () => {
-    if (incoming === 'bad') toast(t('link.bad'));
+    if (incoming && 'refused' in incoming) toast(incoming.refused);
     else if (incoming) arrive(incoming, 'link');
     incoming = null;
   };
   if (hasIdentity()) start();
-  else onboarding(root, start, { arrival: incoming && incoming !== 'bad' ? peek(incoming) : null });
+  else onboarding(root, start, { arrival: incoming && !('refused' in incoming) ? peek(incoming) : null });
 
   if ('serviceWorker' in navigator && !isDevHost()) offerUpdates().catch(() => {});
 }
@@ -101,11 +104,14 @@ async function main() {
  */
 function halt(key, reload = true) {
   document.querySelectorAll('.halt').forEach((e) => e.remove());
-  document.body.append(h('div', { class: 'halt', role: 'alertdialog', 'aria-modal': 'true' },
+  const el = h('div', { class: 'halt', role: 'alertdialog', 'aria-modal': 'true', 'aria-label': t(`${key}.title`) },
     h('div', {}, h('h1', {}, t(`${key}.title`)), h('p', {}, t(key)),
       reload ? h('button', { class: 'btn key wide', onclick: () => freshReload() }, t('store.reload')) : '',
       // What went wrong can still be read and sent: the journal lives in memory until storage opens.
-      key === 'store.upgrade-failed' ? h('button', { class: 'btn wide', style: { marginTop: '8px' }, onclick: () => openJournal() }, t('journal.open')) : '')));
+      key === 'store.upgrade-failed' ? h('button', { class: 'btn wide', style: { marginTop: '8px' }, onclick: () => openJournal() }, t('journal.open')) : ''));
+  document.body.append(el);
+  // The keyboard and a screen reader are in it, not on the page beneath; there is no closing it.
+  holdFocus(el, { first: el.querySelector('button') });
 }
 
 /**
@@ -131,8 +137,9 @@ async function freshReload() {
 }
 
 /**
- * The envelope in the address, taken out of it; 'bad' for a link that is
- * not whole (cut short by a messenger, say). @returns {Uint8Array|'bad'|null}
+ * The envelope in the address, taken out of it; or why it cannot be taken:
+ * a link that is not whole (cut short by a messenger, say), or one a newer
+ * version of Pips made. @returns {Uint8Array|{refused: string}|null}
  */
 function fromAddress() {
   const found = cardInAddress(location.href);
@@ -140,8 +147,8 @@ function fromAddress() {
   history.replaceState(null, '', found.rest);
   try {
     return app.core.parseLink(found.link);
-  } catch {
-    return 'bad';
+  } catch (e) {
+    return { refused: refusal(e, 'link.bad') };
   }
 }
 

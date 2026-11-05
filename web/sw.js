@@ -9,8 +9,11 @@
 const VERSION = 'pips-dev';
 const FILES = ['./', 'index.html'];
 
+// Past the browser's HTTP cache (cache: 'reload'): GitHub Pages lets files
+// be kept ten minutes, and two releases closer than that would otherwise
+// fill the new version's cache with the last one's files.
 self.addEventListener('install', (e) => {
-  e.waitUntil(caches.open(VERSION).then((c) => c.addAll(FILES)));
+  e.waitUntil(caches.open(VERSION).then((c) => c.addAll(FILES.map((f) => new Request(f, { cache: 'reload' })))));
 });
 
 // The person chose to take the new version now (main.js reloads the page).
