@@ -35,8 +35,10 @@
    the wheel still zoom. */
 @media (max-width: 520px) { .collection-bar .zoom { display: none; } }
 .collection-bar .zoom .ib:disabled, .feed-nav .ib:disabled { opacity: .35; cursor: default; }
+/* At the window's edges, not a column's: on a wide screen the card and its
+   neighbours fill the middle, and arrows over them hid what they move to. */
 .feed-nav { position: absolute; z-index: 42; left: 0; right: 0; top: 50%; pointer-events: none; display: flex; justify-content: space-between;
-  padding: 0 max(16px, calc((100% - 1100px) / 2 + 16px)); }
+  padding: 0 16px; }
 .feed-nav[hidden] { display: none; }
 .feed-nav .ib { pointer-events: auto; width: 44px; height: 44px; background: var(--raise2); box-shadow: 0 6px 16px -8px #000; }
 .frame.on-stage { position: absolute; left: 0; top: 0; transform-origin: 0 0; will-change: transform; }
@@ -56,7 +58,8 @@
   padding: 0 4px 8px; pointer-events: none; }
 .stage-label b { font: 600 1em/1.1 var(--serif); color: var(--text); text-wrap: balance; }
 .stage-label span { font-size: .68em; color: var(--text3); margin-top: 3px; }
-.stage-label.by-author b { font-family: var(--sans); overflow-wrap: anywhere; line-height: 1.15; }
+/* A name in the same letters as a month: only allowed to break, being one word. */
+.stage-label.by-author b { overflow-wrap: anywhere; line-height: 1.15; }
 
 /* -------------------------------------------------------------- turn -- */
 /* Above every feed card: the turning card is always the one in front. */

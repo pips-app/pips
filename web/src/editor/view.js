@@ -403,7 +403,13 @@ export function editorView() {
     clearTimeout(measure);
     measure = window.setTimeout(() => {
       const r = toCard(model.doc, by());
-      const c = 'card' in r ? issuable(r.card, app.core.shareSize(r.card)) : null;
+      let c = null;
+      try {
+        c = 'card' in r ? issuable(r.card, app.core.shareSize(r.card)) : null;
+      } catch (e) {
+        // A field the card cannot carry is an answer, not a fault; anything else is worth the journal.
+        if (!/^bad_/.test(/** @type {any} */ (e)?.code)) caught(e, 'draw');
+      }
       cost = c?.cost ?? null;
       refused = c?.refused ?? null;
       paintMeter();

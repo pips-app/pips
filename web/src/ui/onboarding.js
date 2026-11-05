@@ -66,7 +66,7 @@ export function onboarding(root, done, opts = {}) {
   }
 
   /** The back button of a first-run screen. @param {() => void} to */
-  const backTo = (to) => h('button', { class: 'btn wide', 'aria-label': t('onb.back'), onclick: to }, '←');
+  const backTo = (to) => h('button', { class: 'btn wide', onclick: to }, t('onb.back'));
 
   /** A new key's words. Nothing is stored until the nick: back is back. @param {any} [identity] the one shown before, coming back to it */
   function create(identity = app.core.Identity.fromSeed(crypto.getRandomValues(new Uint8Array(32)))) {

@@ -66,7 +66,11 @@ export function meView() {
         handle: finished(handle.value) ? { network: network.value, text: finished(handle.value) } : null,
         link: normalLink(link.value),
       };
-      if (JSON.stringify(next) === JSON.stringify({ nick: app.profile.nick, handle: app.profile.handle ?? null, link: app.profile.link })) return;
+      // Back to what is kept: nothing to save, and nothing wrong any more.
+      if (JSON.stringify(next) === JSON.stringify({ nick: app.profile.nick, handle: app.profile.handle ?? null, link: app.profile.link })) {
+        error.textContent = '';
+        return;
+      }
       // The core is the judge of what a card may carry.
       try {
         app.core.shareSize({ ...BLANK_CARD, author: next.nick, handle: next.handle, link: next.link });

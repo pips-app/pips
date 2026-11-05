@@ -125,6 +125,8 @@ export function icon(name) {
 export function textLimit(input, max, unit) {
   const keep = () => {
     const r = keepTyped(input.value, input.selectionStart ?? input.value.length, max, unit);
+    // The field is full: it says so with a shake, as a refused tap does.
+    if (r.full) shake(input.closest('.field') ?? input);
     if (r.value === input.value) return;
     input.value = r.value;
     input.setSelectionRange(r.caret, r.caret);

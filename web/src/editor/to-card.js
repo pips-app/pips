@@ -11,7 +11,7 @@
 
 import { T, composite } from './model.js';
 import { rgb } from './color.js';
-import { finished } from '../text.js';
+import { finished, LIMITS } from '../text.js';
 
 /**
  * @param {import('./model.js').Doc} doc
@@ -57,7 +57,15 @@ export function toCard(doc, by) {
     card: {
       width: doc.size, height: doc.size, opaque: !empty, palette, frame: doc.shade,
       frames: shown.length, delay_ms: animated ? doc.delay : 0,
-      title: finished(doc.title), author: by.nick, handle: by.handle ?? null, link: by.link ?? '', pixels,
+      title: titleOf(doc.title), author: by.nick, handle: by.handle ?? null, link: by.link ?? '', pixels,
     },
   };
 }
+
+/**
+ * The title as a card takes it: cleaned, and no longer than its limit. The
+ * field keeps to the limit as it is typed — but not while a phone's
+ * keyboard is still composing a word (dom.js), when it can hold more.
+ * @param {string} s
+ */
+const titleOf = (s) => finished(Array.from(finished(s)).slice(0, LIMITS.title).join(''));

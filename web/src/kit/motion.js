@@ -16,7 +16,7 @@ export const REDUCED = typeof matchMedia === 'function' && matchMedia('(prefers-
 export const SPRINGS = /** @type {const} */ ({
   zoom: [120, 22], // the zoom axis: months · weeks · feed · card
   scroll: [170, 26], // settling a grid after a fling past an edge
-  feed: [130, 23], // the feed's position, in cards
+  feed: [100, 20], // the feed's position, in cards: one card to the next unhurried, no overshoot
   turn: [150, 22], // turning a card over: weight without wobble
   tilt: [160, 24],
   drag: [160, 22], // a card let go after a pull
