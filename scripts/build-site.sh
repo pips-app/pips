@@ -1,13 +1,15 @@
 #!/bin/sh
 # Assembles the published site in _site/ from web/.
 #
-# Needs node (for the module list, scripts/module-graph.mjs).
+# Needs node (for the module list, scripts/module-graph.mjs, and the
+# files' hashes).
 #
 # - Development files stay out: web/dev/ (sample art), the core stub, notes,
 #   TypeScript declarations.
 # - The service worker gets a version from the commit and the list of
 #   exactly the files published, so the offline cache can never miss a
-#   module or keep an old one.
+#   module or keep an old one; and the SHA-256 of each, so that it serves
+#   from the cache only what was published.
 #
 #   scripts/build-site.sh [VERSION]      (default: short commit hash)
 set -eu
@@ -41,5 +43,17 @@ grep -q 'rel="modulepreload" href="src/main.js"' _site/index.html || { echo "ind
 # The same version, for the app's own reports.
 sed -i -e "s|^export const VERSION = .*|export const VERSION = '$version';|" _site/src/version.js
 grep -q "^export const VERSION = '$version';" _site/src/version.js || { echo "src/version.js template changed: VERSION not set" >&2; exit 1; }
+# Last, once no file changes any more: what each published file must be,
+# for the worker to check its cache against (see sw.js). The page itself is
+# also asked for as './'.
+hashes=$(cd _site && printf '%s\n' $list | grep -v '^sw\.js$' | node -e '
+  const { createHash } = require("node:crypto"), { readFileSync } = require("node:fs");
+  const h = {};
+  for (const f of readFileSync(0, "utf8").split("\n").filter(Boolean)) h[f] = createHash("sha256").update(readFileSync(f)).digest("base64");
+  h["./"] = h["index.html"];
+  process.stdout.write(JSON.stringify(h));
+')
+sed -i -e "s|^const HASHES = .*|const HASHES = $hashes;|" _site/sw.js
+grep -q '^const HASHES = {"' _site/sw.js || { echo "sw.js template changed: HASHES not set" >&2; exit 1; }
 
 echo "_site: $(printf '%s\n' $list | wc -l) files, $(du -sh _site | cut -f1), cache $version"

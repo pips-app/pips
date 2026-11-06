@@ -106,3 +106,40 @@ test('the published app installs, works with no network, and takes a new release
   assert.deepEqual(errors, [], 'no errors in the page');
   await ctx.close();
 });
+
+test('a file changed in the offline cache by another site on the address is never served: fetched again, or not at all', { skip: firefox && 'Chromium only: a service worker needs a secure origin' }, async () => {
+  env.serving = 1;
+  const ctx = await env.browser.newContext({ viewport: { width: 390, height: 844 }, locale: 'ru-RU' });
+  const p = await ctx.newPage();
+  await p.goto(`${env.origin}/`);
+  await p.locator('text=Создать ключ').waitFor();
+  await until(() => p.evaluate(() => !!navigator.serviceWorker.controller), 'the page controlled by the service worker', 10_000);
+
+  // Another project on the same address — any page there may write to any
+  // cache: it rewrites the app's page in the app's own cache, and puts a
+  // module of its own in a cache of its own.
+  const plant = () => p.evaluate(async () => {
+    const page = new Response('<!doctype html><title>planted</title><script>window.planted = true</script>', { headers: { 'content-type': 'text/html' } });
+    const own = await caches.open((await caches.keys()).find((k) => k.startsWith('pips-')) ?? '');
+    for (const u of ['/', '/index.html']) await own.put(u, page.clone());
+    await (await caches.open('another-project')).put('/src/version.js', new Response("export const VERSION = 'planted';", { headers: { 'content-type': 'text/javascript' } }));
+  });
+  const planted = () => p.evaluate(() => /** @type {any} */ (window).planted === true || document.title === 'planted');
+
+  // Online: the published page instead, and the cache put right.
+  await plant();
+  await p.reload();
+  await p.locator('text=Создать ключ').waitFor();
+  assert.equal(await planted(), false, 'the planted page is not served');
+  assert.equal(await p.evaluate(async () => (await import('/src/version.js')).VERSION), 'pips-test-two', 'nor a module from another cache');
+  assert.equal(await p.evaluate(async () => (await (await caches.match('/', { cacheName: 'pips-test-two' }))?.text())?.includes('planted')), false, 'the cached page put back');
+
+  // Offline: nothing rather than the planted page.
+  await plant();
+  env.serving = null;
+  await p.reload().catch(() => {});
+  await p.waitForURL(/^chrome-error:/); // the browser's own "no connection" page
+  assert.equal(await planted(), false, 'not served offline either');
+  env.serving = 1;
+  await ctx.close();
+});
