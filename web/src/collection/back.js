@@ -9,7 +9,8 @@
 
 import { h, icon, fitBytes, shake } from '../dom.js';
 import { t, date } from '../i18n.js';
-import { cardTitle } from '../ui/card.js';
+import { cardTitle, nameNote } from '../ui/card.js';
+import { identicon } from '../kit/identicon.js';
 import { app, setNote, setTags, daysLeft, NOTE_BYTES } from '../state.js';
 import { toast, ask } from '../ui/shell.js';
 import { normalTag, MAX_TAGS } from './query.js';
@@ -47,7 +48,14 @@ export function cardBack(entry, o) {
     const ed = rec.edition;
     fact(t('back.k.copy'), `${t('back.edition', ed.edition, ed.of)} — ${ed.holder === me ? t('back.edition-yours') : t('back.edition-not-yours')}`);
   }
-  fact(t('back.k.sign'), author ? `✓ ${t('back.sign.ok')} · ${author.short}` : t('back.sign.none'), author ? 'ok' : 'bad');
+  // What a signature proves: this key signed it — not who holds the key.
+  // The key's mark beside it, so that keys are told apart at a glance.
+  if (author) fact(t('back.k.sign'), [h('span', { class: 'back-mark' }, identicon(author.hex)), `${t('back.sign.key')} ${author.short}`], 'ok');
+  else fact(t('back.k.sign'), t('back.sign.none'), 'bad');
+  // A name already known here with another key, said with it (authors.js):
+  // the artist's, and the last sender's when that is someone else.
+  const notes = [author && nameNote(card.author, author.hex), via && rec.from ? nameNote(rec.from.nick, rec.from.key) : null].filter(Boolean);
+  for (const n of notes) fact(t('back.k.name'), n, 'bad');
   for (const l of links(card)) fact(l.k, l.v);
   fact(t('back.k.pic'), t('back.tech', card.width, card.height, rec.payload.length, card.frames));
   if (rec.state === 'trash') fact(t('back.k.bin'), t('back.bin-left', daysLeft(rec)), 'bad');

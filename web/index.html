@@ -6,7 +6,7 @@
 <!-- Everything comes from this origin; nothing else may run or load. The
      identity key lives in this origin's storage, so this policy is what
      protects it. 'wasm-unsafe-eval' only permits compiling the core. -->
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; img-src 'self' blob: data:; font-src 'self'; connect-src 'self'; media-src 'self' blob:; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; img-src 'self' blob: data:; font-src 'self'; connect-src 'self'; media-src 'self' blob:; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'; require-trusted-types-for 'script'; trusted-types pips">
 <meta name="referrer" content="no-referrer">
 <meta name="theme-color" content="#1a1b21">
 <meta name="color-scheme" content="dark">

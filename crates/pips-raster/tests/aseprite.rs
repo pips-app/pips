@@ -67,8 +67,8 @@ fn tilemaps_are_refused() {
     assert_eq!(decode(&load("tilemap.aseprite")), Err(Error::Unsupported("tilemap layers")));
 }
 
-/// Offsets of the layer chunks in the first frame.
-fn layer_chunks(b: &[u8]) -> Vec<usize> {
+/// Start and kind of each chunk in the first frame.
+fn chunks(b: &[u8]) -> Vec<(usize, u16)> {
     let u32_at = |p: usize| u32::from_le_bytes(b[p..p + 4].try_into().unwrap()) as usize;
     let n = match u32_at(128 + 12) {
         0 => usize::from(u16::from_le_bytes([b[128 + 6], b[128 + 7]])),
@@ -77,12 +77,20 @@ fn layer_chunks(b: &[u8]) -> Vec<usize> {
     let mut at = 128 + 16;
     let mut out = Vec::new();
     for _ in 0..n {
-        if u16::from_le_bytes([b[at + 4], b[at + 5]]) == 0x2004 {
-            out.push(at + 6);
-        }
+        out.push((at, u16::from_le_bytes([b[at + 4], b[at + 5]])));
         at += u32_at(at);
     }
     out
+}
+
+/// Offsets of the layer chunks' data in the first frame.
+fn layer_chunks(b: &[u8]) -> Vec<usize> {
+    chunks(b).into_iter().filter(|&(_, k)| k == 0x2004).map(|(at, _)| at + 6).collect()
+}
+
+/// Offset of the first cel chunk's data in the first frame.
+fn first_cel(b: &[u8]) -> usize {
+    chunks(b).into_iter().find(|&(_, k)| k == 0x2005).unwrap().0 + 6
 }
 
 #[test]
@@ -101,6 +109,58 @@ fn translucent_groups_are_refused() {
     let group = layer_chunks(&b)[3];
     b[group + 12] = 128;
     assert_eq!(decode(&b), Err(Error::Unsupported("groups with opacity or a blend mode")));
+}
+
+#[test]
+fn a_second_cel_on_one_layer_in_one_frame_is_refused() {
+    let mut b = load("basic-16x16.aseprite");
+    let at = first_cel(&b) - 6;
+    let len = u32::from_le_bytes(b[at..at + 4].try_into().unwrap()) as usize;
+    let copy = b[at..at + len].to_vec();
+    b.splice(at + len..at + len, copy);
+    // The file, the frame and the frame's chunk count grow by one cel.
+    let grow = |b: &mut Vec<u8>, p: usize, by: u32| {
+        let v = u32::from_le_bytes(b[p..p + 4].try_into().unwrap()) + by;
+        b[p..p + 4].copy_from_slice(&v.to_le_bytes());
+    };
+    grow(&mut b, 0, u32::try_from(len).unwrap());
+    grow(&mut b, 128, u32::try_from(len).unwrap());
+    let old = u16::from_le_bytes([b[128 + 6], b[128 + 7]]);
+    b[128 + 6..128 + 8].copy_from_slice(&(old + 1).to_le_bytes());
+    if u32::from_le_bytes(b[128 + 12..128 + 16].try_into().unwrap()) != 0 {
+        grow(&mut b, 128 + 12, 1);
+    }
+    assert_eq!(decode(&b), Err(Error::Malformed("two cels on one layer in one frame")));
+}
+
+/// A cel moved partly or wholly off the canvas shows just its part on it.
+#[test]
+fn a_cel_off_the_canvas_shows_only_what_is_on_it() {
+    let b = load("basic-16x16.aseprite");
+    let at = first_cel(&b);
+    let base = decode(&b).unwrap();
+    let (w, h) = (base.width as usize, base.height as usize);
+    let (x0, y0) = (i16::from_le_bytes([b[at + 2], b[at + 3]]), i16::from_le_bytes([b[at + 4], b[at + 5]]));
+    for (dx, dy) in [(-3i16, 0i16), (0, 5), (-20, 0), (0, 20), (7, -9)] {
+        let mut m = b.clone();
+        m[at + 2..at + 4].copy_from_slice(&(x0 + dx).to_le_bytes());
+        m[at + 4..at + 6].copy_from_slice(&(y0 + dy).to_le_bytes());
+        let moved = decode(&m).unwrap();
+        for y in 0..h {
+            for x in 0..w {
+                // Where this pixel was before the move, if on the canvas.
+                let back = |v: usize, d: i16, size: usize| {
+                    usize::try_from(i32::try_from(v).unwrap() - i32::from(d)).ok().filter(|&s| s < size)
+                };
+                let want = match (back(x, dx, w), back(y, dy, h)) {
+                    (Some(sx), Some(sy)) => base.frames[0].pixels[sy * w + sx],
+                    _ => [0; 4],
+                };
+                let got = moved.frames[0].pixels[y * w + x];
+                assert!(want[3] == 0 && got[3] == 0 || want == got, "moved by ({dx}, {dy}): pixel ({x}, {y})");
+            }
+        }
+    }
 }
 
 /// No prefix of a valid file decodes, and none panics.

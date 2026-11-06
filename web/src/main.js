@@ -3,13 +3,13 @@
 // the app itself.
 
 import { install, attach, locate, onUncaught, journal } from './diagnostics.js';
-import { h } from './dom.js';
+import { h, trusted } from './dom.js';
 import { holdFocus } from './kit/focus.js';
 import { loadCore, isDevHost } from './core.js';
 import { t, setLanguage, defaultLanguage } from './i18n.js';
 import { app, load, hasIdentity } from './state.js';
 import { cardInAddress } from './links.js';
-import { arrive, peek, refusal } from './ui/arrival.js';
+import { arrive, arriveByLink, peek, refusal } from './ui/arrival.js';
 import { getMeta, onReplaced, onBlocked } from './store.js';
 import { mountShell, go, toast, currentView } from './ui/shell.js';
 import { openJournal } from './ui/journal-view.js';
@@ -65,7 +65,8 @@ async function main() {
   // once (a reload must not bring it in again) and kept until the app is
   // ready for it: after the first run, if there is one.
   let incoming = fromAddress();
-  const start = () => {
+  /** @param {boolean} [named] whether the first run already named the waiting card, and the person went on to keep it */
+  const start = (named = false) => {
     mountShell(root, {
       collection: collectionView({ draw: () => go('draw') }), draw: editorView(), give: giveView(), receive: receiveView(), me: meView(),
     });
@@ -81,18 +82,26 @@ async function main() {
     });
     // Stored cards this version cannot open are said once a start, not hidden.
     if (app.unreadable && !incoming) toast(t('store.unreadable', app.unreadable), { label: t('journal.toast.go'), run: () => openJournal() });
-    take();
+    take(named);
     // Another link opened while the app is up (the same tab, a new address).
     addEventListener('hashchange', () => { incoming = fromAddress(); take(); });
   };
-  /** The card from a link, now that there is a key to keep it under. */
-  const take = () => {
+  /**
+   * The card from a link, now that there is a key to keep it under: asked
+   * about first (arrival.js), unless the first run has just named it.
+   * @param {boolean} [named]
+   */
+  const take = (named = false) => {
     if (incoming && 'refused' in incoming) toast(incoming.refused);
-    else if (incoming) arrive(incoming, 'link');
+    else if (incoming && named) arrive(incoming, 'link');
+    else if (incoming) arriveByLink(incoming);
     incoming = null;
   };
   if (hasIdentity()) start();
-  else onboarding(root, start, { arrival: incoming && !('refused' in incoming) ? peek(incoming) : null });
+  else {
+    const arrival = incoming && !('refused' in incoming) ? peek(incoming) : null;
+    onboarding(root, () => start(!!arrival), { arrival });
+  }
 
   if ('serviceWorker' in navigator && !isDevHost()) offerUpdates().catch(() => {});
 }
@@ -158,7 +167,7 @@ function fromAddress() {
  * reloads as one piece, never half old and half new.
  */
 async function offerUpdates() {
-  const reg = await navigator.serviceWorker.register('sw.js');
+  const reg = await navigator.serviceWorker.register(trusted.createScriptURL('sw.js'));
   const offer = () => {
     const ready = reg.waiting;
     // Only an update: a first install has no page of an older version to replace.

@@ -30,6 +30,14 @@ const LAYER_VISIBLE: u16 = 1;
 const LAYER_BACKGROUND: u16 = 8;
 const LAYER_REFERENCE: u16 = 64;
 
+/// Work allowed for one file: the largest picture there may be, blended
+/// through sixteen layers that each cover every frame whole; each step up
+/// through a layer's groups counts the same as a pixel. Image bytes are
+/// capped as they are stored, but a linked cel reuses an image for a few
+/// bytes of file, so without this a small file could ask for as much
+/// blending as it has cels, and hold the page for as long.
+const MAX_WORK: usize = 16 * MAX_PIXELS;
+
 pub fn sniff(b: &[u8]) -> bool {
     b.len() >= 6 && u16::from_le_bytes([b[4], b[5]]) == FILE_MAGIC
 }
@@ -150,6 +158,7 @@ pub fn decode(bytes: &[u8]) -> Result<Raster, Error> {
         cels_by_frame: Vec::with_capacity(frames),
     };
     let mut out = Vec::with_capacity(frames);
+    let mut work = MAX_WORK;
     for _ in 0..frames {
         let (cels, delay_ms) = st.frame(&mut r)?;
         let ctx = Ctx {
@@ -161,7 +170,7 @@ pub fn decode(bytes: &[u8]) -> Result<Raster, Error> {
             palette: &st.palette,
             images: &st.images,
         };
-        out.push(Frame { pixels: ctx.flatten(&cels)?, delay_ms });
+        out.push(Frame { pixels: ctx.flatten(&cels, &mut work)?, delay_ms });
         st.cels_by_frame.push(cels);
     }
     if r.at != bytes.len() {
@@ -323,7 +332,7 @@ struct Ctx<'a> {
 
 impl Ctx<'_> {
     /// Visible, normal-blended opacity for a layer, or `None` if hidden.
-    fn layer_opacity(&self, i: usize) -> Result<Option<u8>, Error> {
+    fn layer_opacity(&self, i: usize, work: &mut usize) -> Result<Option<u8>, Error> {
         let l = self.layers.get(i).ok_or(Error::Malformed("cel on a missing layer"))?;
         if l.flags & LAYER_VISIBLE == 0 || l.flags & LAYER_REFERENCE != 0 {
             return Ok(None);
@@ -335,6 +344,7 @@ impl Ctx<'_> {
             if level == 0 {
                 break;
             }
+            spend(work, 1)?;
             if p.level == level - 1 {
                 if p.flags & LAYER_VISIBLE == 0 {
                     return Ok(None);
@@ -360,22 +370,33 @@ impl Ctx<'_> {
     }
 
     #[allow(clippy::many_single_char_names)] // x, y, w, h, c: geometry reads best short
-    fn flatten(&self, cels: &[Cel]) -> Result<Vec<Rgba>, Error> {
+    fn flatten(&self, cels: &[Cel], work: &mut usize) -> Result<Vec<Rgba>, Error> {
         let (w, h) = (self.width as usize, self.height as usize);
         let mut canvas = vec![[0u8; 4]; w * h];
         let mut order: Vec<&Cel> = cels.iter().collect();
-        // The spec's rule: order by layer + z, ties by z. A layer has one
-        // cel per frame, so keys are unique.
+        // A layer has one cel per frame: Aseprite writes no more, and with
+        // two the order below would be the sort's, not the file's.
+        crate::heap_sort_by_key(&mut order, |c| c.layer);
+        if order.windows(2).any(|p| p[0].layer == p[1].layer) {
+            return Err(Error::Malformed("two cels on one layer in one frame"));
+        }
+        // The spec's rule: order by layer + z, ties by z. With one cel a
+        // layer, keys are unique. The heap sort, since a frame may have
+        // as many cels as layers.
         #[allow(clippy::cast_possible_wrap, clippy::cast_possible_truncation)]
-        crate::small_sort_by_key(&mut order, |c| (c.layer as i32 + c.z, c.z));
+        crate::heap_sort_by_key(&mut order, |c| (c.layer as i32 + c.z, c.z));
         for c in order {
-            let Some(layer_op) = self.layer_opacity(c.layer)? else { continue };
+            let Some(layer_op) = self.layer_opacity(c.layer, work)? else { continue };
             let background = self.layers[c.layer].flags & LAYER_BACKGROUND != 0;
             let op = mul(layer_op, c.opacity);
             let data = &self.images[c.image];
-            for cy in 0..c.h {
+            // Only the part of the cel on the canvas is read: a cel may be
+            // far larger than the canvas, or lie wholly off it.
+            let (xs, ys) = (on_canvas(c.x, c.w, w), on_canvas(c.y, c.h, h));
+            spend(work, xs.len() * ys.len())?;
+            for cy in ys {
                 let Some(y) = coord(c.y, cy, h) else { continue };
-                for cx in 0..c.w {
+                for cx in xs.clone() {
                     let Some(x) = coord(c.x, cx, w) else { continue };
                     let mut src = self.pixel(data, cy * c.w + cx, background)?;
                     src[3] = mul(src[3], op);
@@ -400,6 +421,21 @@ impl Ctx<'_> {
             }
         })
     }
+}
+
+/// The positions within a cel of `len` at `origin` that fall on a canvas of
+/// `size`, along one axis.
+fn on_canvas(origin: i32, len: usize, size: usize) -> core::ops::Range<usize> {
+    let o = i64::from(origin);
+    let first = usize::try_from(-o).unwrap_or(0).min(len);
+    let end = usize::try_from(i64::try_from(size).unwrap_or(i64::MAX).saturating_sub(o)).unwrap_or(0).min(len);
+    first..end.max(first)
+}
+
+/// Takes `n` from what is left of the file's work, or refuses it as too large.
+fn spend(work: &mut usize, n: usize) -> Result<(), Error> {
+    *work = work.checked_sub(n).ok_or(Error::TooLarge)?;
+    Ok(())
 }
 
 /// Canvas coordinate for cel offset + position, if on the canvas.
@@ -433,4 +469,28 @@ fn over(dst: &mut Rgba, src: Rgba) {
         dst[k] = u8::try_from(b + (s - b) * sa / ra).unwrap_or(255);
     }
     dst[3] = u8::try_from(ra).unwrap_or(255);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{on_canvas, spend, Error};
+
+    #[test]
+    fn on_canvas_keeps_only_the_part_on_the_canvas() {
+        assert_eq!(on_canvas(0, 10, 16), 0..10);
+        assert_eq!(on_canvas(-3, 10, 16), 3..10);
+        assert_eq!(on_canvas(12, 10, 16), 0..4);
+        assert_eq!(on_canvas(-4, 30, 16), 4..20, "wider than the canvas: the canvas's width");
+        assert!(on_canvas(-20, 10, 16).is_empty());
+        assert!(on_canvas(16, 10, 16).is_empty());
+        assert!(on_canvas(i32::from(i16::MAX), usize::from(u16::MAX), 2048).is_empty());
+    }
+
+    #[test]
+    fn spend_refuses_past_what_is_left() {
+        let mut work = 10;
+        assert_eq!(spend(&mut work, 10), Ok(()));
+        assert_eq!(work, 0);
+        assert_eq!(spend(&mut work, 1), Err(Error::TooLarge));
+    }
 }

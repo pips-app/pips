@@ -56,9 +56,9 @@ impl SkewedGridLocation {
         /* Rotate each capstone so that corner 0 is top-left with respect
          * to the grid.
          */
-        rotate_capstone(&mut group.0, &h0, &hd);
-        rotate_capstone(&mut group.1, &h0, &hd);
-        rotate_capstone(&mut group.2, &h0, &hd);
+        rotate_capstone(&mut group.0, &h0, &hd)?;
+        rotate_capstone(&mut group.1, &h0, &hd)?;
+        rotate_capstone(&mut group.2, &h0, &hd)?;
 
         /* Check the timing pattern. This doesn't require a perspective
          * transform.
@@ -164,7 +164,11 @@ where
     Some(jiggle_perspective(img, initial, grid_size))
 }
 
-fn rotate_capstone(cap: &mut CapStone, h0: &Point, hd: &Point) {
+/// Pips: `None` when the rotated corners make no perspective, and the
+/// group is not a code. It was an `expect`: four corners a camera frame's
+/// noise puts in a line make `Perspective::create` fail, and the panic
+/// cannot be caught in WebAssembly.
+fn rotate_capstone(cap: &mut CapStone, h0: &Point, hd: &Point) -> Option<()> {
     let (best_idx, _) = cap
         .corners
         .iter()
@@ -174,8 +178,8 @@ fn rotate_capstone(cap: &mut CapStone, h0: &Point, hd: &Point) {
 
     /* Rotate the capstone */
     cap.corners.rotate_left(best_idx);
-    cap.c = geometry::Perspective::create(&cap.corners, 7.0, 7.0)
-        .expect("rotated perspective can't fail");
+    cap.c = geometry::Perspective::create(&cap.corners, 7.0, 7.0)?;
+    Some(())
 }
 
 //* Try the measure the timing pattern for a given QR code. This does
@@ -248,6 +252,14 @@ where
         + (a.y - align_seed.y) * (c.x - align_seed.x))
         .unsigned_abs() as usize;
 
+    // Pips: no region on the picture holds more pixels than the picture,
+    // so an estimate past twice that can match nothing. From a degenerate
+    // perspective it can be tens of millions, which below meant a spiral of
+    // billions of steps.
+    if size_estimate / 2 > img.width() * img.height() {
+        return None;
+    }
+
     /* Spiral outwards from the estimate point until we find something
      * roughly the right size. Don't look too far from the estimate
      * point.
@@ -258,6 +270,19 @@ where
     while step_size * step_size < size_estimate * 100 {
         const DX_MAP: [i32; 4] = [1, 0, -1, 0];
         const DY_MAP: [i32; 4] = [0, -1, 0, 1];
+        // Pips: a run of the spiral that lies wholly off the picture checks
+        // no pixel, so it is passed in one step rather than one a point. The
+        // estimate point may lie thousands of pixels off a small picture.
+        if run_off_picture(img, align_seed, DX_MAP[dir], DY_MAP[dir], step_size) {
+            let n = i32::try_from(step_size).unwrap_or(i32::MAX);
+            align_seed.x = align_seed.x.saturating_add(DX_MAP[dir].saturating_mul(n));
+            align_seed.y = align_seed.y.saturating_add(DY_MAP[dir].saturating_mul(n));
+            dir = (dir + 1) % 4;
+            if dir & 1 == 0 {
+                step_size += 1
+            }
+            continue;
+        }
         for _pass in 0..step_size {
             let x = align_seed.x as usize;
             let y = align_seed.y as usize;
@@ -287,6 +312,19 @@ where
         }
     }
     None
+}
+
+/// Pips: whether `len` points from `start`, a step of `(dx, dy)` each, all
+/// lie off the picture.
+fn run_off_picture<S>(img: &PreparedImage<S>, start: Point, dx: i32, dy: i32, len: usize) -> bool
+where
+    S: ImageBuffer,
+{
+    let last = i64::try_from(len).unwrap_or(i64::MAX).saturating_sub(1);
+    let (x0, y0) = (i64::from(start.x), i64::from(start.y));
+    let (x1, y1) = (x0 + i64::from(dx) * last, y0 + i64::from(dy) * last);
+    let (w, h) = (img.width() as i64, img.height() as i64);
+    x0.max(x1) < 0 || x0.min(x1) >= w || y0.max(y1) < 0 || y0.min(y1) >= h
 }
 
 struct LeftMostFinder {
@@ -476,4 +514,24 @@ where
     fitness_cell(img, perspective, x + 3, y + 3) + fitness_ring(img, perspective, x + 3, y + 3, 1)
         - fitness_ring(img, perspective, x + 3, y + 3, 2)
         + fitness_ring(img, perspective, x + 3, y + 3, 3)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Pips: a run is off the picture only if none of its points is on it.
+    #[test]
+    fn a_spiral_run_is_off_the_picture_only_when_all_of_it_is() {
+        let img = PreparedImage::prepare_from_greyscale(10, 8, |_, _| 255);
+        let off = |x, y, dx, dy, len| run_off_picture(&img, Point { x, y }, dx, dy, len);
+        assert!(!off(0, 0, 1, 0, 1), "a corner");
+        assert!(off(-5, 3, 1, 0, 5), "ends just left of it");
+        assert!(!off(-5, 3, 1, 0, 6), "reaches its first column");
+        assert!(off(3, 8, 1, 0, 100), "a row below it");
+        assert!(off(20, 4, -1, 0, 11), "stops just right of it");
+        assert!(!off(20, 4, -1, 0, 12), "comes back onto its last column from the right");
+        assert!(off(9034, 479, 0, -1, 30_000), "far off, going up");
+        assert!(!off(5, 9000, 0, -1, 9_000), "far below, reaching its bottom row");
+    }
 }

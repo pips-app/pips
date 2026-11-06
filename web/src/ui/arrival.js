@@ -6,9 +6,9 @@
 
 import { t } from '../i18n.js';
 import { app, receive } from '../state.js';
-import { go, toast } from './shell.js';
+import { go, toast, ask } from './shell.js';
 import { caught } from '../diagnostics.js';
-import { cardTitle } from './card.js';
+import { cardTitle, nameNote } from './card.js';
 
 /** Core error codes meaning "well-formed, but a signature does not check out". */
 const FORGED = new Set(['bad_signature', 'bad_key', 'not_author', 'bad_edition', 'unsigned']);
@@ -28,10 +28,26 @@ export function refusal(e, otherwise) {
 /** @param {{status: string, digest: string}} r */
 export function arrived(r) {
   go('collection', { open: r.digest });
-  const e = app.cards.get(r.digest)?.rec.edition;
+  const entry = app.cards.get(r.digest);
+  const e = entry?.rec.edition;
+  // A new card whose name is known here with another key says so at once;
+  // its back keeps saying it (back.js).
+  const note = r.status === 'added' && entry ? notes(entry.card.author, entry.author?.hex, entry.rec.from)[0] : null;
   // A numbered copy of a card already here took its place: said, with its number.
   if (r.status === 'numbered' && e) toast(t('receive.numbered', t('back.edition', e.edition, e.of)));
+  else if (note) toast(t('receive.got-note', note));
   else toast(t(r.status === 'added' ? 'receive.got' : 'receive.dup'));
+}
+
+/**
+ * What is to be said about the artist's name and the sender's, against the
+ * names in the collection (ui/card.js). The sender only when not the artist.
+ * @param {string} author @param {string|undefined} authorKey @param {{nick: string, key: string}|null} from
+ * @returns {string[]}
+ */
+function notes(author, authorKey, from) {
+  const out = [authorKey ? nameNote(author, authorKey) : null, from && from.key !== authorKey ? nameNote(from.nick, from.key) : null];
+  return /** @type {string[]} */ (out.filter(Boolean));
 }
 
 /** What damage is called, by the way the card came: a code is scanned again, a link was most likely cut short, a file changed on the way. */
@@ -56,15 +72,43 @@ export async function arrive(envelope, via = 'code') {
 /**
  * The card in a link, without keeping it: what it is and who sent it, for
  * a first run to say why it is there. @param {Uint8Array} envelope
- * @returns {{title: string, author: string} | null}
+ * @returns {{title: string, author: string, authorKey: string|undefined, from: {nick: string, key: string}|null} | null}
  */
 export function peek(envelope) {
   try {
     const o = app.core.openEnvelope(envelope);
     const card = app.core.inspectCard(o.payload).card;
-    return { title: cardTitle(card), author: card.author || '' };
+    return {
+      title: cardTitle(card), author: card.author || '', authorKey: /** @type {string|undefined} */ (o.author?.hex),
+      from: o.sender ? { nick: /** @type {string} */ (o.sender.nick), key: /** @type {string} */ (o.sender.key.hex) } : null,
+    };
   } catch {
     return null;
+  }
+}
+
+/** Whether a card from a link is waiting for the person's answer. */
+let asking = false;
+
+/**
+ * A card from a link, kept only when the person says so. A scan or a file
+ * is their own doing; a link may not be: a page that opened Pips keeps a
+ * handle on its window and can change its address as often as it likes,
+ * and each change would bring in another card. One question at a time: a
+ * link that comes while one is open is not opened, and that is said.
+ * @param {Uint8Array} envelope
+ */
+export async function arriveByLink(envelope) {
+  if (asking) return void toast(t('link.busy'));
+  const seen = peek(envelope);
+  // What does not open is refused in its own words, as it always was.
+  if (!seen) return void (await arrive(envelope, 'link'));
+  asking = true;
+  try {
+    const question = [t('link.ask', seen.title, seen.author), ...notes(seen.author, seen.authorKey, seen.from)].join(' ');
+    if (await ask(question, { yes: t('link.keep'), no: t('link.skip') })) await arrive(envelope, 'link');
+  } finally {
+    asking = false;
   }
 }
 

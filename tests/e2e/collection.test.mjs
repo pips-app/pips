@@ -277,6 +277,26 @@ test('the keys scroll the grids: a step with the arrows, a screen with Page Up a
   await p.context().close();
 });
 
+test('the longest nick stays inside the visiting card and the profile card on the narrowest phone', async () => {
+  const nick = 'w'.repeat(24); // the longest a nick can be, of the widest letter it may hold
+  const p = await env.phone(nick);
+  await p.setViewportSize({ width: 320, height: 568 });
+  /** How far a box's text runs past the box that holds it, in px. @param {string} inner @param {string} outer */
+  const past = (inner, outer) => p.evaluate(([i, o]) => {
+    const a = /** @type {HTMLElement} */ (document.querySelector(i)).getBoundingClientRect();
+    const b = /** @type {HTMLElement} */ (document.querySelector(o)).getBoundingClientRect();
+    return Math.max(0, a.right - b.right, b.left - a.left, /** @type {HTMLElement} */ (document.querySelector(i)).scrollWidth - a.width);
+  }, [inner, outer]);
+  await p.locator('.first-run .me-card b').waitFor();
+  assert.equal(await p.textContent('.first-run .me-card b'), nick);
+  assert.equal(await past('.first-run .me-card b', '.first-run .me-card'), 0, 'the visiting card');
+  await tab(p, 'me');
+  const card = 'section.view:not([hidden]) .idcard';
+  await p.locator(`${card} b`).waitFor();
+  assert.equal(await past(`${card} b`, card), 0, 'the profile card');
+  await p.context().close();
+});
+
 test('nothing on screen covers anything else, and the hint shows only when it applies', async () => {
   for (const desk of [false, true]) {
     const p = await env.phone('pixelfox', undefined, desk);

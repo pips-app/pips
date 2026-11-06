@@ -22,7 +22,7 @@ test('a card goes from one phone to another and is checked on arrival', async ()
   // It opens large in the collection, where it now is.
   await b.locator('.turn:not([hidden])').waitFor();
   const back = await backText(b);
-  assert.match(back, /верна/);
+  assert.match(back, /ключом [0-9a-f]{2}(·[0-9a-f]{2}){3}/, 'signed: by which key');
   assert.match(back, /@pixelfox → вам/);
   assert.equal(await cards(b), 1);
 
@@ -110,7 +110,7 @@ test('a .pips file from before envelopes — a bare signed card — still opens,
   const open = (file) => toastAfter(b, () => choose(b, () => b.click('section.view:visible >> text=Файл .pips'), file));
   assert.equal(await open(old), 'Карточка в коллекции');
   await b.locator('.turn:not([hidden])').waitFor();
-  assert.match(await backText(b), /верна/, 'its signature checked');
+  assert.match(await backText(b), /ключом [0-9a-f]{2}(·[0-9a-f]{2}){3}/, 'its signature checked: by which key');
   assert.equal(await cards(b), 1);
   // One byte of the picture changed: the signature no longer holds.
   const forged = Uint8Array.from(bare);
@@ -309,22 +309,38 @@ test('a numbered copy made out to someone who already has the card takes the pla
   for (const x of [a, b, c]) await x.context().close();
 });
 
+/**
+ * The card open on `p`, sent «Ссылкой» through a stand-in for the device's
+ * share sheet. @param {import('playwright').Page} p
+ * @returns {Promise<{url: string, title: string}>} what the share sheet was handed
+ */
+async function shareLink(p) {
+  await p.evaluate(() => { /** @type {any} */ (navigator).share = async (d) => { /** @type {any} */ (window).shared = d; }; });
+  await act(p, 'share');
+  await p.click('.top-sheet .share-link >> nth=0'); // «Ссылкой»
+  return p.evaluate(() => /** @type {any} */ (window).shared);
+}
+
+/** The question a link's card asks, answered. @param {import('playwright').Page} p @param {string} reply */
+async function answer(p, reply) {
+  await p.click(`.dialog button:has-text("${reply}")`);
+  await p.locator('.dialog').waitFor({ state: 'detached' });
+}
+
 test('a card sent as a link opens the app and arrives, even before the first run', async () => {
   const a = await env.phone('pixelfox');
   await ownCard(a, 'Сердце', env.dir);
-  // The device's share sheet, stood in for: what it is handed is kept.
-  await a.evaluate(() => { /** @type {any} */ (navigator).share = async (d) => { /** @type {any} */ (window).shared = d; }; });
-  await act(a, 'share');
-  await a.click('.top-sheet .share-link >> nth=0'); // «Ссылкой»
-  const sent = await a.evaluate(() => /** @type {any} */ (window).shared);
+  const sent = await shareLink(a);
   assert.match(sent.url, /^https:\/\/pips-app\.github\.io\/pips\/#[A-Za-z0-9_-]+$/, 'the published app (this one is not on https)');
   assert.equal(sent.title, 'Сердце');
   const fragment = sent.url.slice(sent.url.indexOf('#'));
 
-  // Someone with the app: it opens on the card, and the address forgets it.
+  // Someone with the app: it asks, opens on the card, and the address forgets it.
   const b = await env.phone('mossfern');
   await b.goto('about:blank');
   await b.goto(env.url + fragment);
+  assert.match(await b.textContent('.dialog p'), /По ссылке пришла карточка «Сердце» от @pixelfox/);
+  await answer(b, 'Взять');
   await b.locator('.turn:not([hidden])').waitFor();
   assert.equal(await toast(b), 'Карточка в коллекции');
   assert.equal(await b.evaluate(() => location.hash), '', 'a reload will not bring it in again');
@@ -352,6 +368,85 @@ test('a card sent as a link opens the app and arrives, even before the first run
   }
   assert.equal(await cards(b), 1);
   for (const p of [a, b, c]) await p.context().close();
+});
+
+test('a card from a link is kept only when the person says so; a page that opened Pips cannot fill the collection', async () => {
+  const a = await env.phone('pixelfox');
+  await ownCard(a, 'Сердце', env.dir);
+  const heartLink = (await shareLink(a)).url;
+  await ownCard(a, 'Звезда', env.dir);
+  const starLink = (await shareLink(a)).url;
+  const fragment = (/** @type {string} */ url) => url.slice(url.indexOf('#'));
+
+  // Another site opens Pips with a card in the address, and keeps a hold on
+  // its window: it changes the address again while the question is open.
+  const b = await env.phone('mossfern');
+  const site = await b.context().newPage();
+  await site.goto('about:blank');
+  const [pips] = await Promise.all([
+    b.context().waitForEvent('page'),
+    site.evaluate((u) => { /** @type {any} */ (window).w = window.open(u); }, env.url + fragment(heartLink)),
+  ]);
+  assert.match(await pips.textContent('.dialog p'), /«Сердце» от @pixelfox/);
+  await site.evaluate((u) => { /** @type {any} */ (window).w.location = u; }, env.url + fragment(starLink));
+  assert.match(await toast(pips), /Пока вы решали, пришла ещё одна ссылка/);
+  assert.equal(await pips.locator('.dialog').count(), 1, 'one question at a time');
+  assert.match(await pips.textContent('.dialog p'), /«Сердце»/, 'still the first card');
+  await answer(pips, 'Не брать');
+  assert.equal(await cards(pips), 0, 'nothing kept without a yes');
+
+  // Opened again, and taken: it arrives as a link always did.
+  await pips.goto('about:blank');
+  await pips.goto(env.url + fragment(starLink));
+  assert.match(await pips.textContent('.dialog p'), /«Звезда»/);
+  await answer(pips, 'Взять');
+  await pips.locator('.turn:not([hidden])').waitFor();
+  assert.equal(await cards(pips), 1);
+  for (const p of [a, b]) await p.context().close();
+});
+
+test('a name already in the collection, signed with another key, is said: on arrival, in a link\'s question and on the back', async () => {
+  const kitsu = await env.phone('kitsu');
+  await ownCard(kitsu, 'Лиса', env.dir);
+  const real = (await shareLink(kitsu)).url;
+  const short = await kitsu.evaluate(async () => (await import('/src/state.js')).app.identity.publicKey().short);
+  // Someone else takes the name, with a Cyrillic «к» in it.
+  const fake = await env.phone('кitsu');
+  await ownCard(fake, 'Лиса 2', env.dir);
+  const copy = (await shareLink(fake)).url;
+  // And someone takes the name of the person who will receive.
+  const mimic = await env.phone('mossfern');
+  await ownCard(mimic, 'Привет', env.dir);
+  const mine = (await shareLink(mimic)).url;
+  const fragment = (/** @type {string} */ url) => url.slice(url.indexOf('#'));
+
+  const b = await env.phone('mossfern');
+  const open = async (/** @type {string} */ url) => {
+    await b.goto('about:blank');
+    await b.goto(env.url + fragment(url));
+    return b.textContent('.dialog p');
+  };
+  // The first card from a name: nothing to say about it.
+  assert.doesNotMatch(await open(real), /ключ/);
+  await answer(b, 'Взять');
+  await b.locator('.turn:not([hidden])').waitFor();
+  assert.ok((await backText(b)).includes(`ключом ${short}`), 'signed with this key, its short form beside it');
+
+  // The look-alike name with another key: said in the question, when it
+  // arrives, and on its back.
+  const said = `У @кitsu в вашей коллекции есть и другой ключ: ${short}.`;
+  assert.ok((await open(copy)).endsWith(said), 'in the question');
+  const [, told] = await Promise.all([answer(b, 'Взять'), toast(b)]);
+  assert.equal(told, `Карточка в коллекции. ${said}`);
+  await b.locator('.turn:not([hidden])').waitFor();
+  assert.ok((await backText(b)).includes(said), 'on its back');
+
+  // A card under the person's own name, from another key.
+  assert.match(await open(mine), /@mossfern — это ваше имя, но ключ не ваш\./);
+  await answer(b, 'Взять');
+  await b.locator('.turn:not([hidden])').waitFor();
+  assert.match(await backText(b), /@mossfern — это ваше имя, но ключ не ваш\./);
+  for (const p of [kitsu, fake, mimic, b]) await p.context().close();
 });
 
 test('a card is signed with a name; one that came without shows «Без названия»', async () => {

@@ -55,6 +55,35 @@ test('a fault nobody caught is written down, told once, and can be read and sent
   await p.context().close();
 });
 
+test('the browser itself refuses markup that is not one of the app\'s icons, and scripts that are not its own', async () => {
+  const p = await env.phone('trustfox');
+  await p.locator('.first-run').waitFor();
+  assert.ok(await p.locator('svg.i').count() > 0, 'the icons are drawn');
+  const r = await p.evaluate(async () => {
+    const { trusted } = await import('/src/dom.js');
+    const refused = (/** @type {() => unknown} */ f) => { try { f(); return false; } catch (e) { return e instanceof TypeError; } };
+    const div = document.createElement('div');
+    return {
+      enforced: 'trustedTypes' in window,
+      plainString: refused(() => { div.innerHTML = '<img src=x>'; }),
+      otherMarkup: refused(() => trusted.createHTML('<img src=x>')),
+      otherScript: refused(() => trusted.createScriptURL('https://example.com/x.js')),
+      anotherPolicy: refused(() => /** @type {any} */ (window).trustedTypes?.createPolicy('more', { createHTML: (/** @type {string} */ s) => s })),
+    };
+  });
+  if (r.enforced) {
+    assert.equal(r.plainString, true, 'a plain string into innerHTML');
+    assert.equal(r.anotherPolicy, true, 'a second policy');
+    // The two refusals met on purpose: the browser reports each in the console.
+    const met = env.errors.filter((/** @type {string} */ e) => e.startsWith('trustfox:') && /TrustedHTML|TrustedTypePolicy/.test(e));
+    assert.equal(met.length, 2, 'each refusal reported');
+    for (const e of met) env.errors.splice(env.errors.indexOf(e), 1);
+  }
+  assert.equal(r.otherMarkup, !!r.enforced, 'other markup through the policy');
+  assert.equal(r.otherScript, !!r.enforced, 'another site\'s script through the policy');
+  await p.context().close();
+});
+
 test('developer mode opens only for its phrase, and its samples come and go as a set', async () => {
   const p = await env.phone('pixelfox');
   await ownCard(p, 'Моя', env.dir);
