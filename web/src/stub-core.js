@@ -9,6 +9,7 @@
 // with a separate database.
 
 import { PALETTES } from '../dev/palettes.js';
+import { trusted } from './dom.js';
 
 const enc = new TextEncoder();
 const dec = new TextDecoder();
@@ -70,7 +71,7 @@ export default async function init() {
   if (/** @type {any} */ (globalThis).qrcode) return;
   await new Promise((resolve) => {
     const tag = document.createElement('script');
-    tag.src = new URL('../dev/qrcode.js', import.meta.url).href;
+    tag.src = trusted.createScriptURL(new URL('../dev/qrcode.js', import.meta.url).href);
     tag.onload = tag.onerror = resolve;
     document.head.append(tag);
   });

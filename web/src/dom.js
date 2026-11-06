@@ -103,13 +103,38 @@ const ICONS = {
   hold: '<circle cx="12" cy="13" r="7.5"/><path d="M12 9v4l2.5 2M10 3h4"/>',
 };
 
+/** Scripts the app starts by URL, relative to index.html: the service worker, and the dev stub's QR generator. */
+const OWN_SCRIPTS = ['sw.js', 'dev/qrcode.js'];
+
+/**
+ * The app's one Trusted Types policy. index.html's CSP requires one for
+ * every HTML and script-URL sink and allows no other name, so the browser
+ * itself refuses markup from anywhere else — a card's text included —
+ * rather than this rule resting on review alone. Where the browser has no
+ * Trusted Types, strings pass as they are.
+ */
+export const trusted = /** @type {{createHTML: (s: string) => any, createScriptURL: (s: string) => any}} */ (
+  /** @type {any} */ (globalThis).trustedTypes?.createPolicy('pips', {
+    /** @param {string} s */
+    createHTML: (s) => {
+      if (!Object.values(ICONS).includes(s)) throw new TypeError('markup that is not an icon');
+      return s;
+    },
+    /** @param {string} s */
+    createScriptURL: (s) => {
+      const url = new URL(s, document.baseURI).href;
+      if (!OWN_SCRIPTS.some((f) => new URL(f, document.baseURI).href === url)) throw new TypeError(`not one of the app's scripts: ${url}`);
+      return url;
+    },
+  }) ?? { createHTML: (/** @type {string} */ s) => s, createScriptURL: (/** @type {string} */ s) => s });
+
 /** An icon from the fixed set above. @param {keyof typeof ICONS} name */
 export function icon(name) {
   const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
   svg.setAttribute('viewBox', '0 0 24 24');
   svg.setAttribute('class', 'i');
   svg.setAttribute('aria-hidden', 'true');
-  svg.innerHTML = ICONS[name]; // constant markup, never data
+  svg.innerHTML = trusted.createHTML(ICONS[name]); // constant markup, never data
   return svg;
 }
 

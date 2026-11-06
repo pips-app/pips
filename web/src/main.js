@@ -3,7 +3,7 @@
 // the app itself.
 
 import { install, attach, locate, onUncaught, journal } from './diagnostics.js';
-import { h } from './dom.js';
+import { h, trusted } from './dom.js';
 import { holdFocus } from './kit/focus.js';
 import { loadCore, isDevHost } from './core.js';
 import { t, setLanguage, defaultLanguage } from './i18n.js';
@@ -167,7 +167,7 @@ function fromAddress() {
  * reloads as one piece, never half old and half new.
  */
 async function offerUpdates() {
-  const reg = await navigator.serviceWorker.register('sw.js');
+  const reg = await navigator.serviceWorker.register(trusted.createScriptURL('sw.js'));
   const offer = () => {
     const ready = reg.waiting;
     // Only an update: a first install has no page of an older version to replace.
