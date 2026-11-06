@@ -22,7 +22,7 @@ test('a card goes from one phone to another and is checked on arrival', async ()
   // It opens large in the collection, where it now is.
   await b.locator('.turn:not([hidden])').waitFor();
   const back = await backText(b);
-  assert.match(back, /верна/);
+  assert.match(back, /ключом [0-9a-f]{2}(·[0-9a-f]{2}){3}/, 'signed: by which key');
   assert.match(back, /@pixelfox → вам/);
   assert.equal(await cards(b), 1);
 
@@ -110,7 +110,7 @@ test('a .pips file from before envelopes — a bare signed card — still opens,
   const open = (file) => toastAfter(b, () => choose(b, () => b.click('section.view:visible >> text=Файл .pips'), file));
   assert.equal(await open(old), 'Карточка в коллекции');
   await b.locator('.turn:not([hidden])').waitFor();
-  assert.match(await backText(b), /верна/, 'its signature checked');
+  assert.match(await backText(b), /ключом [0-9a-f]{2}(·[0-9a-f]{2}){3}/, 'its signature checked: by which key');
   assert.equal(await cards(b), 1);
   // One byte of the picture changed: the signature no longer holds.
   const forged = Uint8Array.from(bare);
@@ -403,6 +403,50 @@ test('a card from a link is kept only when the person says so; a page that opene
   await pips.locator('.turn:not([hidden])').waitFor();
   assert.equal(await cards(pips), 1);
   for (const p of [a, b]) await p.context().close();
+});
+
+test('a name already in the collection, signed with another key, is said: on arrival, in a link\'s question and on the back', async () => {
+  const kitsu = await env.phone('kitsu');
+  await ownCard(kitsu, 'Лиса', env.dir);
+  const real = (await shareLink(kitsu)).url;
+  const short = await kitsu.evaluate(async () => (await import('/src/state.js')).app.identity.publicKey().short);
+  // Someone else takes the name, with a Cyrillic «к» in it.
+  const fake = await env.phone('кitsu');
+  await ownCard(fake, 'Лиса 2', env.dir);
+  const copy = (await shareLink(fake)).url;
+  // And someone takes the name of the person who will receive.
+  const mimic = await env.phone('mossfern');
+  await ownCard(mimic, 'Привет', env.dir);
+  const mine = (await shareLink(mimic)).url;
+  const fragment = (/** @type {string} */ url) => url.slice(url.indexOf('#'));
+
+  const b = await env.phone('mossfern');
+  const open = async (/** @type {string} */ url) => {
+    await b.goto('about:blank');
+    await b.goto(env.url + fragment(url));
+    return b.textContent('.dialog p');
+  };
+  // The first card from a name: nothing to say about it.
+  assert.doesNotMatch(await open(real), /ключ/);
+  await answer(b, 'Взять');
+  await b.locator('.turn:not([hidden])').waitFor();
+  assert.ok((await backText(b)).includes(`ключом ${short}`), 'signed with this key, its short form beside it');
+
+  // The look-alike name with another key: said in the question, when it
+  // arrives, and on its back.
+  const said = `У @кitsu в вашей коллекции есть и другой ключ: ${short}.`;
+  assert.ok((await open(copy)).endsWith(said), 'in the question');
+  const [, told] = await Promise.all([answer(b, 'Взять'), toast(b)]);
+  assert.equal(told, `Карточка в коллекции. ${said}`);
+  await b.locator('.turn:not([hidden])').waitFor();
+  assert.ok((await backText(b)).includes(said), 'on its back');
+
+  // A card under the person's own name, from another key.
+  assert.match(await open(mine), /@mossfern — это ваше имя, но ключ не ваш\./);
+  await answer(b, 'Взять');
+  await b.locator('.turn:not([hidden])').waitFor();
+  assert.match(await backText(b), /@mossfern — это ваше имя, но ключ не ваш\./);
+  for (const p of [kitsu, fake, mimic, b]) await p.context().close();
 });
 
 test('a card is signed with a name; one that came without shows «Без названия»', async () => {

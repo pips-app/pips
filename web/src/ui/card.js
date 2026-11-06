@@ -5,6 +5,19 @@
 import { h } from '../dom.js';
 import { t, date } from '../i18n.js';
 import { app } from '../state.js';
+import { knownNames, clash } from '../authors.js';
+
+/**
+ * What is to be said about a name signed with a key, against the names in
+ * the collection (authors.js): one sentence, or null. The same words on a
+ * card's back, when it arrives, and in the question a link asks.
+ * @param {string} name @param {string} hex the key it came with
+ */
+export function nameNote(name, hex) {
+  const c = clash({ name, hex }, knownNames(app.cards.values()), { name: app.profile.nick, hex: app.identity.publicKey().hex });
+  if (!c) return null;
+  return c.own ? t('clash.own', name) : t('clash.other', name, c.other);
+}
 
 /** A blank card: the exact frame size of an empty preview, or how large a profile makes a code. */
 export const BLANK_CARD = Object.freeze({

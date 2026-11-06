@@ -98,6 +98,7 @@
 .back-in dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
 .back-in dd.ok { color: color-mix(in srgb, #2f7a3e 80%, var(--shade-ink)); font-weight: 600; }
 .back-in dd.bad { color: #a3332b; font-weight: 600; }
+.back-mark canvas { display: inline-block; width: 1.15em; height: 1.15em; vertical-align: -.22em; margin-right: .35em; border-radius: 2px; image-rendering: pixelated; }
 .back-in .mini-btn { border: 0; border-radius: .4em; padding: .1em .5em; font-size: .85em; background: color-mix(in srgb, var(--shade-ink) 10%, transparent); color: var(--shade-ink); }
 /* Two rows of tags at most; the room is there even when empty. */
 .back-in .tags { flex: none; display: flex; flex-wrap: wrap; align-content: flex-start; gap: .4em; height: calc(2 * 1.9em + .4em); overflow: hidden; }
