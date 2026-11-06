@@ -6,7 +6,7 @@
 
 import { t } from '../i18n.js';
 import { app, receive } from '../state.js';
-import { go, toast } from './shell.js';
+import { go, toast, ask } from './shell.js';
 import { caught } from '../diagnostics.js';
 import { cardTitle } from './card.js';
 
@@ -65,6 +65,30 @@ export function peek(envelope) {
     return { title: cardTitle(card), author: card.author || '' };
   } catch {
     return null;
+  }
+}
+
+/** Whether a card from a link is waiting for the person's answer. */
+let asking = false;
+
+/**
+ * A card from a link, kept only when the person says so. A scan or a file
+ * is their own doing; a link may not be: a page that opened Pips keeps a
+ * handle on its window and can change its address as often as it likes,
+ * and each change would bring in another card. One question at a time: a
+ * link that comes while one is open is not opened, and that is said.
+ * @param {Uint8Array} envelope
+ */
+export async function arriveByLink(envelope) {
+  if (asking) return void toast(t('link.busy'));
+  const seen = peek(envelope);
+  // What does not open is refused in its own words, as it always was.
+  if (!seen) return void (await arrive(envelope, 'link'));
+  asking = true;
+  try {
+    if (await ask(t('link.ask', seen.title, seen.author), { yes: t('link.keep'), no: t('link.skip') })) await arrive(envelope, 'link');
+  } finally {
+    asking = false;
   }
 }
 
