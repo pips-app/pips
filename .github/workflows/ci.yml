@@ -13,6 +13,10 @@ on:
 permissions:
   contents: read
 
+# Every action is pinned to a commit, its version beside it: a tag can be
+# moved to other code, and these steps build what is published. Raise them
+# on purpose (git ls-remote https://github.com/<owner>/<action> refs/tags/<v>).
+
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
@@ -27,13 +31,14 @@ jobs:
     # Far above a normal run: a hang ends here, not after GitHub's six hours.
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       # Pinned: every Rust release adds lints, and CI should not turn red
       # without a change in this repository. Raise it on purpose.
-      - uses: dtolnay/rust-toolchain@1.99.0
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
         with:
+          toolchain: 1.99.0
           components: rustfmt, clippy
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo test --workspace
@@ -48,8 +53,8 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v7
-      - uses: taiki-e/install-action@v2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: taiki-e/install-action@c509219cf42fba86913069efd0ade2458c59337b # v2
         with:
           tool: cargo-audit
       - run: cargo audit --deny warnings
@@ -59,9 +64,11 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@1.85.1
-      - uses: Swatinem/rust-cache@v2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
+        with:
+          toolchain: 1.85.1
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
       # The tests too: whoever builds with the declared minimum can run them.
       - run: cargo test --workspace
 
@@ -70,14 +77,23 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 75
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: ./.github/actions/core
       # One Node for every step here, the browser tests' own.
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: 24
           cache: npm
           cache-dependency-path: tests/e2e/package-lock.json
+      # The site is packed first, from the checkout and the core alone,
+      # before any step below downloads and runs code from npm (TypeScript,
+      # Playwright and their dependencies): what is published holds people's
+      # keys, and none of that code gets the chance to change it. The steps
+      # below still decide whether it is published (deploy needs this job).
+      - run: scripts/build-site.sh
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5
+        with:
+          path: _site
       - name: Type-check the app
         run: npx --yes -p typescript@5.9.3 tsc -p web/jsconfig.json
       # The interface's plain parts (layout, filters, springs), without a browser.
@@ -101,10 +117,6 @@ jobs:
         env:
           ANNOTATE: --test-reporter=spec --test-reporter-destination=stdout --test-reporter=../gh-annotate.mjs --test-reporter-destination=stdout
         run: BROWSER=firefox npm test -- $ANNOTATE
-      - run: scripts/build-site.sh
-      - uses: actions/upload-pages-artifact@v5
-        with:
-          path: _site
 
   deploy:
     name: Publish to GitHub Pages
@@ -120,4 +132,4 @@ jobs:
       url: ${{ steps.deploy.outputs.page_url }}
     steps:
       - id: deploy
-        uses: actions/deploy-pages@v5
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5
