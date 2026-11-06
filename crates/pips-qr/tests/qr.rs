@@ -247,3 +247,37 @@ fn scan_reads_what_matrix_draws() {
     assert_eq!(pips_qr::scan::read_rgba(&vec![0; big * 4], big, 1), none, "too many pixels");
     assert_eq!(pips_qr::scan::read_rgba(&[], usize::MAX, 2), none, "a size that overflows");
 }
+
+/// A frame of noise whose three capstone-like blobs make a perspective that
+/// puts the alignment pattern's estimate thousands of pixels off a 58×45
+/// picture, with a size estimate of millions: found by fuzzing (`scan`).
+/// rqrr spiralled out a billion steps over nothing — seconds natively,
+/// longer in WebAssembly, on the page's main thread. Now it is refused at
+/// once (vendor/rqrr/PIPS.md).
+#[cfg(feature = "scan")]
+#[test]
+fn a_frame_that_aims_the_alignment_search_far_off_is_answered_at_once() {
+    let data = std::fs::read(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/data/far-alignment.frame")).unwrap();
+    let (&w, rgba) = data.split_first().unwrap();
+    let w = usize::from(w);
+    let h = rgba.len() / 4 / w;
+    let start = std::time::Instant::now();
+    assert!(pips_qr::scan::read_rgba(&rgba[..w * h * 4], w, h).is_empty());
+    // A thousandfold margin over the fixed time, even unoptimised.
+    assert!(start.elapsed() < std::time::Duration::from_secs(2), "took {:?}", start.elapsed());
+}
+
+/// A frame of noise with a capstone whose rotated corners make no
+/// perspective: found by fuzzing (`scan`). rqrr panicked on it — in
+/// WebAssembly a panic cannot be caught, and the reader's module was left
+/// broken until the page reloaded. Now the group is just not a code
+/// (vendor/rqrr/PIPS.md).
+#[cfg(feature = "scan")]
+#[test]
+fn a_frame_with_a_flat_capstone_reads_as_nothing_not_a_panic() {
+    let data = std::fs::read(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/data/flat-capstone.frame")).unwrap();
+    let (&w, rgba) = data.split_first().unwrap();
+    let w = usize::from(w);
+    let h = rgba.len() / 4 / w;
+    assert!(pips_qr::scan::read_rgba(&rgba[..w * h * 4], w, h).is_empty());
+}
