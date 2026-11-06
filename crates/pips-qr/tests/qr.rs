@@ -262,7 +262,7 @@ fn a_frame_that_aims_the_alignment_search_far_off_is_answered_at_once() {
     let w = usize::from(w);
     let h = rgba.len() / 4 / w;
     let start = std::time::Instant::now();
-    assert!(pips_qr::scan::read_rgba(&rgba[..w * h * 4], w, h).is_empty());
+    assert_eq!(pips_qr::scan::read_rgba(&rgba[..w * h * 4], w, h), Vec::<String>::new());
     // A thousandfold margin over the fixed time, even unoptimised.
     assert!(start.elapsed() < std::time::Duration::from_secs(2), "took {:?}", start.elapsed());
 }
@@ -279,5 +279,5 @@ fn a_frame_with_a_flat_capstone_reads_as_nothing_not_a_panic() {
     let (&w, rgba) = data.split_first().unwrap();
     let w = usize::from(w);
     let h = rgba.len() / 4 / w;
-    assert!(pips_qr::scan::read_rgba(&rgba[..w * h * 4], w, h).is_empty());
+    assert_eq!(pips_qr::scan::read_rgba(&rgba[..w * h * 4], w, h), Vec::<String>::new());
 }
