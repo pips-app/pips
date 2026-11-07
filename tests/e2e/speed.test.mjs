@@ -16,7 +16,7 @@ const env = suite();
 /** Cards: enough for a full screen at the smallest level, and many off it. */
 const CARDS = 150;
 
-test('a zoom between weeks and months lays the cards out once, not on every frame', { skip: process.env.BROWSER === 'firefox' && 'counting layouts needs Chromium’s DevTools' }, async () => {
+test('a zoom between weeks and months lays the cards out once, not on every frame', { skip: (process.env.BROWSER ?? 'chromium') !== 'chromium' && 'counting layouts needs Chromium’s DevTools' }, async () => {
   const p = await env.phone('speedfox');
   // Many cards, each its own picture, spread over a year.
   await p.evaluate(async (n) => {

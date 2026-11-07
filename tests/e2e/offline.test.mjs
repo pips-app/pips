@@ -20,7 +20,8 @@ import { chromium } from 'playwright';
 import { serve, photo, fromPicture, ownCard, act, tab, until, still } from './helpers.mjs';
 
 const ROOT = new URL('../../', import.meta.url).pathname;
-const firefox = process.env.BROWSER === 'firefox';
+/** Not Chromium: the service worker tests below need what only it gives a test server here. */
+const firefox = (process.env.BROWSER ?? 'chromium') !== 'chromium';
 
 /** @type {{dir: string, releases: string[], site: Awaited<ReturnType<typeof serve>>, browser: import('playwright').Browser, origin: string, serving: number|null}} */
 const env = /** @type {any} */ ({ serving: 0 });
