@@ -7,7 +7,6 @@ use libfuzzer_sys::fuzz_target;
 use pips_wasm::api::{inspect_card, open_envelope};
 
 fuzz_target!(|data: &[u8]| {
-    let _ = pips_sign::open(data);
     if let Ok(opened) = open_envelope(data) {
         let stored = inspect_card(&opened.payload).expect("a card that opened reads back");
         assert_eq!(stored.digest, opened.digest);

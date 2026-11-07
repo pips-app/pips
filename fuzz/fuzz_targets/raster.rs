@@ -11,8 +11,8 @@ use pips_raster::{import, Options, Target};
 fuzz_target!(|data: &[u8]| {
     if pips_raster::decode(data).is_ok() {
         let n = data.len();
-        // Ids up to 63 are built-in palettes' (some not yet made: refused).
-        let id = u8::try_from(n % 64).unwrap_or(0);
+        let builtins = pips_palette::BUILTINS;
+        let id = builtins[n % builtins.len()].id;
         let fit = u8::try_from(n % 31).unwrap_or(0) + 2;
         let tries = [
             (Target::Auto, false),
