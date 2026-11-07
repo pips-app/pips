@@ -326,7 +326,7 @@ a.btn { text-decoration: none; }
    one's cards below, the chosen one lifted. */
 .give-scroll { display: flex; flex-direction: column; align-items: center; padding-top: 4px; }
 .give-paper { --shade: var(--paper); --shade-ink: var(--ink); --shade-dim: var(--dim);
-  width: min(100%, 380px); background: var(--shade); color: var(--shade-ink); border-radius: 6px; padding: 16px 14px 14px;
+  width: min(100%, max(380px, var(--give-paper, 0px))); /* at least as on a phone; wider with a larger code (give.js) */ background: var(--shade); color: var(--shade-ink); border-radius: 6px; padding: 16px 14px 14px;
   box-shadow: 0 30px 50px -26px #000; }
 .paper-body { display: flex; flex-direction: column; align-items: center; gap: 12px; }
 .give-deck-box { flex: none; }
