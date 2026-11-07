@@ -4,16 +4,16 @@ use crate::identify::match_capstones::CapStoneGroup;
 use crate::identify::Point;
 use lru::LruCache;
 
-/// An black-and-white image that can be mutated on search for QR codes
-///
-/// During search for QR codes, some black zones will be recolored in
-/// 'different' shades of black. This is done to speed up the search and
-/// mitigate the impact of a huge zones.
 /// Regions the cache keeps at once: one per pixel value left after white,
 /// black and the three marks (`PixelColor::Discarded`). Pips: a constant,
 /// checked when compiled, rather than an `unwrap` at run time.
 const REGIONS: NonZeroUsize = NonZeroUsize::new(251).unwrap();
 
+/// An black-and-white image that can be mutated on search for QR codes
+///
+/// During search for QR codes, some black zones will be recolored in
+/// 'different' shades of black. This is done to speed up the search and
+/// mitigate the impact of a huge zones.
 pub struct PreparedImage<S> {
     buffer: S,
     cache: LruCache<u8, ColoredRegion>,

@@ -51,6 +51,14 @@ a frame should never be able to stop the module.
 - `repaint_and_apply` panicked when asked to repaint white or with the
   colour already there, and `flood_fill` asserted the colours differ; now
   both paint nothing (`repainting_white_or_the_same_colour_paints_nothing`).
+- `line_intersect` multiplied three coordinates in `i32`, which a picture
+  2560 pixels a side already takes past its range: a panic in a debug
+  build, a wrong point in a release one. Now it works in `i64` and a point
+  that does not fit is no point
+  (`lines_across_a_large_picture_meet_without_overflow`). The rest of the
+  crate's arithmetic on points is products of two differences, which fit
+  an `i32` for any side up to 2560 — and `pips-qr` now refuses a frame
+  with a longer side (`scan::MAX_SIDE`), however few pixels it has.
 - The ranking of neighbours sorted with `partial_cmp(..).expect(..)`; a
   score there is never NaN, so `total_cmp` gives the same order without a
   way to panic. `rotate_capstone`'s `expect` on four corners is `?`; the

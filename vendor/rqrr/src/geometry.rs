@@ -89,16 +89,22 @@ impl Perspective {
     }
 }
 
+/// Pips: worked in i64. The products below multiply three coordinates,
+/// which a picture 2560 pixels a side already takes past an i32 (a panic in
+/// a debug build, a wrong point in a release one); in i64 they are exact,
+/// and a point that does not fit an i32 is no point.
 pub fn line_intersect(p0: &Point, p1: &Point, q0: &Point, q1: &Point) -> Option<Point> {
+    let [p0x, p0y, p1x, p1y] = [p0.x, p0.y, p1.x, p1.y].map(i64::from);
+    let [q0x, q0y, q1x, q1y] = [q0.x, q0.y, q1.x, q1.y].map(i64::from);
     /* (a, b) is perpendicular to line p */
-    let a = -(p1.y - p0.y);
-    let b = p1.x - p0.x;
+    let a = -(p1y - p0y);
+    let b = p1x - p0x;
     /* (c, d) is perpendicular to line q */
-    let c = -(q1.y - q0.y);
-    let d = q1.x - q0.x;
+    let c = -(q1y - q0y);
+    let d = q1x - q0x;
     /* e and f are dot products of the respective vectors with p and q */
-    let e = a * p1.x + b * p1.y;
-    let f = c * q1.x + d * q1.y;
+    let e = a * p1x + b * p1y;
+    let f = c * q1x + d * q1y;
     /* Now we need to solve:
      *     [a b] [rx]   [e]
      *     [c d] [ry] = [f]
@@ -112,8 +118,8 @@ pub fn line_intersect(p0: &Point, p1: &Point, q0: &Point, q1: &Point) -> Option<
         None
     } else {
         Some(Point {
-            x: (d * e - b * f) / det,
-            y: (-c * e + a * f) / det,
+            x: i32::try_from((d * e - b * f) / det).ok()?,
+            y: i32::try_from((-c * e + a * f) / det).ok()?,
         })
     }
 }
@@ -194,6 +200,18 @@ impl Iterator for BresenhamScan {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Pips: lines across a picture 2560 pixels a side meet where they
+    /// meet. The products here multiply three coordinates, which overflow an
+    /// i32 on such a picture: a panic in a debug build, a wrong point in a
+    /// release one.
+    #[test]
+    fn lines_across_a_large_picture_meet_without_overflow() {
+        let (p0, p1) = (Point { x: 0, y: 2559 }, Point { x: 2559, y: 0 });
+        let (q0, q1) = (Point { x: 0, y: 0 }, Point { x: 2559, y: 2558 });
+        let r = line_intersect(&p0, &p1, &q0, &q1).expect("they cross");
+        assert!((r.x - 1279).abs() <= 1 && (r.y - 1279).abs() <= 1, "{r:?}");
+    }
 
     #[test]
     fn test_bresenham_straight() {

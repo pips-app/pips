@@ -224,20 +224,30 @@ fn scan_reads_what_matrix_draws() {
     let m = pips_qr::matrix::Matrix::encode(text).unwrap();
     let (k, pad) = (5, 37);
     let side = m.size() * k + 2 * pad;
-    let mut rgba = vec![255u8; side * side * 4];
-    for y in 0..m.size() {
-        for x in 0..m.size() {
-            if m.get(x, y) {
-                for dy in 0..k {
-                    for dx in 0..k {
-                        let o = ((pad + y * k + dy) * side + pad + x * k + dx) * 4;
-                        rgba[o..o + 3].fill(20);
+    let frame = |width: usize| {
+        let mut rgba = vec![255u8; width * side * 4];
+        for y in 0..m.size() {
+            for x in 0..m.size() {
+                if m.get(x, y) {
+                    for dy in 0..k {
+                        for dx in 0..k {
+                            let o = ((pad + y * k + dy) * width + pad + x * k + dx) * 4;
+                            rgba[o..o + 3].fill(20);
+                        }
                     }
                 }
             }
         }
-    }
+        rgba
+    };
+    let rgba = frame(side);
     assert_eq!(pips_qr::scan::read_rgba(&rgba, side, side), vec![text.to_string()]);
+    // A side longer than any camera's is refused, however few pixels: the
+    // reader's arithmetic is sized for sides up to MAX_SIDE.
+    let wide = pips_qr::scan::MAX_SIDE + 1;
+    assert!(wide * side <= pips_qr::scan::MAX_PIXELS);
+    assert_eq!(pips_qr::scan::read_rgba(&frame(wide), wide, side), Vec::<String>::new(), "too wide");
+    assert_eq!(pips_qr::scan::read_rgba(&frame(wide - 1), wide - 1, side), vec![text.to_string()]);
     let none: Vec<String> = Vec::new();
     assert_eq!(pips_qr::scan::read_rgba(&rgba[4..], side, side), none, "inconsistent size");
     assert_eq!(pips_qr::scan::read_rgba(&[], 0, 0), none);
