@@ -210,16 +210,16 @@ where
 
     match (ring_reg, stone_reg) {
         (
-            ColoredRegion::Unclaimed {
+            Some(ColoredRegion::Unclaimed {
                 color: ring_color,
                 pixel_count: ring_count,
                 ..
-            },
-            ColoredRegion::Unclaimed {
+            }),
+            Some(ColoredRegion::Unclaimed {
                 color: stone_color,
                 pixel_count: stone_count,
                 ..
-            },
+            }),
         ) => {
             let ratio = stone_count * 100 / ring_count;
             // Verify that left is connected to right, and that stone is not connected

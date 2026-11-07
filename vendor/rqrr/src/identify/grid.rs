@@ -63,7 +63,7 @@ impl SkewedGridLocation {
         /* Check the timing pattern. This doesn't require a perspective
          * transform.
          */
-        let grid_size = measure_timing_pattern(img, &group);
+        let grid_size = measure_timing_pattern(img, &group)?;
 
         /* Make an estimate based for the alignment pattern based on extending
          * lines from capstones A and C.
@@ -173,8 +173,7 @@ fn rotate_capstone(cap: &mut CapStone, h0: &Point, hd: &Point) -> Option<()> {
         .corners
         .iter()
         .enumerate()
-        .min_by_key(|(_, a)| (a.x - h0.x) * (-hd.y) + (a.y - h0.y) * hd.x)
-        .expect("corners cannot be empty");
+        .min_by_key(|(_, a)| (a.x - h0.x) * (-hd.y) + (a.y - h0.y) * hd.x)?;
 
     /* Rotate the capstone */
     cap.corners.rotate_left(best_idx);
@@ -191,7 +190,9 @@ fn rotate_capstone(cap: &mut CapStone, h0: &Point, hd: &Point) -> Option<()> {
 // * which is nearest the centre of the code. Using these points, we do
 // * a horizontal and a vertical timing scan.
 // */
-fn measure_timing_pattern<S>(img: &PreparedImage<S>, caps: &CapStoneGroup) -> usize
+/// Pips: `None` when neither scan crosses a single change of colour, and
+/// the group is not a code. It was an `assert!`.
+fn measure_timing_pattern<S>(img: &PreparedImage<S>, caps: &CapStoneGroup) -> Option<usize>
 where
     S: ImageBuffer,
 {
@@ -207,10 +208,12 @@ where
     let scan = cmp::max(hscan, vscan);
 
     /* Choose the nearest allowable grid size */
-    assert!(scan >= 1);
+    if scan == 0 {
+        return None;
+    }
     let size = scan + 13;
     let ver = (size as f64 - 15.0).floor() as usize / 4;
-    ver * 4 + 17
+    Some(ver * 4 + 17)
 }
 
 fn timing_scan<S>(img: &PreparedImage<S>, p0: &Point, p1: &Point) -> usize
@@ -291,7 +294,7 @@ where
             if x < img.width() && y < img.height() && PixelColor::White != img.get_pixel_at(x, y) {
                 let region = img.get_region((x, y));
                 let count = match region {
-                    ColoredRegion::Unclaimed { pixel_count, .. } => pixel_count,
+                    Some(ColoredRegion::Unclaimed { pixel_count, .. }) => pixel_count,
                     _ => continue,
                 };
 
@@ -533,5 +536,26 @@ mod tests {
         assert!(!off(20, 4, -1, 0, 12), "comes back onto its last column from the right");
         assert!(off(9034, 479, 0, -1, 30_000), "far off, going up");
         assert!(!off(5, 9000, 0, -1, 9_000), "far below, reaching its bottom row");
+    }
+
+    fn stone(x: i32, y: i32) -> CapStone {
+        let corners = [
+            Point { x, y },
+            Point { x: x + 7, y },
+            Point { x: x + 7, y: y + 7 },
+            Point { x, y: y + 7 },
+        ];
+        let c = geometry::Perspective::create(&corners, 7.0, 7.0).expect("a square");
+        CapStone { corners, center: c.map(3.5, 3.5), c }
+    }
+
+    /// Pips: three capstones with no timing pattern between them, on a
+    /// picture all of one colour, are no code. The timing scan finds no
+    /// change at all; that was an `assert!`.
+    #[test]
+    fn capstones_with_no_timing_pattern_between_them_are_no_code() {
+        let img = PreparedImage::prepare_from_bitmap(40, 40, |_, _| true);
+        let group = CapStoneGroup(stone(0, 30), stone(0, 0), stone(30, 0));
+        assert_eq!(measure_timing_pattern(&img, &group), None);
     }
 }
