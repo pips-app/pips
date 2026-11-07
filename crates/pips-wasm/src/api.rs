@@ -894,15 +894,11 @@ pub struct SenderData {
 /// partly verified is ever returned.
 pub fn open_envelope(bytes: &[u8]) -> Result<Opened> {
     let o = pips_sign::open(bytes)?;
-    // Layout: 'E', version, flags, u16 length, payload. `open` has just
-    // checked all of it.
-    let len = usize::from(u16::from_le_bytes([bytes[3], bytes[4]]));
-    let payload = bytes[5..5 + len].to_vec();
     let digest = hex_digest(&o.card)?;
     Ok(Opened {
         card: from_card(&o.card),
         unknown_extensions: o.card.extensions.len(),
-        payload,
+        payload: o.payload,
         digest,
         author: o.author.as_ref().map(key_data),
         certificate: o.certificate.map(|c| CertificateData {

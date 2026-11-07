@@ -303,6 +303,10 @@ pub struct Sender {
 pub struct Opened {
     /// The card.
     pub card: Card,
+    /// The card's bytes exactly as they arrived: what an app stores and
+    /// passes on, so that extensions and flags this version does not
+    /// understand travel on unchanged.
+    pub payload: Vec<u8>,
     /// Its author, if the card is signed. `None` marks an unsigned card,
     /// which the app accepts but labels.
     pub author: Option<PublicKey>,
@@ -380,7 +384,8 @@ pub fn open(bytes: &[u8]) -> Result<Opened, Error> {
         return Err(Error::UnknownFlag(flags & !KNOWN_FLAGS));
     }
     let len = usize::from(u16::from_le_bytes(r.array()?));
-    let card = decode(r.take(len)?)?;
+    let payload = r.take(len)?;
+    let card = decode(payload)?;
 
     let author = match verify_card(&card) {
         Ok(a) => Some(a),
@@ -409,7 +414,7 @@ pub fn open(bytes: &[u8]) -> Result<Opened, Error> {
         None
     };
     r.end()?;
-    Ok(Opened { card, author, certificate, sender })
+    Ok(Opened { card, payload: payload.to_vec(), author, certificate, sender })
 }
 
 /// What a sender signs: the card, who signed it and how, the certificate

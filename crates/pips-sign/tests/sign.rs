@@ -4,7 +4,8 @@
 use pips_format::{Card, Handle, Network};
 use pips_sign::recovery::{from_paper, from_words, to_paper, to_words, word_list, RecoveryError, PAPER_PREFIX};
 use pips_sign::{
-    open, seal, sign_card, verify_card, Certificate, Error, PublicKey, RecipientCode, SecretKey, CERTIFICATE_LEN,
+    open, seal, sign_card, verify_card, Certificate, Error, Opened, PublicKey, RecipientCode, SecretKey,
+    CERTIFICATE_LEN,
 };
 
 fn key(n: u8) -> SecretKey {
@@ -224,6 +225,7 @@ fn envelope_from_the_author() {
     let c = signed(&author);
     let o = open(&seal(&c, None, None).unwrap()).unwrap();
     assert_eq!(o.card, c);
+    assert_eq!(o.payload, pips_format::encode(&c).unwrap(), "the card's bytes as they came");
     assert_eq!(o.author, Some(author.public_key()));
     assert_eq!((o.certificate, o.sender), (None, None));
 
@@ -264,14 +266,17 @@ fn envelope_tampering_is_caught() {
     // Every single-bit flip is either refused or changes nothing that
     // matters. Deflate ignores a few padding bits, so a flip there leaves the
     // same pixels — and signatures cover the content, not the compression.
-    let original = open(&env).unwrap();
+    // The payload bytes do differ then: they are kept as they came, and the
+    // card's identity (its digest) is what tells two copies apart.
+    let content = |o: &Opened| (o.card.clone(), o.author, o.certificate, o.sender.clone());
+    let original = content(&open(&env).unwrap());
     let mut harmless = 0;
     for at in 0..env.len() {
         for bit in [0x01, 0x02, 0x40, 0x80] {
             let mut b = env.clone();
             b[at] ^= bit;
             if let Ok(o) = open(&b) {
-                assert_eq!(o, original, "flip at {at} changed the content");
+                assert_eq!(content(&o), original, "flip at {at} changed the content");
                 assert!((5..5 + c.pixels.len()).contains(&at), "flip at {at} outside the pixel stream");
                 harmless += 1;
             }
