@@ -18,6 +18,9 @@ the site is packed from `web/` alone. The rules of `web/README.md` and
 | `src/core/keys.js` | The person's key, in the worker: made, checked, kept hidden from the page (WebCrypto), restored, signing. |
 | `src/core/client.js` | The page's side: jobs one at a time, each with a limit; a stopped worker is replaced. |
 | `src/core/limits.js` | The limits, each from a measurement (`tests/next/measure.mjs`). |
+| `src/rules/cards.js` | What happens to a card — arriving, moved, binned, noted, tagged — as plain functions over records. |
+| `src/rules/editions.js` | Numbered copies: the log joined, the next number, the run. |
+| `src/rules/backup.js` | A backup restored onto the device: nothing kept is lost or overwritten. |
 | `src/errors.js` | One model of errors: every code has words; a mistake of the app is said as one. |
 | `src/i18n.js` | The words, Russian and English, with the same keys and arguments. |
 | `src/dom.js` | Building DOM without HTML (from `web/`). |
@@ -42,4 +45,8 @@ npx --yes -p typescript@5.9.3 tsc -p web-next/jsconfig.json   # strict
 - **Tests check what a person sees**: roles, names, text. Where no button
   reaches a layer yet, a page under `tests/next/harness/` drives it — never
   the app's modules from a human journey's test.
+- **Rules are plain functions** (`src/rules/`): no storage, no core, no
+  clock of their own. Each is tested on examples and on random inputs
+  (`tests/next/unit/rules.test.mjs`; `RULES_SEED` repeats a case,
+  `RULES_ROUNDS` runs more).
 - **Type checking is strict** (`"strict": true`).
