@@ -88,8 +88,32 @@ fn push_nick(out: &mut Vec<u8>, nick: &str) {
 ///
 /// [`Error::Format`] if the card itself is invalid.
 pub fn sign_card(card: &mut Card, key: &SecretKey) -> Result<(), Error> {
-    let message = concat(&[CARD_DOMAIN, &canonical_bytes(card)?]);
+    let message = card_message(card)?;
     card.signature = Some(Signature { public_key: key.public_key().to_bytes(), bytes: key.sign(&message) });
+    Ok(())
+}
+
+/// What an author signs for a card: its content, not its signature. For a
+/// key kept elsewhere (a browser's, which signs but never shows the key);
+/// [`attach_card_signature`] then puts the signature on.
+///
+/// # Errors
+///
+/// [`Error::Format`] if the card itself is invalid.
+pub fn card_message(card: &Card) -> Result<Vec<u8>, Error> {
+    Ok(concat(&[CARD_DOMAIN, &canonical_bytes(card)?]))
+}
+
+/// Puts a signature made elsewhere on a card, as [`sign_card`] would have,
+/// once it checks out against [`card_message`].
+///
+/// # Errors
+///
+/// [`Error::BadSignature`] or [`Error::BadKey`] if it does not, and
+/// [`Error::Format`] for an invalid card.
+pub fn attach_card_signature(card: &mut Card, author: &PublicKey, signature: &[u8; 64]) -> Result<(), Error> {
+    author.verify(&card_message(card)?, signature)?;
+    card.signature = Some(Signature { public_key: author.to_bytes(), bytes: *signature });
     Ok(())
 }
 
@@ -150,13 +174,65 @@ impl Certificate {
         recipient: PublicKey,
         issued_day: u32,
     ) -> Result<Self, Error> {
-        if verify_card(card)? != author.public_key() {
+        let mut cert = Self::unsigned(&author.public_key(), card, edition, of, recipient, issued_day)?;
+        cert.signature = author.sign(&cert.message(card)?);
+        Ok(cert)
+    }
+
+    /// What `author` signs to issue this copy, for a key kept elsewhere;
+    /// [`with_signature`](Self::with_signature) then makes the certificate.
+    ///
+    /// # Errors
+    ///
+    /// As [`issue`](Self::issue).
+    pub fn message_to_issue(
+        author: &PublicKey,
+        card: &Card,
+        edition: u16,
+        of: u16,
+        recipient: PublicKey,
+        issued_day: u32,
+    ) -> Result<Vec<u8>, Error> {
+        Self::unsigned(author, card, edition, of, recipient, issued_day)?.message(card)
+    }
+
+    /// The certificate [`issue`](Self::issue) would make, from a signature
+    /// made elsewhere over [`message_to_issue`](Self::message_to_issue).
+    ///
+    /// # Errors
+    ///
+    /// [`Error::BadSignature`] if the signature does not check out, and the
+    /// errors of [`issue`](Self::issue).
+    pub fn with_signature(
+        author: &PublicKey,
+        card: &Card,
+        edition: u16,
+        of: u16,
+        recipient: PublicKey,
+        issued_day: u32,
+        signature: &[u8; 64],
+    ) -> Result<Self, Error> {
+        let mut cert = Self::unsigned(author, card, edition, of, recipient, issued_day)?;
+        author.verify(&cert.message(card)?, signature)?;
+        cert.signature = *signature;
+        Ok(cert)
+    }
+
+    /// The certificate before its signature, once the card is the author's
+    /// and the number is allowed.
+    fn unsigned(
+        author: &PublicKey,
+        card: &Card,
+        edition: u16,
+        of: u16,
+        recipient: PublicKey,
+        issued_day: u32,
+    ) -> Result<Self, Error> {
+        if verify_card(card)? != *author {
             return Err(Error::NotAuthor);
         }
         check_edition(edition, of)?;
-        let mut cert = Self { edition, of, recipient, issued_day, signature: [0; 64] };
-        cert.signature = author.sign(&cert.message(card)?);
-        Ok(cert)
+        Ok(Self { edition, of, recipient, issued_day, signature: [0; 64] })
     }
 
     /// Checks the certificate against its card: the card must be validly
@@ -334,6 +410,53 @@ pub fn seal(
     certificate: Option<&Certificate>,
     sender: Option<(&SecretKey, &str)>,
 ) -> Result<Vec<u8>, Error> {
+    let signed = match sender {
+        Some((key, nick)) => Some((key.public_key(), nick, key.sign(&sender_message_for(card, certificate, nick)?))),
+        None => None,
+    };
+    build(card, certificate, signed.as_ref().map(|(k, n, s)| (k, *n, s)))
+}
+
+/// What a sender signs to hand `card` on under `nick`, for a key kept
+/// elsewhere; [`seal_signed`] then wraps the card with that signature.
+///
+/// # Errors
+///
+/// A bad nickname, an invalid card, or a certificate that does not verify
+/// against it.
+pub fn sender_message_for(card: &Card, certificate: Option<&Certificate>, nick: &str) -> Result<Vec<u8>, Error> {
+    check_nick(nick)?;
+    if let Some(c) = certificate {
+        c.verify(card)?;
+    }
+    sender_message(card, certificate.map(Certificate::to_bytes).as_ref(), nick)
+}
+
+/// [`seal`], with the sender's signature made elsewhere over
+/// [`sender_message_for`]. The signature is checked before the envelope is
+/// made: what this returns opens.
+///
+/// # Errors
+///
+/// [`Error::BadSignature`] if it does not check out, and the errors of
+/// [`seal`].
+pub fn seal_signed(
+    card: &Card,
+    certificate: Option<&Certificate>,
+    sender: Option<(&PublicKey, &str, &[u8; 64])>,
+) -> Result<Vec<u8>, Error> {
+    if let Some((key, nick, signature)) = sender {
+        key.verify(&sender_message_for(card, certificate, nick)?, signature)?;
+    }
+    build(card, certificate, sender)
+}
+
+/// The envelope's bytes, every signature already made.
+fn build(
+    card: &Card,
+    certificate: Option<&Certificate>,
+    sender: Option<(&PublicKey, &str, &[u8; 64])>,
+) -> Result<Vec<u8>, Error> {
     let payload = encode(card)?;
     let len = u16::try_from(payload.len()).map_err(|_| Error::Format(pips_format::Error::PayloadTooLarge))?;
     if let Some(c) = certificate {
@@ -353,12 +476,11 @@ pub fn seal(
     if let Some(b) = &cert_bytes {
         out.extend_from_slice(b);
     }
-    if let Some((key, nick)) = sender {
+    if let Some((key, nick, signature)) = sender {
         check_nick(nick)?;
-        let message = sender_message(card, cert_bytes.as_ref(), nick)?;
         push_nick(&mut out, nick);
-        out.extend_from_slice(&key.public_key().to_bytes());
-        out.extend_from_slice(&key.sign(&message));
+        out.extend_from_slice(&key.to_bytes());
+        out.extend_from_slice(signature);
     }
     Ok(out)
 }

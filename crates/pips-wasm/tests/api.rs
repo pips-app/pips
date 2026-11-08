@@ -426,3 +426,74 @@ fn every_error_has_its_own_code() {
     assert_eq!(names.len(), Code::ALL.len(), "a code listed twice");
     assert!(Code::ALL.iter().all(|&c| Code::named(c.as_str()) == Some(c)));
 }
+
+/// The bytes of a key from its hex.
+fn key_bytes(hex: &str) -> Vec<u8> {
+    (0..hex.len()).step_by(2).map(|i| u8::from_str_radix(&hex[i..i + 2], 16).unwrap()).collect()
+}
+
+/// A key kept elsewhere, as a browser keeps one: it signs bytes, nothing
+/// more of it is seen.
+fn elsewhere(seed: [u8; 32]) -> impl Fn(&[u8]) -> Vec<u8> {
+    use ed25519_dalek::Signer;
+    let key = ed25519_dalek::SigningKey::from_bytes(&seed);
+    move |m| key.sign(m).to_bytes().to_vec()
+}
+
+/// With the key kept elsewhere, every signing in two steps — card,
+/// numbered copy, envelope passed on — and every backup gives the same
+/// bytes as an Identity holding the secret.
+#[test]
+fn a_key_kept_elsewhere_makes_the_same_bytes_as_one_held() {
+    use pips_wasm::api::{
+        card_to_sign, edition, edition_to_sign, open_backup_with, recipient_code, seal_backup_with, seal_own,
+        sealed_by, sender_to_sign, signed_card, BackupData, ProfileData,
+    };
+    let held = Identity::from_seed(&[3; 32]).unwrap();
+    let sign = elsewhere([3; 32]);
+    let me = key_bytes(&held.public_key().hex);
+    let other = Identity::from_seed(&[4; 32]).unwrap();
+
+    let card = editor_card();
+    let payload = signed_card(&card, &me, &sign(&card_to_sign(&card).unwrap())).unwrap();
+    assert_eq!(payload, held.sign_card(&card).unwrap());
+
+    assert_eq!(recipient_code(&me, "me").unwrap(), held.recipient_code("me").unwrap());
+    let rc = classify(&other.recipient_code("dapple").unwrap());
+    let Scanned::Recipient { bytes: to, .. } = rc else { panic!("{rc:?}") };
+    let m = edition_to_sign(&payload, 1, 3, &to, 20_400, &me).unwrap();
+    let cert = edition(&payload, 1, 3, &to, 20_400, &me, &sign(&m)).unwrap();
+    assert_eq!(cert, held.issue(&payload, 1, 3, &to, 20_400).unwrap());
+    assert_eq!(seal_own(&payload, Some(&cert)).unwrap(), held.seal_as_author(&payload, Some(&cert)).unwrap());
+
+    let theirs = other.sign_card(&card).unwrap();
+    let env = sealed_by(&theirs, "me", &me, &sign(&sender_to_sign(&theirs, "me").unwrap())).unwrap();
+    assert_eq!(env, held.seal_as_sender(&theirs, "me").unwrap());
+
+    let data = BackupData {
+        created: 1_760_000_000_999,
+        profile: ProfileData { nick: "me".into(), handle: None, link: String::new() },
+        cards: vec![],
+    };
+    let kept = held.backup_key();
+    let file = seal_backup_with(&data, &me, &kept, &[9; 24]).unwrap();
+    assert_eq!(file, held.seal_backup(&data, &[9; 24]).unwrap());
+    assert_eq!(open_backup_with(&file, &me, &kept).unwrap(), held.open_backup(&file).unwrap());
+}
+
+/// A signature made elsewhere is checked before it is used; bytes of the
+/// wrong length are told apart.
+#[test]
+fn a_signature_from_elsewhere_that_does_not_fit_is_refused() {
+    use pips_wasm::api::{card_to_sign, sealed_by, sender_to_sign, signed_card};
+    let held = Identity::from_seed(&[3; 32]).unwrap();
+    let me = key_bytes(&held.public_key().hex);
+    let card = editor_card();
+    let wrong = elsewhere([5; 32])(&card_to_sign(&card).unwrap());
+    assert_eq!(signed_card(&card, &me, &wrong).unwrap_err().code, "bad_signature");
+    assert_eq!(signed_card(&card, &me, &wrong[..63]).unwrap_err().code, "bad_signature");
+    assert_eq!(signed_card(&card, &me[..31], &wrong).unwrap_err().code, "bad_key");
+    let theirs = Identity::from_seed(&[4; 32]).unwrap().sign_card(&card).unwrap();
+    let good = elsewhere([3; 32])(&sender_to_sign(&theirs, "me").unwrap());
+    assert_eq!(sealed_by(&theirs, "not me", &me, &good).unwrap_err().code, "bad_signature");
+}

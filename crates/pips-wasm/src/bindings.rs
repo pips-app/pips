@@ -134,6 +134,85 @@ pub fn qr_svg(text: &str) -> Js<String> {
     api::qr_svg(text).map_err(thrown)
 }
 
+// A key kept elsewhere (a browser's): each signing in two steps, what to
+// sign and then the result from the signature (api.rs, same section).
+
+/// What the author signs for an editor card.
+#[wasm_bindgen(js_name = cardToSign)]
+pub fn card_to_sign(card_data: JsValue) -> Js<Vec<u8>> {
+    api::card_to_sign(&card(card_data)?).map_err(thrown)
+}
+
+/// The card's payload, from the author's key and signature.
+#[wasm_bindgen(js_name = signedCard)]
+pub fn signed_card(card_data: JsValue, author: &[u8], signature: &[u8]) -> Js<Vec<u8>> {
+    api::signed_card(&card(card_data)?, author, signature).map_err(thrown)
+}
+
+/// Base45 text of the recipient code for a key and a nickname.
+#[wasm_bindgen(js_name = recipientCodeOf)]
+pub fn recipient_code_of(key: &[u8], nick: &str) -> Js<String> {
+    api::recipient_code(key, nick).map_err(thrown)
+}
+
+/// What the author signs to issue a numbered copy.
+#[wasm_bindgen(js_name = editionToSign)]
+pub fn edition_to_sign(
+    payload: &[u8],
+    edition: u16,
+    of: u16,
+    recipient: &[u8],
+    day: u32,
+    author: &[u8],
+) -> Js<Vec<u8>> {
+    api::edition_to_sign(payload, edition, of, recipient, day, author).map_err(thrown)
+}
+
+/// The certificate of a numbered copy, from the author's signature.
+#[wasm_bindgen]
+pub fn edition(
+    payload: &[u8],
+    edition: u16,
+    of: u16,
+    recipient: &[u8],
+    day: u32,
+    author: &[u8],
+    signature: &[u8],
+) -> Js<Vec<u8>> {
+    api::edition(payload, edition, of, recipient, day, author, signature).map_err(thrown)
+}
+
+/// Envelope for an own card, with an optional certificate.
+#[wasm_bindgen(js_name = sealOwn)]
+pub fn seal_own(payload: &[u8], certificate: Option<Vec<u8>>) -> Js<Vec<u8>> {
+    api::seal_own(payload, certificate.as_deref()).map_err(thrown)
+}
+
+/// What a sender signs to pass someone else's card on.
+#[wasm_bindgen(js_name = senderToSign)]
+pub fn sender_to_sign(payload: &[u8], nick: &str) -> Js<Vec<u8>> {
+    api::sender_to_sign(payload, nick).map_err(thrown)
+}
+
+/// The envelope of a card passed on, from the sender's signature.
+#[wasm_bindgen(js_name = sealedBy)]
+pub fn sealed_by(payload: &[u8], nick: &str, sender: &[u8], signature: &[u8]) -> Js<Vec<u8>> {
+    api::sealed_by(payload, nick, sender, signature).map_err(thrown)
+}
+
+/// Encrypts `{ created, profile, cards }` with a backup key kept apart.
+#[wasm_bindgen(js_name = sealBackupWith)]
+pub fn seal_backup_with(data: JsValue, owner: &[u8], key: &[u8], nonce: &[u8]) -> Js<Vec<u8>> {
+    let d = serde_wasm_bindgen::from_value(data).map_err(|e| thrown(ApiError::new(Code::InvalidBackup, e)))?;
+    api::seal_backup_with(&d, owner, key, nonce).map_err(thrown)
+}
+
+/// Decrypts and checks a backup with a backup key kept apart.
+#[wasm_bindgen(js_name = openBackupWith)]
+pub fn open_backup_with(bytes: &[u8], owner: &[u8], key: &[u8]) -> Js<JsValue> {
+    js(&api::open_backup_with(bytes, owner, key).map_err(thrown)?)
+}
+
 /// The user's key.
 #[wasm_bindgen]
 pub struct Identity(api::Identity);
@@ -182,6 +261,11 @@ impl Identity {
     #[wasm_bindgen(js_name = openBackup)]
     pub fn open_backup(&self, bytes: &[u8]) -> Js<JsValue> {
         js(&self.0.open_backup(bytes).map_err(thrown)?)
+    }
+    /// The key backups are sealed with, to keep apart (`sealBackupWith`).
+    #[wasm_bindgen(js_name = backupKey)]
+    pub fn backup_key(&self) -> Vec<u8> {
+        self.0.backup_key()
     }
     /// Signs an editor card; returns its payload.
     #[wasm_bindgen(js_name = signCard)]

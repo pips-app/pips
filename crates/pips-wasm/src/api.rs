@@ -839,6 +839,171 @@ impl Identity {
     pub fn open_backup(&self, bytes: &[u8]) -> Result<BackupData> {
         pips_store::open(bytes, &self.0).map(|b| from_store(&b)).map_err(store_err)
     }
+
+    /// The key backups are sealed with, to keep once the seed is out of
+    /// reach ([`seal_backup_with`]). It opens backups; it cannot sign.
+    #[must_use]
+    pub fn backup_key(&self) -> Vec<u8> {
+        pips_store::BackupKey::of(&self.0).bytes().to_vec()
+    }
+}
+
+// ------------------------------------------------------- a key kept elsewhere --
+//
+// For an identity whose secret the app does not hold: a browser's key,
+// which signs but never shows itself (docs/REWRITE.md, О1). Each signing
+// is two calls: what to sign, then the result from the signature, which
+// the core checks against the public key before it uses it. The bytes are
+// the same as an Identity's own.
+
+/// A public key from its 32 bytes.
+fn public_key(bytes: &[u8]) -> Result<pips_sign::PublicKey> {
+    let b: &[u8; 32] = bytes.try_into().map_err(|_| err(Code::BadKey, "a public key is 32 bytes"))?;
+    Ok(pips_sign::PublicKey::from_bytes(b)?)
+}
+
+/// A signature from its 64 bytes.
+fn signature(bytes: &[u8]) -> Result<[u8; 64]> {
+    bytes.try_into().map_err(|_| err(Code::BadSignature, "a signature is 64 bytes"))
+}
+
+/// What the author signs for a card from the editor.
+///
+/// # Errors
+///
+/// `invalid_card`.
+pub fn card_to_sign(card: &CardData) -> Result<Vec<u8>> {
+    Ok(pips_sign::card_message(&to_card(card)?)?)
+}
+
+/// The card's payload, signed by `author` with `signature` over
+/// [`card_to_sign`].
+///
+/// # Errors
+///
+/// `bad_signature`, `bad_key`, `invalid_card`.
+pub fn signed_card(card: &CardData, author: &[u8], signature_bytes: &[u8]) -> Result<Vec<u8>> {
+    let mut c = to_card(card)?;
+    pips_sign::attach_card_signature(&mut c, &public_key(author)?, &signature(signature_bytes)?)?;
+    Ok(pips_format::encode(&c)?)
+}
+
+/// The Base45 text of a recipient code for `key` and `nick`.
+///
+/// # Errors
+///
+/// `bad_key`, `bad_nick`.
+pub fn recipient_code(key: &[u8], nick: &str) -> Result<String> {
+    let code = RecipientCode { key: public_key(key)?, nick: nick.into() }.to_bytes()?;
+    Ok(pips_base45::encode(&code))
+}
+
+/// What `author` signs to issue copy `edition` of `of` of an own card to the
+/// person whose recipient code was scanned (as [`Identity::issue`]).
+///
+/// # Errors
+///
+/// `not_author`, `bad_edition`, `invalid_code`, `invalid_card`, `bad_key`.
+pub fn edition_to_sign(
+    payload: &[u8],
+    edition: u16,
+    of: u16,
+    recipient: &[u8],
+    day: u32,
+    author: &[u8],
+) -> Result<Vec<u8>> {
+    let card = pips_format::decode(payload)?;
+    let to = RecipientCode::from_bytes(recipient)?;
+    Ok(Certificate::message_to_issue(&public_key(author)?, &card, edition, of, to.key, day)?)
+}
+
+/// The certificate, from `signature` over [`edition_to_sign`] with the
+/// same arguments.
+///
+/// # Errors
+///
+/// `bad_signature`, and the errors of [`edition_to_sign`].
+pub fn edition(
+    payload: &[u8],
+    edition: u16,
+    of: u16,
+    recipient: &[u8],
+    day: u32,
+    author: &[u8],
+    signature_bytes: &[u8],
+) -> Result<Vec<u8>> {
+    let card = pips_format::decode(payload)?;
+    let to = RecipientCode::from_bytes(recipient)?;
+    let cert = Certificate::with_signature(
+        &public_key(author)?,
+        &card,
+        edition,
+        of,
+        to.key,
+        day,
+        &signature(signature_bytes)?,
+    )?;
+    Ok(cert.to_bytes().to_vec())
+}
+
+/// An envelope for an own card, optionally with a certificate: nothing in
+/// it is signed by the envelope (the card carries its own signature).
+///
+/// # Errors
+///
+/// `invalid_card`, or a certificate that does not match the card.
+pub fn seal_own(payload: &[u8], certificate: Option<&[u8]>) -> Result<Vec<u8>> {
+    let card = pips_format::decode(payload)?;
+    let cert = certificate.map(Certificate::from_bytes).transpose()?;
+    Ok(pips_sign::seal(&card, cert.as_ref(), None)?)
+}
+
+/// What a sender signs to pass someone else's card on as `nick` (as
+/// [`Identity::seal_as_sender`]: never with a certificate).
+///
+/// # Errors
+///
+/// `invalid_card`, `bad_nick`.
+pub fn sender_to_sign(payload: &[u8], nick: &str) -> Result<Vec<u8>> {
+    let card = pips_format::decode(payload)?;
+    Ok(pips_sign::sender_message_for(&card, None, nick)?)
+}
+
+/// The envelope, from `signature` by `sender` over [`sender_to_sign`].
+///
+/// # Errors
+///
+/// `bad_signature`, `bad_key`, and the errors of [`sender_to_sign`].
+pub fn sealed_by(payload: &[u8], nick: &str, sender: &[u8], signature_bytes: &[u8]) -> Result<Vec<u8>> {
+    let card = pips_format::decode(payload)?;
+    Ok(pips_sign::seal_signed(&card, None, Some((&public_key(sender)?, nick, &signature(signature_bytes)?)))?)
+}
+
+/// A backup key kept apart from its identity, with its owner.
+fn backup_key(owner: &[u8], key: &[u8]) -> Result<pips_store::BackupKey> {
+    let k: [u8; 32] = key.try_into().map_err(|_| err(Code::BadSeed, "a backup key is 32 bytes"))?;
+    Ok(pips_store::BackupKey::from_parts(public_key(owner)?, k))
+}
+
+/// Encrypts a backup with a backup key kept apart from the identity
+/// ([`Identity::backup_key`]). `nonce`: 24 bytes from
+/// `crypto.getRandomValues`.
+///
+/// # Errors
+///
+/// As [`Identity::seal_backup`], and `bad_key`.
+pub fn seal_backup_with(data: &BackupData, owner: &[u8], key: &[u8], nonce: &[u8]) -> Result<Vec<u8>> {
+    let nonce: [u8; 24] = nonce.try_into().map_err(|_| err(Code::BadNonce, "a nonce is 24 bytes"))?;
+    pips_store::seal_with(&to_store(data)?, &backup_key(owner, key)?, nonce).map_err(store_err)
+}
+
+/// Decrypts and checks a backup with a backup key kept apart.
+///
+/// # Errors
+///
+/// As [`Identity::open_backup`], and `bad_key`.
+pub fn open_backup_with(bytes: &[u8], owner: &[u8], key: &[u8]) -> Result<BackupData> {
+    pips_store::open_with(bytes, &backup_key(owner, key)?).map(|b| from_store(&b)).map_err(store_err)
 }
 
 // ---------------------------------------------------------------- receiving --
