@@ -229,3 +229,12 @@ test('found by the random tests: a card held twice in a backup counts once; a lo
   const { put } = mergeCards(new Map([['d', twice]]), [card({ editions: { of: 0, issued: [issue(1, 'cy')] } })], 'me');
   assert.ok(put[0]?.editions?.issued.some((i) => i.edition === 1 && i.holder === 'cy'), 'the new copy is kept');
 });
+
+test('changes since the last backup: each card counted once, the profile once, every copy issued', async () => {
+  const { touched, NOTHING } = await import(new URL('pending.js', rules).href);
+  let p = NOTHING;
+  for (const w of [{ card: 'a' }, { card: 'a' }, { card: 'b' }, { profile: true }, { profile: true }, { issued: 1 }, { card: 'a', issued: 1 }]) p = touched(p, w);
+  assert.deepEqual(p, { cards: ['a', 'b'], profile: true, issued: 2 });
+  assert.equal(touched(p, { card: 'b' }), p, 'nothing new: the same object, nothing to write');
+  assert.equal(touched(p, {}), p);
+});

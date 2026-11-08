@@ -28,6 +28,7 @@ export async function load() {
     parseLink: core.parseLink,
     qrPlan: core.qrPlan,
     qrMatrix: core.qrMatrix,
+    sealOwn: core.sealOwn,
     /**
      * One frame of a carousel. Making the encoder costs a copy of the
      * bytes and their checksum, so each frame makes its own: no handle to

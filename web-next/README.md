@@ -18,10 +18,13 @@ the site is packed from `web/` alone. The rules of `web/README.md` and
 | `src/core/keys.js` | The person's key, in the worker: made, checked, kept hidden from the page (WebCrypto), restored, signing. |
 | `src/core/client.js` | The page's side: jobs one at a time, each with a limit; a stopped worker is replaced. |
 | `src/core/limits.js` | The limits, each from a measurement (`tests/next/measure.mjs`). |
+| `src/state.js` | The app's state: asks the core what a card is, the rules what follows, and stores it; views read it and listen. |
 | `src/store.js` | Storage (IndexedDB `pips-next`): cards and settings; a connection closed or taken over by the browser handled (from `web/`). |
 | `src/schema.js` | The database's layout, step by step; a released step is never edited. |
 | `src/rules/cards.js` | What happens to a card — arriving, moved, binned, noted, tagged — as plain functions over records. |
 | `src/rules/editions.js` | Numbered copies: the log joined, the next number, the run. |
+| `src/rules/names.js` | A name seen with another key, said (from `web/`). |
+| `src/rules/pending.js` | What changed since the last backup. |
 | `src/rules/backup.js` | A backup restored onto the device: nothing kept is lost or overwritten. |
 | `src/errors.js` | One model of errors: every code has words; a mistake of the app is said as one. |
 | `src/i18n.js` | The words, Russian and English, with the same keys and arguments. |
