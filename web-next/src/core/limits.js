@@ -28,6 +28,10 @@
 // A backup of the 100 000 cards pips-store allows may so wait for hours: a
 // limit is where waiting stops being worth it, and for the person's whole
 // collection that is far.
+//
+// The QR reader, in a worker of its own (scan-worker.js), on the largest
+// frame it reads (2560 × 1440): 327 ms for noise (WebKit; a checkerboard
+// or one colour, ~70 ms).
 
 /** shareSize: 310 ms × 10 × 10, rounded up. */
 const SHARE_SIZE = 31_000;
@@ -41,6 +45,9 @@ const SEAL_CARD = 0.3;
 const SEAL_BYTE = 90 / MB;
 /** openBackup: ms per byte of the file (measured above, rounded up). */
 const OPEN_BYTE = 3_300 / MB;
+
+/** scanQr: 327 ms × 10 × 10, rounded up to the second. */
+const SCAN = 33_000;
 
 /** Any other job: 12 ms × 10 × 10, rounded up to the second. */
 export const OTHER_LIMIT = 2_000;
@@ -62,3 +69,6 @@ export const LIMITS = {
   openBackup: opening,
   openBackupWaiting: opening,
 };
+
+/** The QR reader's worker's one job. */
+export const SCAN_LIMITS = { scanQr: SCAN };

@@ -22,6 +22,9 @@ tried on a phone; it takes `web/`'s place at stage 6. The rules of `web/README.m
 | `src/core/worker.js` | The core's worker: the WebAssembly runs here, never on the page. |
 | `src/core/serve.js` | The worker's side: one message a job, one answer each; a panic ends the worker. |
 | `src/core/ops.js` | The jobs the worker does, by name: the core's functions the app may call. |
+| `src/core/joiner.js` | A carousel put back together, in the core's worker: one at a time, frames in, progress out. |
+| `src/core/scan-worker.js` | The QR reader's own worker (`pkg/pips_scan`): a camera frame stops only it. |
+| `src/reader.js` | Reading QR codes from a camera or a picture: BarcodeDetector, or the reader's worker (from `web/`). |
 | `src/core/keys.js` | The person's key, in the worker: made, checked, kept hidden from the page (WebCrypto), restored, signing. |
 | `src/core/client.js` | The page's side: jobs one at a time, each with a limit; a stopped worker is replaced. |
 | `src/core/limits.js` | The limits, each from a measurement (`tests/next/measure.mjs`). |

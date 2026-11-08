@@ -87,3 +87,35 @@ export function measureBackup(core, small, large) {
     id.free();
   }
 }
+
+/**
+ * The QR reader (pkg/pips_scan) on the largest frames it reads (pips-qr's
+ * MAX_SIDE × the rest of MAX_PIXELS: 2560 × 1440): noise, a fine
+ * checkerboard — a frame full of what could be the corners of codes — and
+ * one colour. Each is read twice; the worst counts.
+ * @param {{ scanQr(rgba: Uint8Array, width: number, height: number): string[] }} scan
+ */
+export function measureScan(scan) {
+  const w = 2560;
+  const h = 1440;
+  const next = noise(1);
+  /** @type {Record<string, (x: number, y: number) => number>} */
+  const frames = {
+    noise: () => (next(2) ? 255 : 0),
+    checkerboard: (x, y) => ((((x / 7) | 0) + ((y / 7) | 0)) & 1 ? 255 : 0),
+    'one colour': () => 0,
+  };
+  /** @type {Record<string, Times>} */
+  const out = {};
+  for (const [name, at] of Object.entries(frames)) {
+    const rgba = new Uint8Array(w * h * 4);
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const v = at(x, y);
+        rgba.set([v, v, v, 255], (y * w + x) * 4);
+      }
+    }
+    out[name] = time(() => scan.scanQr(rgba, w, h), 2);
+  }
+  return out;
+}

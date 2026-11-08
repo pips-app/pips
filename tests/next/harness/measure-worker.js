@@ -5,7 +5,8 @@
 import { serve } from '/src/core/serve.js';
 import { load } from '/src/core/ops.js';
 import * as core from '/pkg/pips_wasm.js';
-import { largestCard, measureBackup, time } from '/dev/measure-ops.js';
+import { largestCard, measureBackup, measureScan, time } from '/dev/measure-ops.js';
+import initScan, * as scan from '/pkg/pips_scan.js';
 
 serve(async () => {
   const ops = await load();
@@ -60,5 +61,9 @@ serve(async () => {
 
     /** @param {number} small @param {number} large */
     measureBackup: (small, large) => measureBackup(core, small, large),
+    async measureScan() {
+      await initScan({ module_or_path: '/pkg/pips_scan_bg.wasm' });
+      return measureScan(scan);
+    },
   };
 });

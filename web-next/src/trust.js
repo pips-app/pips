@@ -10,8 +10,8 @@
  * @typedef {{ readonly trustedScriptURL: never }} TrustedScriptURL
  */
 
-/** The scripts the app starts: the core's worker. */
-const SCRIPTS = [new URL('./core/worker.js', import.meta.url).href];
+/** The scripts the app starts: the core's worker, the QR reader's. */
+const SCRIPTS = [new URL('./core/worker.js', import.meta.url).href, new URL('./core/scan-worker.js', import.meta.url).href];
 
 /** @type {any} */
 const tt = /** @type {any} */ (globalThis).trustedTypes;
@@ -37,3 +37,5 @@ export function scriptURL(url) {
 
 /** The core's worker. */
 export const CORE_WORKER = SCRIPTS[0];
+/** The QR reader's worker. */
+export const SCAN_WORKER = SCRIPTS[1];

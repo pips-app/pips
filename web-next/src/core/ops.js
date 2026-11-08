@@ -3,17 +3,19 @@
 // may call, and nothing else of the module (its glue and memory stay
 // inside the worker). Loaded only in the worker.
 //
-// What lives between calls: the person's key (keys.js), and later the
-// carousel's joiner (docs/REWRITE.md, "Операции ядра").
+// What lives between calls: the person's key (keys.js) and the carousel
+// being put together (joiner.js; docs/REWRITE.md, "Операции ядра").
 
 import init, * as core from '../../pkg/pips_wasm.js';
 import { keyOps } from './keys.js';
+import { joinerOps } from './joiner.js';
 
 /** Loads the core and lists its jobs. */
 export async function load() {
   await init({ module_or_path: new URL('../../pkg/pips_wasm_bg.wasm', import.meta.url) });
   return {
     ...keyOps,
+    ...joinerOps,
     errorCodes: core.errorCodes,
     palettes: core.palettes,
     recoveryWords: core.recoveryWords,

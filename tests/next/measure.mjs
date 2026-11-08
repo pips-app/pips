@@ -73,4 +73,6 @@ const backup = await page.evaluate(() => /** @type {any} */ (window).core.call('
 for (const [shape, m] of Object.entries(backup)) {
   console.log(`${engineName}\tbackup of ${m.cards} ${shape} cards, ${m.file} B\tseal ${m.seal.max.toFixed(0)} ms (${m.sealPerMB.toFixed(0)} ms/MB of cards)\topen ${m.open.max.toFixed(0)} ms (${m.openPerMB.toFixed(0)} ms/MB of file)`);
 }
+const scanned = await page.evaluate(() => /** @type {any} */ (window).core.call('measureScan'));
+for (const [frame, t] of Object.entries(scanned)) console.log(`${engineName}\tscanQr 2560×1440 ${frame}\tmax ${t.max.toFixed(0)} ms`);
 await env.close();

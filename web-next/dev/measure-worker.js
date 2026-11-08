@@ -4,7 +4,8 @@
 // The core is loaded here directly, without the app's key or storage.
 
 import init, * as core from '../pkg/pips_wasm.js';
-import { largestCard, measureBackup, time } from './measure-ops.js';
+import initScan, * as scan from '../pkg/pips_scan.js';
+import { largestCard, measureBackup, measureScan, time } from './measure-ops.js';
 
 /**
  * Backups to seal and open: fewer cards than on the desktop
@@ -73,6 +74,9 @@ onmessage = async () => {
     const b = measureBackup(core, SMALL, LARGE);
     say({ step: 'sealBackup', perCard: b['1×1'].seal.max / SMALL, perMB: b.largest.sealPerMB });
     say({ step: 'openBackup', perMB: b['1×1'].openPerMB, perMBLarge: b.largest.openPerMB });
+    await initScan({ module_or_path: new URL('../pkg/pips_scan_bg.wasm', import.meta.url) });
+    const read = measureScan(scan);
+    say({ step: 'scanQr', ms: Math.max(...Object.values(read).map((t) => t.max)) });
     say({ done: true });
   } catch (e) {
     say({ error: String(e) });

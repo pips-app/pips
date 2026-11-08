@@ -17,7 +17,7 @@ test('the measuring page runs every step and gives one line to send', async () =
   await p.getByRole('status').filter({ hasText: /Готово|Ошибка/ }).waitFor({ timeout: 110_000 });
   const line = await p.getByRole('textbox', { name: 'Строка для отправки' }).inputValue();
   assert.doesNotMatch(line, /error/);
-  for (const step of ['boot', 'shareSize', 'render', 'openEnvelope', 'importPicture upscaled', 'importPicture noise', 'sealBackup', 'openBackup']) {
+  for (const step of ['boot', 'shareSize', 'render', 'openEnvelope', 'importPicture upscaled', 'importPicture noise', 'sealBackup', 'openBackup', 'scanQr']) {
     assert.match(line, new RegExp(`\\| ${step} `), step);
   }
   assert.equal(await p.getByRole('button', { name: 'Скопировать строку' }).isEnabled(), true);
