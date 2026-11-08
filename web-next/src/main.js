@@ -26,7 +26,7 @@ try {
   await store.open();
   const app = createState(core);
   await app.load();
-  const land = () => home({ root, core, app });
+  const land = (/** @type {string} */ said = '') => home({ root, core, app, said });
   if (app.key.state === 'none') onboarding({ root, core, app, done: land });
   else if (!app.profile.nick) onboarding({ root, core, app, done: land, start: 'name' });
   else land();

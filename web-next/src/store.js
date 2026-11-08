@@ -14,9 +14,10 @@
 /**
  * The codes storage refuses with: data from a newer app; an upgrade that
  * failed (nothing changed); storage that would not open this once; data
- * handed to a newer app in another tab.
+ * handed to a newer app in another tab; no room left on the device (also
+ * for the key's storage, core/serve.js).
  */
-export const STORE_CODES = ['newer_data', 'upgrade_failed', 'store_unavailable', 'store_replaced'];
+export const STORE_CODES = ['newer_data', 'upgrade_failed', 'store_unavailable', 'store_replaced', 'storage_full'];
 
 import { SCHEMA, stepsFrom } from './schema.js';
 
@@ -199,7 +200,11 @@ function write(store, op) {
     t.oncomplete = () => resolve(undefined);
     t.onerror = () => reject(t.error);
     t.onabort = () => reject(t.error ?? new DOMException('transaction aborted', 'AbortError'));
-  }));
+  })).catch((e) => {
+    // The person can make room: said so, not taken for a mistake of the app.
+    if (/** @type {any} */ (e)?.name === 'QuotaExceededError') throw Object.assign(new Error('no room left on the device', { cause: e }), { code: 'storage_full' });
+    throw e;
+  });
 }
 
 /** @param {string} key */
@@ -207,6 +212,8 @@ export const getMeta = async (key) => (memoryOnly ? mem.meta.get(key) : read('me
 /** @param {string} key @param {any} value */
 export const setMeta = async (key, value) => (memoryOnly ? void mem.meta.set(key, value) : write('meta', (m) => m.put(value, key)));
 
+/** @param {string} digest @returns {Promise<CardRecord | undefined>} */
+export const getCard = async (digest) => (memoryOnly ? mem.cards.get(digest) : read('cards', (c) => c.get(digest)));
 /** @returns {Promise<CardRecord[]>} */
 export const allCards = async () => (memoryOnly ? [...mem.cards.values()] : read('cards', (c) => c.getAll()));
 /** @param {CardRecord} rec */

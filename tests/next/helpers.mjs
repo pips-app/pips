@@ -65,16 +65,23 @@ export async function setup() {
   const heard = new Set();
   /** @param {string} e */
   const write = (e) => { errors.push(e); for (const f of heard) f(); };
+  /** A page watched for errors, at `path`. @param {import('playwright').Page} p @param {string} path */
+  const open = async (p, path) => {
+    p.on('pageerror', (e) => write(e.message));
+    p.on('console', (m) => { if (m.type() === 'error') write(m.text()); });
+    await p.goto(new URL(path, site.url).href);
+    return p;
+  };
   return {
     url: site.url,
-    /** A fresh page at `path`. @param {string} path */
+    /** A fresh page at `path`: a new phone. @param {string} path */
     async page(path = '') {
       const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, locale: 'ru-RU' });
-      const p = await ctx.newPage();
-      p.on('pageerror', (e) => write(e.message));
-      p.on('console', (m) => { if (m.type() === 'error') write(m.text()); });
-      await p.goto(new URL(path, site.url).href);
-      return p;
+      return open(await ctx.newPage(), path);
+    },
+    /** Another tab beside `page`, at `path`: the same phone, the same storage. @param {import('playwright').Page} page @param {string} path */
+    async tab(page, path = '') {
+      return open(await page.context().newPage(), path);
     },
     /**
      * Runs `cause`, which makes the page write `count` errors matching

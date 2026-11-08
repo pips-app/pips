@@ -32,7 +32,7 @@ const BACKUP_MAX = 64 * 1024 * 1024;
  * @param {HTMLElement} o.root where the pages go
  * @param {{ call(op: string, ...args: unknown[]): Promise<any> }} o.core
  * @param {State} o.app
- * @param {() => void} o.done the app can start
+ * @param {(said?: string) => void} o.done the app can start; `said`: what went wrong after the key was kept, to say there
  * @param {'welcome' | 'name' | 'switch'} [o.start] 'name': a key is kept, the name is not;
  *   'switch': from the profile, another key in place of this one
  * @param {() => void} [o.cancel] back out of switching
@@ -95,8 +95,8 @@ export function onboarding({ root, core, app, done, start = 'welcome', cancel = 
     const book = wordBook(await list);
     const places = pick(ASKED, words.length);
     const status = h('p', { class: 'onb-status wrong', role: 'status' });
-    const next = /** @type {HTMLButtonElement} */ (h('button', { type: 'button', class: 'btn key wide', disabled: true, onclick: () => keep(next) }, t('onb.next')));
-    /** Whether each asked word is right, as the core says. @type {boolean[]} */
+    const next = /** @type {HTMLButtonElement} */ (h('button', { type: 'button', class: 'btn key wide', disabled: true, onclick: () => keep(next, k.words) }, t('onb.next')));
+    /** Whether each asked word is right. The page has the words: it is showing them. @type {boolean[]} */
     const right = places.map(() => false);
     const fields = places.map((n, i) => {
       const input = /** @type {HTMLInputElement} */ (h('input', {
@@ -104,9 +104,9 @@ export function onboarding({ root, core, app, done, start = 'welcome', cancel = 
       }));
       const mark = h('span', { class: 'onb-mark' });
       const field = h('label', { class: 'field' }, h('span', { 'aria-hidden': 'true' }, t('onb.check.word', n)), input, mark);
-      input.addEventListener('input', async () => {
+      input.addEventListener('input', () => {
         const word = book.resolve(input.value);
-        right[i] = !!word && (await core.call('keyCheckWords', [{ n, word }]))[0];
+        right[i] = word === words[n - 1];
         replace(mark, right[i] ? icon('check') : '');
         const wrong = !!word && !right[i];
         field.classList.toggle('bad', wrong);
@@ -124,23 +124,46 @@ export function onboarding({ root, core, app, done, start = 'welcome', cancel = 
     /** @type {HTMLInputElement} */ (fields[0].querySelector('input')).focus();
   }
 
-  /** The new key kept: hidden by the browser where it can. @param {HTMLButtonElement} button */
-  async function keep(button) {
+  /**
+   * The new key kept: hidden by the browser where it can. Made again from
+   * its words first, so that a worker restarted meanwhile (which forgets a
+   * waiting key) changes nothing: the key kept is the one whose words were
+   * checked. @param {HTMLButtonElement} button @param {string} words
+   */
+  async function keep(button, words) {
     if (button.disabled) return;
     button.disabled = true;
+    /** @type {any} */
+    let next;
     try {
-      await core.call('keyKeep');
-      await app.keyChanged();
+      await core.call('keyRestore', { words });
+      next = await core.call('keyKeep');
     } catch (e) {
       button.disabled = false;
       replace(/** @type {HTMLElement} */ (page.querySelector('.onb-status')), say(e));
       return;
     }
-    kept();
+    kept(await settled(next));
   }
 
-  /** What the person now has: the key here, the words with them. */
-  function kept() {
+  /**
+   * After a key is kept there is no way back: whatever fails next (storage,
+   * the backup) is said where the person goes on, not on the page they
+   * left. @param {any} next the key's state, as keyKeep gave it @param {() => Promise<unknown>} [then]
+   * @returns {Promise<string>} what to say, if anything
+   */
+  async function settled(next, then = async () => {}) {
+    try {
+      await app.keyChanged(next);
+      await then();
+      return '';
+    } catch (e) {
+      return say(e);
+    }
+  }
+
+  /** What the person now has: the key here, the words with them. @param {string} said */
+  function kept(said) {
     const k = app.key;
     if (k.state === 'none') return welcome();
     const hidden = k.state === 'hidden';
@@ -149,6 +172,7 @@ export function onboarding({ root, core, app, done, start = 'welcome', cancel = 
       h('div', { class: 'onb-facts' },
         h('div', { class: hidden ? 'note' : 'note box warn' }, icon(hidden ? 'lock' : 'open'), h('p', {}, t(hidden ? 'onb.kept.hidden' : 'onb.kept.open'))),
         h('div', { class: 'note' }, icon('lines'), h('p', {}, t('onb.kept.words')))),
+      h('p', { class: 'onb-status wrong', role: 'alert' }, said),
       h('div', { class: 'onb-grow' }),
       h('button', { type: 'button', class: 'btn key wide', onclick: () => name() }, t('onb.kept.next')));
   }
@@ -165,11 +189,13 @@ export function onboarding({ root, core, app, done, start = 'welcome', cancel = 
   async function restore(switching = false) {
     /** The key the words give, waiting in the worker. @type {{ hex: string, short: string } | null} */
     let key = null;
+    /** The words that gave it. */
+    let typed = '';
     /** @type {{ bytes: Uint8Array, name: string, owner: { hex: string, short: string } } | null} */
     let file = null;
     const status = h('p', { class: 'onb-status', role: 'status' });
     const fileBox = h('div', {});
-    const go = /** @type {HTMLButtonElement} */ (h('button', { type: 'button', class: 'btn key wide', disabled: true, onclick: () => finish() }, t('onb.restore.go')));
+    const go = /** @type {HTMLButtonElement} */ (h('button', { type: 'button', class: 'btn key wide', disabled: true }, t('onb.restore.go')));
 
     /**
      * Where things stand; restoring goes only with a key that fits the file.
@@ -215,50 +241,92 @@ export function onboarding({ root, core, app, done, start = 'welcome', cancel = 
     if (chosen) await take(chosen.bytes, chosen.name);
     else paintFile();
 
+    /** Each change of the words asks anew; an answer to an older one is dropped. */
+    let asked = 0;
     const entry = wordsEntry(await list, async (s) => {
+      const words = s.words?.join(' ') ?? '';
+      // The same words again (a cell left, as a tap on the button leaves it): nothing changed.
+      if (s.bad < 0 && words && words === typed && key) return;
+      const ask = ++asked;
+      // Nothing to restore until these words have answered.
       key = null;
+      typed = '';
+      go.disabled = true;
       if (s.bad >= 0) return paint(t('onb.restore.unknown', s.bad + 1), true);
       if (!s.words) return paint(s.named ? t('onb.restore.count', s.named) : '');
       try {
-        key = (await core.call('keyRestore', { words: s.words.join(' ') })).key;
+        const found = (await core.call('keyRestore', { words })).key;
+        if (ask !== asked) return; // typed on meanwhile
+        key = found;
+        typed = words;
         paint();
-      } catch {
-        paint(t('onb.restore.sum'), true);
+      } catch (e) {
+        if (ask !== asked) return;
+        paint(/** @type {any} */ (e)?.code === 'bad_words' ? t('onb.restore.sum') : say(e), true);
       }
     });
+
+    /** Restoring: in place of another key, asked first. */
+    function restoreClicked() {
+      if (go.disabled) return;
+      const now = app.key;
+      if (switching && now.state !== 'none' && key && now.key.hex !== key.hex) confirm(now.key);
+      else void finish();
+    }
+
+    /**
+     * Switching throws the current key away: it comes back only from its
+     * words, which Pips cannot show. Said, and asked, before it is done.
+     * @param {{ hex: string, short: string }} current
+     */
+    function confirm(current) {
+      const own = [...app.cards.values()].filter((e) => e.rec.mine).length;
+      show(heading(t('onb.confirm.title')), h('p', {}, t('onb.switch.lead')),
+        h('div', { class: 'idcard' }, identicon(current.hex), h('div', {}, h('b', {}, t('onb.confirm.now')), h('small', {}, t('key.short', current.short)))),
+        h('div', { class: 'note box warn' }, icon('open'), h('p', {}, t('onb.confirm.lead', current.short))),
+        own ? h('div', { class: 'note' }, icon('lines'), h('p', {}, t('onb.switch.own', own))) : '',
+        h('div', { class: 'onb-grow' }),
+        h('button', { type: 'button', class: 'btn key wide', onclick: () => { show(...parts); void finish(); } }, t('onb.confirm.go')),
+        h('button', { type: 'button', class: 'btn plain wide', onclick: () => show(...parts) }, t('onb.back')));
+    }
 
     async function finish() {
       if (go.disabled) return;
       go.disabled = true;
+      /** @type {any} */
+      let next;
+      /** @type {any} */
+      let opened = null;
       try {
+        // The key made again from its words: a worker restarted since they
+        // were typed has forgotten it, and the person need not type them again.
+        await core.call('keyRestore', { words: typed });
         // Every card and certificate of the backup checked before anything is kept.
-        const opened = file ? await core.call('openBackupWaiting', file.bytes) : null;
-        await core.call('keyKeep');
-        await app.keyChanged();
-        if (opened) await app.applyBackup(opened);
+        if (file) opened = await core.call('openBackupWaiting', file.bytes);
+        next = await core.call('keyKeep', { switching });
       } catch (e) {
         paint(say(e), true);
         go.disabled = false;
         return;
       }
-      if (app.profile.nick) done();
-      else name();
+      const said = await settled(next, async () => { if (opened) await app.applyBackup(opened); });
+      if (app.profile.nick) done(said);
+      else name(said);
     }
 
-    // Switching: the person's own cards will be a former self's, said before it is done.
-    const own = [...app.cards.values()].filter((e) => e.rec.mine).length;
-    const warning = switching && own ? h('div', { class: 'note box warn' }, icon('lines'), h('p', {}, t('onb.switch.own', own))) : '';
-    show(heading(t(switching ? 'onb.switch.title' : 'onb.restore.title')), h('p', {}, t(switching ? 'onb.switch.lead' : 'onb.restore.lead')), warning,
+    go.onclick = restoreClicked;
+    const parts = [heading(t(switching ? 'onb.switch.title' : 'onb.restore.title')), h('p', {}, t(switching ? 'onb.switch.lead' : 'onb.restore.lead')),
       h('div', { class: 'group' }, h('h2', {}, t('onb.restore.file')), fileBox, fileInput),
       h('div', { class: 'group' }, h('h2', {}, t('onb.restore.key')), h('p', { class: 'hint' }, t('onb.restore.words.lead')), entry.el, status),
       h('div', { class: 'onb-grow' }), go,
-      h('button', { type: 'button', class: 'btn plain wide', onclick: async () => { await core.call('keyDrop'); if (switching) cancel(); else welcome(); } }, t('onb.back')));
+      h('button', { type: 'button', class: 'btn plain wide', onclick: async () => { await core.call('keyDrop'); if (switching) cancel(); else welcome(); } }, t('onb.back'))];
+    show(...parts);
   }
 
-  /** The name on the person's cards. The key is kept by now: only forward. */
-  function name() {
+  /** The name on the person's cards. The key is kept by now: only forward. @param {string} [said] what went wrong before, still to say */
+  function name(said = '') {
     const nick = textLimit(/** @type {HTMLInputElement} */ (h('input', { autocomplete: 'nickname', placeholder: 'kitsu', 'aria-label': t('onb.nick.title') })), LIMITS.name, 'chars');
-    const problem = h('p', { class: 'onb-status wrong', role: 'alert' });
+    const problem = h('p', { class: 'onb-status wrong', role: 'alert' }, said);
     // A name is needed: it is on every card drawn and every card passed on.
     const go = /** @type {HTMLButtonElement} */ (h('button', { type: 'button', class: 'btn key wide', disabled: true, onclick: finish }, t('onb.done')));
     nick.addEventListener('input', () => { go.disabled = !finished(nick.value); });
@@ -273,7 +341,7 @@ export function onboarding({ root, core, app, done, start = 'welcome', cancel = 
         go.disabled = false;
         return;
       }
-      done();
+      done(said);
     }
     show(heading(t('onb.nick.title')), h('p', {}, t('onb.nick.lead')), h('div', { class: 'field' }, nick), problem, h('div', { class: 'onb-grow' }), go);
     nick.focus();

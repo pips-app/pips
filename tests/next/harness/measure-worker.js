@@ -96,5 +96,41 @@ serve(async () => {
       }
       return out;
     },
+
+    /**
+     * Sealing and opening backups, per byte of the file: of the smallest
+     * cards, where checking each card's signature costs most, and of the
+     * largest, where the bytes do. A backup's jobs take time in proportion
+     * to its size, and their limits do too (limits.js).
+     * @param {number} small how many 1×1 cards @param {number} large how many of the largest
+     */
+    measureBackup(small, large) {
+      const id = core.Identity.fromSeed(new Uint8Array(32).fill(7));
+      const { card } = largestCard();
+      const tiny = { ...card, width: 1, height: 1, frames: 1, palette: { builtin: 0 }, title: '', author: '', link: '', pixels: new Uint8Array(1) };
+      /** @type {Record<string, unknown>} */
+      const out = {};
+      for (const [name, n, at] of /** @type {[string, number, (i: number) => any][]} */ ([
+        ['1×1', small, (i) => ({ ...tiny, title: String(i) })],
+        ['largest', large, (i) => ({ ...card, title: String(i) })],
+      ])) {
+        const cards = Array.from({ length: n }, (_, i) => ({
+          payload: id.signCard(at(i)), cert: null, edition: null, mine: true, state: 'collection',
+          received: 1, trashedAt: null, from: null, note: '', tags: [],
+        }));
+        const data = { created: 1, profile: { nick: 'k', handle: null, link: '' }, cards };
+        const key = id.backupKey();
+        const pub = id.publicKey();
+        const pk = Uint8Array.from(pub.hex.match(/../g) ?? [], (b) => parseInt(b, 16));
+        /** @type {Uint8Array} */
+        let file = new Uint8Array(0);
+        const seal = time(() => { file = core.sealBackupWith(data, pk, key, new Uint8Array(24)); }, 3);
+        const open = time(() => core.openBackupWith(file, pk, key), 3);
+        const payloads = cards.reduce((sum, c) => sum + c.payload.length, 0);
+        out[name] = { cards: n, file: file.length, payloads, seal, open,
+          sealPerMB: (seal.max / payloads) * 2 ** 20, openPerMB: (open.max / file.length) * 2 ** 20 };
+      }
+      return out;
+    },
   };
 });

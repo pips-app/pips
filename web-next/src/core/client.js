@@ -9,6 +9,11 @@
 // running with it — the jobs behind it go to the next worker.
 
 /** @typedef {import('./serve.js').Failure} Failure */
+/**
+ * How long a job may take, in ms: a number, or one worked out from the
+ * job's arguments, for jobs whose time grows with their input.
+ * @typedef {number | ((...args: any[]) => number)} Limit
+ */
 
 /**
  * A job the core did not do: its code says why (the core's codes,
@@ -46,7 +51,7 @@ export const CLIENT_CODES = ['core_timeout', 'core_crashed', 'core_unavailable',
  * @param {object} o
  * @param {string | URL | import('../trust.js').TrustedScriptURL} o.script the worker's script
  *   (through the Trusted Types policy on a page that requires it)
- * @param {Record<string, number>} o.limits ms each job may take, by op
+ * @param {Record<string, Limit>} o.limits ms each job may take, by op
  * @param {number} o.otherLimit ms for a job not in `limits`
  * @param {number} o.bootLimit ms the worker may take to load the core
  */
@@ -141,7 +146,8 @@ export function coreClient({ script, limits, otherLimit, bootLimit }) {
       // a mistake in the app. The job fails now; the worker never saw it.
       return settle(null, new CoreError({ code: 'internal', message: String(e) }));
     }
-    const limit = Object.hasOwn(limits, job.op) ? limits[job.op] : otherLimit;
+    const given = Object.hasOwn(limits, job.op) ? limits[job.op] : otherLimit;
+    const limit = typeof given === 'function' ? given(...job.args) : given;
     timer = window.setTimeout(() => stop('core_timeout', `${job.op} took over ${limit} ms`), limit);
   }
 

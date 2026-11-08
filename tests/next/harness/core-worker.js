@@ -13,12 +13,17 @@ const TRAP = new Uint8Array([
   0x0a, 0x05, 0x01, 0x03, 0x00, 0x00, 0x0b, // body: unreachable
 ]);
 
+/** Busy for `ms`, then answers it. @param {number} ms */
+function busy(ms) { const end = Date.now() + ms; while (Date.now() < end) { /* on purpose */ } return ms; }
+
 serve(async () => ({
   ...(await load()),
   /** Never answers. */
   hang() { for (;;) { /* on purpose */ } },
-  /** Answers after `ms`. @param {number} ms */
-  slow(ms) { const end = Date.now() + ms; while (Date.now() < end) { /* on purpose */ } return ms; },
+  /** Answers after `ms`. */
+  slow: busy,
+  /** Answers after `ms`; its limit is its second argument (harness/core.js). */
+  sized: busy,
   /** Traps in WebAssembly. */
   trap() { /** @type {any} */ (new WebAssembly.Instance(new WebAssembly.Module(TRAP)).exports).t(); },
   /** Answers, then throws where nothing catches it: the worker's own error. */

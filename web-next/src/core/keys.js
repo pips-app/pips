@@ -8,7 +8,11 @@
 // copy it. The core then signs in two steps (what to sign, then the result
 // from the signature), and the bytes are the same as before. A browser
 // without Ed25519 in WebCrypto keeps the secret as the old app did, and
-// the app says so (state "open").
+// the app says so (state "open"); once the browser can hide it, it is
+// hidden the next time it is read.
+//
+// The kept key is read again for every job: another tab may have switched
+// it, and a job signs with the key the person has now.
 //
 // Words come out once, when a key is made; nothing is stored until the
 // person has checked that they wrote them down (keep()). A key restored
@@ -20,10 +24,11 @@ import * as core from '../../pkg/pips_wasm.js';
 
 /**
  * The codes the key's jobs refuse with, beside the core's: no key kept
- * (a mistake of the app, which asks only once one is), and a key that was
- * waiting to be kept lost with a restarted worker.
+ * (a mistake of the app, which asks only once one is); a key that was
+ * waiting to be kept lost with a restarted worker; and another key kept
+ * meanwhile (in another tab), which only switching replaces.
  */
-export const KEY_CODES = ['no_key', 'key_lost'];
+export const KEY_CODES = ['no_key', 'key_lost', 'key_exists'];
 
 /** The key's own database, apart from the app's: only this worker opens it. */
 const DB = 'pips-next-key';
@@ -48,8 +53,6 @@ const PKCS8 = [0x30, 0x2e, 0x02, 0x01, 0x00, 0x30, 0x05, 0x06, 0x03, 0x2b, 0x65,
 
 /** A key the person has not kept yet: made, or restored. @type {core.Identity | null} */
 let waiting = null;
-/** The kept key, once read. @type {Kept | null | undefined} */
-let kept;
 
 /** @returns {Promise<IDBDatabase>} */
 function open() {
@@ -77,10 +80,18 @@ async function run(mode, op) {
   }
 }
 
-/** @returns {Promise<Kept | null>} */
+/** The kept key; one kept in the open is hidden now if the browser can. @returns {Promise<Kept | null>} */
 async function read() {
-  if (kept === undefined) kept = (await run('readonly', (s) => s.get(ID))) ?? null;
-  return /** @type {Kept | null} */ (kept);
+  /** @type {Kept | undefined} */
+  const k = await run('readonly', (s) => s.get(ID));
+  if (!k?.seed) return k ?? null;
+  const sign = await hide(k.seed);
+  if (!sign) return k;
+  k.seed.fill(0);
+  /** @type {Kept} */
+  const hidden = { ...k, sign, seed: null };
+  await run('readwrite', (s) => s.put(hidden, ID));
+  return hidden;
 }
 
 /**
@@ -167,18 +178,17 @@ export const keyOps = {
   },
 
   /**
-   * Whether these words, at these places (1 to 24), are the waiting key's:
-   * the check that they were written down. One answer for each.
-   * @param {{ n: number, word: string }[]} asked
+   * Keeps the waiting key, hidden where the browser can. In place of
+   * another key only when switching: otherwise that key was kept meanwhile,
+   * in another tab, and is not thrown away unasked.
+   * @param {{ switching?: boolean }} [o]
    */
-  keyCheckWords(asked) {
-    const words = waitingKey('checked').words().split(' ');
-    return asked.map(({ n, word }) => words[n - 1] === word.trim().toLowerCase());
-  },
-
-  /** Keeps the waiting key in place of any kept before, hidden where the browser can. */
-  async keyKeep() {
+  async keyKeep({ switching = false } = {}) {
     const id = waitingKey('kept');
+    const before = await read();
+    if (before && !switching && hex(before.publicKey) !== id.publicKey().hex) {
+      throw { code: 'key_exists', message: 'another key was kept meanwhile' };
+    }
     const seed = id.seed();
     try {
       const sign = await hide(seed);
@@ -190,7 +200,6 @@ export const keyOps = {
         backup: id.backupKey(),
       };
       await run('readwrite', (s) => s.put(k, ID));
-      kept = k;
       waiting = null;
       id.free();
       return { state: sign ? 'hidden' : 'open', key: core.keyData(k.publicKey) };

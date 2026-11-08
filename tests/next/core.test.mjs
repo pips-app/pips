@@ -60,6 +60,12 @@ test('a job’s limit counts its own time, not its wait behind another', async (
   assert.deepEqual(all, Array(5).fill({ value: 400 }));
 });
 
+test('a limit can grow with the job: worked out from its arguments', async () => {
+  // A backup's jobs take time in proportion to its size (core/limits.js).
+  assert.deepEqual(await run('sized', 600, 3000), { value: 600 });
+  assert.deepEqual(await run('sized', 600, 300), { code: 'core_timeout', name: 'CoreError' });
+});
+
 test('what is not a job of the core is refused, and the worker stays', async () => {
   const before = await restarts();
   assert.equal((await run('__proto__')).code, 'unknown_op');

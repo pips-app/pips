@@ -18,9 +18,15 @@ const CARD = {
   title: 'Ключ', author: 'kitsu', handle: null, link: '', pixels: Array.from({ length: 64 }, (_, i) => i % 4),
 };
 
-/** A page with the core's worker (`worker`: another from the harness), and a way to call it. @param {string} [worker] */
-async function core(worker) {
-  const p = await env.page(`__test__/core.html${worker ? `?worker=${worker}` : ''}`);
+/**
+ * A page with the core's worker, and a way to call it. `query`: another
+ * worker from the harness (`worker=…`), the app's limits (`limits=app`).
+ * `beside`: a tab beside that page, on the same storage.
+ * @param {string} [query] @param {import('playwright').Page} [beside]
+ */
+async function core(query, beside) {
+  const path = `__test__/core.html${query ? `?${query}` : ''}`;
+  const p = beside ? await env.tab(beside, path) : await env.page(path);
   await p.waitForFunction(() => /** @type {any} */ (window).harness);
   /** Its value, or the code it failed with. @param {string} op @param {...unknown} args */
   const run = (op, ...args) => p.evaluate(([op, args]) => /** @type {any} */ (window).core.call(op, ...args).then(
@@ -41,8 +47,6 @@ test('a new key: its words checked, then kept hidden; it signs, and the page can
   const words = made.words.split(' ');
   assert.equal(words.length, 24);
   assert.match(made.paper, /^PIPS:KEY:1:/);
-  assert.deepEqual(await value('keyCheckWords', [{ n: 4, word: words[3] }, { n: 13, word: ` ${words[12].toUpperCase()} ` }, { n: 21, word: words[21] }]),
-    [true, true, words[20] === words[21]], 'a word from the wrong place is wrong');
   assert.equal((await run('signCard', CARD)).code, 'no_key', 'nothing is kept before keep');
   assert.deepEqual(await value('keyKeep'), { state: 'hidden', key: made.key });
 
@@ -70,7 +74,7 @@ test('a new key: its words checked, then kept hidden; it signs, and the page can
   const other = (await value('keyNew')).words;
   await value('keyDrop');
   assert.equal(await value('keyVerify', other), false, 'another key’s words');
-  assert.equal((await run('keyCheckWords', [{ n: 1, word: words[0] }])).code, 'key_lost', 'nothing waits once kept or dropped');
+  assert.equal((await run('keyKeep')).code, 'key_lost', 'nothing waits once kept or dropped');
   await p.context().close();
 });
 
@@ -105,7 +109,7 @@ test('where the browser cannot hide a key, it is kept as before, and every signa
   const want = await sign(hidden.value);
   await hidden.p.context().close();
 
-  const open = await core('no-ed25519-worker.js');
+  const open = await core('worker=no-ed25519-worker.js');
   await open.value('keyRestore', { words: made.words });
   assert.deepEqual(await open.value('keyKeep'), { state: 'open', key: made.key });
   assert.deepEqual(await open.value('keyState'), { state: 'open', key: made.key });
@@ -119,5 +123,61 @@ test('a key waiting to be kept is lost with a restarted worker, and the page is 
   assert.equal((await run('hang')).code, 'core_timeout');
   assert.equal((await run('keyKeep')).code, 'key_lost');
   assert.deepEqual(await value('keyState'), { state: 'none' });
+  await p.context().close();
+});
+
+test('a key kept in the open is hidden once the browser can, as the app promises', async () => {
+  const old = await core('worker=no-ed25519-worker.js');
+  const made = await old.value('keyNew');
+  assert.deepEqual(await old.value('keyKeep'), { state: 'open', key: made.key });
+  const payload = await old.value('signCard', CARD);
+  // The browser updated: the same storage, a worker with Ed25519.
+  const now = await core('', old.p);
+  assert.deepEqual(await now.value('keyState'), { state: 'hidden', key: made.key });
+  assert.deepEqual(await now.value('signCard', CARD), payload, 'the same key');
+  const stored = await now.p.evaluate(async () => {
+    const db = await new Promise((ok, no) => { const r = indexedDB.open('pips-next-key'); r.onsuccess = () => ok(r.result); r.onerror = () => no(r.error); });
+    const rec = await new Promise((ok) => { const r = /** @type {IDBDatabase} */ (db).transaction('key').objectStore('key').get('identity'); r.onsuccess = () => ok(r.result); });
+    return { seed: rec.seed, extractable: rec.sign.extractable };
+  });
+  assert.deepEqual(stored, { seed: null, extractable: false }, 'the secret is gone from storage');
+  await old.p.context().close();
+});
+
+test('a key switched in another tab is the one every tab signs with; only switching replaces a kept key', async () => {
+  const a = await core();
+  const first = await a.value('keyNew');
+  await a.value('keyKeep');
+  const b = await core('', a.p);
+  const second = await b.value('keyNew');
+  // Kept meanwhile in another tab: a plain keep does not throw that key away.
+  assert.equal((await b.run('keyKeep')).code, 'key_exists');
+  assert.deepEqual(await a.value('keyState'), { state: 'hidden', key: first.key });
+  assert.deepEqual(await b.value('keyKeep', { switching: true }), { state: 'hidden', key: second.key });
+  // The first tab signs with the key the person has now.
+  assert.equal((await a.value('inspectCard', await a.value('signCard', CARD))).author.hex, second.key.hex);
+  assert.equal(await a.value('keyVerify', first.words), false, 'the old words are no longer the key’s');
+  // The same key kept again, as restoring it does, needs no switching.
+  await b.value('keyRestore', { words: second.words });
+  assert.deepEqual(await b.value('keyKeep'), { state: 'hidden', key: second.key });
+  await a.p.context().close();
+});
+
+test('a backup of thousands of the smallest cards is sealed and opened within the app’s own limits', async () => {
+  // Opening checks every card's signature: 10 000 of the smallest cards
+  // take about 3 s on a desktop, past the 2 s once given to every job.
+  const { p, value } = await core('limits=app');
+  const made = await value('keyNew');
+  await value('keyKeep');
+  const r = await p.evaluate(async (words) => {
+    const core = /** @type {any} */ (window).core;
+    const tiny = { width: 1, height: 1, opaque: true, frame: 0, frames: 1, delay_ms: 100, palette: { builtin: 0 }, title: '', author: '', handle: null, link: '', pixels: [1] };
+    const signed = await Promise.all(Array.from({ length: 10_000 }, (_, i) => core.call('signCard', { ...tiny, title: String(i) })));
+    const cards = signed.map((payload) => ({ payload, cert: null, edition: null, mine: true, state: 'collection', received: 1, trashedAt: null, from: null, note: '', tags: [] }));
+    const file = await core.call('sealBackup', { created: 1, profile: { nick: 'k', handle: null, link: '' }, cards });
+    await core.call('keyRestore', { words });
+    return (await core.call('openBackupWaiting', file)).cards.length;
+  }, made.words);
+  assert.equal(r, 10_000);
   await p.context().close();
 });

@@ -1,9 +1,11 @@
 // @ts-check
 // The new app's state (web-next/src/state.js) in real browsers, on the real
 // core: own cards and other people's, numbered copies handed from one
-// person to another, backups restored on a new device, the bin emptied in
-// time, and a stored card this version cannot read set aside. Each person
-// is a browser profile of their own, with their own key.
+// person to another — one number to one holder, however fast, from however
+// many tabs — backups restored on a new device, the bin emptied in time, a
+// stored card this version cannot read set aside, and another key's backup
+// state dropped. Each person is a browser profile of their own, with their
+// own key.
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { setup } from './helpers.mjs';
@@ -32,8 +34,7 @@ async function person(words) {
   const run = (f, arg) => p.evaluate(([src, a]) => (0, eval)(src)(window, a), /** @type {const} */ ([`(${f})`, arg]));
   const made = await run(async (w, words) => {
     const made = words ? await w.core.call('keyRestore', { words }) : await w.core.call('keyNew');
-    await w.core.call('keyKeep');
-    await w.app.keyChanged();
+    await w.app.keyChanged(await w.core.call('keyKeep'));
     return made;
   }, words);
   return { p, run, words: made.words ?? words, hex: made.key.hex };
@@ -134,5 +135,84 @@ test('the bin is emptied in time at the next start; a stored card this version c
     return { kept, unreadable, after: w.app.cards.size, stored: (await w.store.allCards()).map((/** @type {any} */ c) => c.digest) };
   }, card('Корзина'));
   assert.deepEqual(r, { kept: 1, unreadable: 1, after: 0, stored: ['not a card'] }, 'the unreadable one stays on disk');
+  await a.p.context().close();
+});
+
+/** A recipient code, as scanning it gives it. @param {any} w @param {string} nick */
+const SCANNED = `async (w, nick) => {
+  const c = await w.core.call('classify', await w.core.call('recipientCode', nick));
+  return { bytes: c.bytes, nick: c.nick, key: c.key };
+}`;
+
+/** Who holds which number, from what is stored. @param {any} w @param {string} digest */
+const LOG = `async (w, digest) => (await w.store.getCard(digest)).editions.issued.map((i) => i.edition + ':' + i.nick).sort()`;
+
+test('two copies issued at once get two numbers, and the log keeps both holders', async () => {
+  const a = await person();
+  const r = await a.run(async (w, { c, scanned, log }) => {
+    const code = (0, eval)(scanned);
+    const { digest } = await w.app.addPayload(await w.core.call('signCard', c));
+    const mira = await code(w, 'mira');
+    const lis = await code(w, 'lis');
+    const [one, two] = await Promise.all([w.app.issueEdition(digest, 5, mira), w.app.issueEdition(digest, 5, lis)]);
+    return { numbers: [one.edition, two.edition].sort(), log: await (0, eval)(log)(w, digest) };
+  }, { c: card('Тираж'), scanned: SCANNED, log: LOG });
+  assert.deepEqual(r.numbers, [1, 2]);
+  assert.equal(r.log.length, 2);
+  await a.p.context().close();
+});
+
+test('two tabs issue from the same log: no number twice, no holder lost', async () => {
+  const a = await person();
+  const digest = await a.run(async (w, c) => (await w.app.addPayload(await w.core.call('signCard', c))).digest, card('Тираж'));
+  const tab = await env.tab(a.p, '__test__/state.html');
+  await tab.waitForFunction(() => /** @type {any} */ (window).harness);
+  const issue = (/** @type {import('playwright').Page} */ p, /** @type {string} */ nick) => p.evaluate(async ([digest, nick, scanned]) => {
+    const w = /** @type {any} */ (window);
+    return (await w.app.issueEdition(digest, 5, await (0, eval)(scanned)(w, nick))).edition;
+  }, [digest, nick, SCANNED]);
+  // One after the other, and then at once: each tab loaded the log before the other wrote.
+  const first = [await issue(a.p, 'mira'), await issue(tab, 'lis')];
+  const both = await Promise.all([issue(a.p, 'yuki'), issue(tab, 'ren')]);
+  assert.deepEqual([...first, ...both].sort(), [1, 2, 3, 4]);
+  const log = await a.run(async (w, { digest, log }) => (0, eval)(log)(w, digest), { digest, log: LOG });
+  assert.deepEqual(log.map((/** @type {string} */ x) => x.split(':')[0]), ['1', '2', '3', '4']);
+  assert.deepEqual(log.map((/** @type {string} */ x) => x.split(':')[1]).sort(), ['lis', 'mira', 'ren', 'yuki']);
+  await a.p.context().close();
+});
+
+test('a backup state of another key is dropped at the next start, even if the switch was cut short', async () => {
+  const a = await person();
+  const r = await a.run(async (w, c) => {
+    await w.app.addPayload(await w.core.call('signCard', c));
+    await w.app.makeBackup();
+    const before = await w.app.lastBackup();
+    // Another key kept, and the app gone before it heard (keyChanged never ran).
+    await w.core.call('keyNew');
+    await w.core.call('keyKeep', { switching: true });
+    await w.restart();
+    return { before: before?.count, after: await w.app.lastBackup(), mine: [...w.app.cards.values()][0].rec.mine };
+  }, card('Чужая копия'));
+  assert.deepEqual(r, { before: 1, after: null, mine: false });
+  await a.p.context().close();
+});
+
+test('a backup made beside an unreadable card says it is not whole; a core failing at the start is not an unreadable card', async () => {
+  const a = await person();
+  const r = await a.run(async (w, c) => {
+    const { digest } = await w.app.addPayload(await w.core.call('signCard', c));
+    await w.store.putCard({ ...w.app.cards.get(digest).rec, digest: 'not a card', payload: new Uint8Array([1, 2, 3]) });
+    await w.restart();
+    const made = await w.app.makeBackup();
+    const pending = w.app.pending.cards.length;
+    // A start whose core stops on the first card: the start fails, nothing is set aside.
+    const real = w.core.call;
+    w.core.call = (/** @type {string} */ op, /** @type {unknown[]} */ ...args) => (op === 'inspectCard' ? Promise.reject({ code: 'core_timeout' }) : real(op, ...args));
+    let failed = '';
+    try { await w.restart(); } catch (e) { failed = /** @type {any} */ (e).code; }
+    w.core.call = real;
+    return { count: made.count, left: made.left, pending, failed };
+  }, card('Целая'));
+  assert.deepEqual(r, { count: 1, left: 1, pending: 1, failed: 'core_timeout' });
   await a.p.context().close();
 });

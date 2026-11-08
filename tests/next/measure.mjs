@@ -69,4 +69,8 @@ console.log(engineName, JSON.stringify(out.card));
 for (const [op, t] of Object.entries(out)) {
   if (op !== 'card') console.log(`${engineName}\t${op}\tmax ${t.max.toFixed(1)} ms\tmedian ${t.median.toFixed(1)} ms`);
 }
+const backup = await page.evaluate(() => /** @type {any} */ (window).core.call('measureBackup', 5000, 200));
+for (const [shape, m] of Object.entries(backup)) {
+  console.log(`${engineName}\tbackup of ${m.cards} ${shape} cards, ${m.file} B\tseal ${m.seal.max.toFixed(0)} ms (${m.sealPerMB.toFixed(0)} ms/MB of cards)\topen ${m.open.max.toFixed(0)} ms (${m.openPerMB.toFixed(0)} ms/MB of file)`);
+}
 await env.close();

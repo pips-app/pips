@@ -27,6 +27,13 @@
  * @returns {e is Failure}
  */
 const isFailure = (e) => typeof e === 'object' && e !== null && typeof (/** @type {any} */ (e).code) === 'string';
+/**
+ * The disk full under the key's own storage (keys.js): the person can fix
+ * that, so it is said (store.js, STORE_CODES), not taken for a mistake.
+ * A DOMException's `code` is a number, and does not say it.
+ * @param {unknown} e
+ */
+const full = (e) => /** @type {any} */ (e)?.name === 'QuotaExceededError';
 
 /**
  * Answers the page's jobs with `ops`, once `boot` has loaded the core.
@@ -62,7 +69,9 @@ export function serve(boot) {
       /** @type {Failure} */
       const failure = isFailure(error)
         ? { code: error.code, message: error.message, args: error.args }
-        : { code: 'internal', message: String(error) };
+        : full(error)
+          ? { code: 'storage_full', message: String(error) }
+          : { code: 'internal', message: String(error) };
       scope.postMessage({ id, ok: false, error: failure });
     }
   });

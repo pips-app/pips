@@ -181,6 +181,9 @@ test('another key’s backup is not opened; switching to that key from its words
   await p.getByText(file.name).waitFor();
   await typeWords(p, a.words);
   await p.getByRole('button', { name: 'Восстановить' }).click();
+  // The current key goes for good: said, and asked, first.
+  await p.getByRole('heading', { name: 'Сменить ключ?' }).waitFor();
+  await p.getByRole('button', { name: 'Сменить ключ', exact: true }).click();
   await p.getByRole('status').filter({ hasText: 'Ключ сменён' }).waitFor();
   assert.equal(await shortKey(p), aKey);
   // The name already given stays; the backup's does not replace it.
@@ -219,5 +222,64 @@ test('an own backup added on the same phone adds nothing twice; a file that is n
   await p.getByRole('status').filter({ hasText: 'Из копии добавлено: 0' }).waitFor();
   await add({ name: 'notes.pipsbak', mimeType: 'application/octet-stream', buffer: Buffer.from('not a backup at all') });
   await p.getByRole('status').filter({ hasText: 'Это не резервная копия Pips' }).waitFor();
+  await p.context().close();
+});
+
+test('switching to another key asks first, naming the key that goes; back keeps what was typed', async () => {
+  const other = await newKey('aoi');
+  const theirs = await shortKey(other.p);
+  await other.p.context().close();
+  const { p } = await newKey('beni');
+  const mine = await shortKey(p);
+  await p.getByRole('button', { name: 'Сменить ключ' }).click();
+  await typeWords(p, other.words);
+  await p.getByRole('button', { name: 'Восстановить' }).click();
+  await p.getByRole('heading', { name: 'Сменить ключ?' }).waitFor();
+  assert.match(await p.getByRole('main').innerText(), new RegExp(`Ключ ${mine} будет удалён из этого браузера`));
+  await p.getByRole('button', { name: 'Назад' }).click();
+  // Back on the words, as they were: the key they give is still found.
+  await p.getByText('Ключ найден').waitFor();
+  await p.getByRole('button', { name: 'Назад' }).click();
+  await p.getByRole('heading', { name: 'Профиль' }).waitFor();
+  assert.equal(await shortKey(p), mine, 'nothing changed');
+  await p.reload();
+  await p.getByRole('heading', { name: 'Профиль' }).waitFor();
+  assert.equal(await shortKey(p), mine);
+  assert.notEqual(theirs, mine);
+  await p.context().close();
+});
+
+test('a key switched in another tab is the key this tab shows, and says so', async () => {
+  const other = await newKey('aoi');
+  const theirs = await shortKey(other.p);
+  await other.p.context().close();
+  const { p } = await newKey('beni');
+  const tab = await env.tab(p);
+  await tab.getByRole('heading', { name: 'Профиль' }).waitFor();
+  await tab.getByRole('button', { name: 'Сменить ключ' }).click();
+  await typeWords(tab, other.words);
+  await tab.getByRole('button', { name: 'Восстановить' }).click();
+  await tab.getByRole('button', { name: 'Сменить ключ', exact: true }).click();
+  await tab.getByRole('status').filter({ hasText: 'Ключ сменён' }).waitFor();
+  await p.getByRole('status').filter({ hasText: 'Ключ сменён в другой вкладке' }).waitFor();
+  assert.equal(await shortKey(p), theirs);
+  await p.context().close();
+});
+
+test('the words sheet holds the keyboard: Tab does not reach the profile under it, and a second tap opens no second sheet', async () => {
+  const { p } = await newKey('kitsu');
+  const button = p.getByRole('button', { name: 'Проверить слова' });
+  await button.dblclick();
+  const dialog = p.getByRole('dialog', { name: 'Проверить слова' });
+  await dialog.waitFor();
+  assert.equal(await dialog.count(), 1);
+  const under = () => p.evaluate(() => !!document.activeElement?.closest('main.home'));
+  for (let i = 0; i < 30; i++) {
+    await p.keyboard.press('Tab');
+    assert.equal(await under(), false, `Tab ${i + 1} reached the profile under the sheet`);
+  }
+  await p.keyboard.press('Escape');
+  await dialog.waitFor({ state: 'detached' });
+  assert.equal(await p.evaluate(() => document.activeElement?.textContent), 'Проверить слова', 'focus back on the button that opened it');
   await p.context().close();
 });

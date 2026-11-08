@@ -10,6 +10,7 @@ import { arrive, expired, isMine, moved, noted, tagged } from './rules/cards.js'
 import { EMPTY_LOG, issued, nextIssue } from './rules/editions.js';
 import { mergeCards, mergeProfile } from './rules/backup.js';
 import { NOTHING, touched } from './rules/pending.js';
+import { CLIENT_CODES } from './core/client.js';
 
 /** @typedef {import('./rules/cards.js').CardRecord} CardRecord */
 /** @typedef {import('./rules/cards.js').Place} Place */
@@ -21,6 +22,10 @@ import { NOTHING, touched } from './rules/pending.js';
 /** @typedef {{ call(op: string, ...args: unknown[]): Promise<any> }} Core */
 
 const DAY = 86_400_000;
+/** Where tabs of the app tell each other that the key changed. */
+const CHANNEL = 'pips-next';
+/** Issuing copies, one at a time across every tab (issueEdition). */
+const ISSUE_LOCK = 'pips-next-issue';
 /** A profile no one has filled in. @type {Profile} */
 const NO_PROFILE = Object.freeze({ nick: '', handle: null, link: '' });
 
@@ -45,6 +50,10 @@ export function createState(core, { now = Date.now } = {}) {
 
   const me = () => (key.state === 'none' ? null : key.key.hex);
   const changed = () => { for (const f of listeners) f(); };
+  /** In browsers without BroadcastChannel, a tab hears of another's key at its next start. */
+  const tabs = globalThis.BroadcastChannel ? new BroadcastChannel(CHANNEL) : null;
+  /** Issuing within this tab where the browser has no locks across tabs. */
+  let issuing = Promise.resolve();
 
   /** Notes a change the last backup does not have. @param {Parameters<typeof touched>[1]} what */
   async function touch(what) {
@@ -75,6 +84,31 @@ export function createState(core, { now = Date.now } = {}) {
   }
 
   /**
+   * Makes what is stored agree with the key: the cards re-owned, and the
+   * last backup and the changes since it dropped if they were another
+   * key's. The key they belong to is stored beside them, so a change cut
+   * short (a tab closed, storage failing) is finished at the next start.
+   */
+  async function settleOwner() {
+    await reown();
+    const owner = (await store.getMeta('owner')) ?? null;
+    if (owner === me()) return;
+    await store.setMeta('lastBackup', null);
+    pending = NOTHING;
+    await store.setMeta('pending', pending);
+    await store.setMeta('owner', me());
+  }
+
+  /** The key as the core has it now, and what follows from it. */
+  async function rereadKey() {
+    key = await core.call('keyState');
+    await settleOwner();
+    changed();
+  }
+  // Another tab kept or switched the key: this one goes on with that key.
+  if (tabs) tabs.onmessage = () => { rereadKey().catch(() => {}); };
+
+  /**
    * Keeps an arriving card (rules/cards.js, arrive).
    * @param {Omit<CardRecord, 'digest' | 'mine'>} partial
    * @returns {Promise<{ status: 'added' | 'numbered' | 'duplicate', digest: string }>}
@@ -98,6 +132,18 @@ export function createState(core, { now = Date.now } = {}) {
     await store.putCard(e.rec);
     await touch({ card: digest });
     changed();
+  }
+
+  /**
+   * Runs `f` once no other tab or call is issuing (Web Locks); in a browser
+   * without them, one at a time in this tab.
+   * @template T @param {() => Promise<T>} f @returns {Promise<T>}
+   */
+  function oneAtATime(f) {
+    if (navigator.locks) return /** @type {Promise<T>} */ (navigator.locks.request(ISSUE_LOCK, f));
+    const run = issuing.then(f);
+    issuing = run.then(() => {}, () => {});
+    return run;
   }
 
   /** @param {Profile} p */
@@ -140,30 +186,32 @@ export function createState(core, { now = Date.now } = {}) {
         try {
           const i = await core.call('inspectCard', rec.payload);
           cards.set(rec.digest, { rec, card: i.card, author: i.author ?? null });
-        } catch {
+        } catch (e) {
+          // Only a card the core refuses is unreadable; a core that failed
+          // this once (stopped, not loaded) says nothing about the card, and
+          // the start fails with words rather than hide part of the collection.
+          if (CLIENT_CODES.includes(/** @type {any} */ (e)?.code)) throw e;
           unreadable++;
         }
       }
-      await reown();
+      await settleOwner();
       changed();
     },
 
     /**
-     * The key's state once it has changed (kept, switched): the cards are
-     * re-owned, and with another key the last backup — of the old one — no
-     * longer counts.
+     * The key once it has changed (kept, switched), as keyKeep gave it:
+     * taken at once, so that a failure in what follows does not hide a key
+     * that is kept. Then the cards are re-owned, and with another key the
+     * last backup — of the old one — no longer counts; other tabs are told.
+     * @param {KeyState} kept
      */
-    async keyChanged() {
-      const before = me();
-      key = await core.call('keyState');
-      if (before && before !== me()) {
-        await reown();
-        await store.setMeta('lastBackup', null);
-        pending = NOTHING;
-        await store.setMeta('pending', pending);
-      }
+    async keyChanged(kept) {
+      key = kept;
+      changed();
+      tabs?.postMessage('key');
       // Asked, not awaited: Firefox answers only after the person replies.
       store.persist().catch(() => {});
+      await settleOwner();
       changed();
     },
 
@@ -205,36 +253,50 @@ export function createState(core, { now = Date.now } = {}) {
     /**
      * Issues the next numbered copy of an own card to a scanned recipient
      * code, and logs it before handing out its envelope: a number is never
-     * handed out twice from this device.
+     * handed out twice from this device. One copy at a time, across tabs,
+     * and the log read from storage inside that: a second tap, or another
+     * tab, works from the log the first one wrote.
      * @param {string} digest @param {number} of run size, fixed by the first copy
      * @param {{ bytes: Uint8Array, nick: string, key: KeyData }} recipient
      * @returns {Promise<{ envelope: Uint8Array, edition: number, of: number } | { code: 'run_out' }>}
      */
-    async issueEdition(digest, of, recipient) {
-      const e = cards.get(digest);
-      if (!e?.rec.mine) throw { code: 'not_author', message: 'not an own card' };
-      const log = e.rec.editions ?? EMPTY_LOG;
-      const next = nextIssue(log, of);
-      if ('code' in next) return next;
-      const day = Math.floor(now() / DAY);
-      const cert = await core.call('issue', e.rec.payload, next.edition, next.of, recipient.bytes, day);
-      const envelope = await core.call('sealOwn', e.rec.payload, cert);
-      e.rec = { ...e.rec, editions: issued(log, next, { nick: recipient.nick, holder: recipient.key.hex, day }) };
-      await store.putCard(e.rec);
-      await touch({ card: digest, issued: 1 });
-      changed();
-      return { envelope, ...next };
+    issueEdition(digest, of, recipient) {
+      return oneAtATime(async () => {
+        const e = cards.get(digest);
+        if (!e?.rec.mine) throw { code: 'not_author', message: 'not an own card' };
+        e.rec = (await store.getCard(digest)) ?? e.rec;
+        const log = e.rec.editions ?? EMPTY_LOG;
+        const next = nextIssue(log, of);
+        if ('code' in next) return next;
+        const day = Math.floor(now() / DAY);
+        const cert = await core.call('issue', e.rec.payload, next.edition, next.of, recipient.bytes, day);
+        const envelope = await core.call('sealOwn', e.rec.payload, cert);
+        e.rec = { ...e.rec, editions: issued(log, next, { nick: recipient.nick, holder: recipient.key.hex, day }) };
+        await store.putCard(e.rec);
+        await touch({ card: digest, issued: 1 });
+        changed();
+        return { envelope, ...next };
+      });
     },
 
-    /** A backup of every card and the profile, sealed by the key: bytes the core made, in a buffer of their own. @returns {Promise<{ bytes: Uint8Array<ArrayBuffer>, count: number }>} */
+    /**
+     * A backup of every card and the profile, sealed by the key: bytes the
+     * core made, in a buffer of their own. Cards this version cannot read
+     * cannot go in (the core checks every card it seals): `left` says how
+     * many, and while there are any, the backup does not count as whole.
+     * @returns {Promise<{ bytes: Uint8Array<ArrayBuffer>, count: number, left: number }>}
+     */
     async makeBackup() {
       const recs = [...cards.values()].map(({ rec }) => rec);
       const data = { created: now(), profile, cards: recs };
       const bytes = await core.call('sealBackup', data);
       await store.setMeta('lastBackup', { at: data.created, count: recs.length });
-      pending = NOTHING;
-      await store.setMeta('pending', pending);
-      return { bytes, count: recs.length };
+      if (!unreadable) {
+        pending = NOTHING;
+        await store.setMeta('pending', pending);
+      }
+      changed();
+      return { bytes, count: recs.length, left: unreadable };
     },
 
     /**
@@ -263,7 +325,7 @@ export function createState(core, { now = Date.now } = {}) {
       }
       const p = mergeProfile(profile, b.profile);
       if (p.took) await setProfile(p.profile);
-      if (fresh) {
+      if (fresh && !unreadable) {
         await store.setMeta('lastBackup', { at: b.created, count: b.cards.length });
         pending = NOTHING;
         await store.setMeta('pending', pending);

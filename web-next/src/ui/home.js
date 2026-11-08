@@ -23,7 +23,7 @@ const BACKUP_MAX = 64 * 1024 * 1024;
  * @param {HTMLElement} o.root
  * @param {{ call(op: string, ...args: unknown[]): Promise<any> }} o.core
  * @param {State} o.app
- * @param {string} [o.said] what to say on arriving (a key just switched)
+ * @param {string} [o.said] what to say on arriving (a key just switched; what went wrong after)
  */
 export function home({ root, core, app, said = '' }) {
   const k = app.key;
@@ -56,6 +56,15 @@ export function home({ root, core, app, said = '' }) {
       h('p', { class: 'hint' }, t('home.backup.hint'))));
   replace(root, page);
   void paintBackup();
+  // Another tab switched the key: this page is of the old one, and goes.
+  const stop = app.subscribe(() => {
+    if (!page.isConnected) return stop();
+    const now = app.key;
+    if (now.state !== 'none' && now.key.hex !== k.key.hex) {
+      stop();
+      home({ root, core, app, said: t('home.switch.elsewhere') });
+    }
+  });
 
   /** When the last backup was made, and what changed since. */
   async function paintBackup() {
@@ -72,7 +81,7 @@ export function home({ root, core, app, said = '' }) {
   /** Saves a backup of every card and the profile, as a file. */
   async function save() {
     try {
-      const { bytes } = await app.makeBackup();
+      const { bytes, left } = await app.makeBackup();
       const day = new Date().toISOString().slice(0, 10);
       const url = URL.createObjectURL(new Blob([bytes], { type: 'application/octet-stream' }));
       const a = /** @type {HTMLAnchorElement} */ (h('a', { href: url, download: `pips-${day}.pipsbak`, hidden: true }));
@@ -81,7 +90,7 @@ export function home({ root, core, app, said = '' }) {
       a.remove();
       // The browser has the file by the next task; the address is let go then.
       setTimeout(() => URL.revokeObjectURL(url));
-      tell(t('home.backup.saved'));
+      tell(left ? t('home.backup.left', left) : t('home.backup.saved'), left > 0);
     } catch (e) {
       tell(say(e), true);
     }
@@ -116,17 +125,29 @@ export function home({ root, core, app, said = '' }) {
     onboarding({
       root, core, app, start: 'switch', file,
       cancel: () => back(),
-      done: () => back(app.key.state !== 'none' && app.key.key.hex === before ? t('home.switch.same') : t('home.switch.done')),
+      done: (said = '') => back(said || (app.key.state !== 'none' && app.key.key.hex === before ? t('home.switch.same') : t('home.switch.done'))),
     });
   }
 
   /** Checking the written words against the key, in a sheet over the page. */
   async function verify() {
+    // One sheet: a second tap while the word list comes does not open another.
+    if (page.inert) return;
+    page.inert = true;
     const opener = /** @type {HTMLElement | null} */ (document.activeElement);
+    /** @type {string[]} */
+    let list;
+    try {
+      list = await core.call('recoveryWords');
+    } catch (e) {
+      page.inert = false;
+      tell(say(e), true);
+      return;
+    }
     const verdict = h('p', { class: 'home-verdict', role: 'status' });
     /** The words to check, once all 24 name a word. @type {string[] | null} */
     let words = null;
-    const entry = wordsEntry(await core.call('recoveryWords'), (s) => {
+    const entry = wordsEntry(list, (s) => {
       words = s.words;
       verdict.classList.toggle('wrong', s.bad >= 0);
       verdict.textContent = s.bad >= 0 ? t('onb.restore.unknown', s.bad + 1) : '';
@@ -144,7 +165,8 @@ export function home({ root, core, app, said = '' }) {
         verdict.textContent = /** @type {any} */ (e)?.code === 'bad_words' ? t('onb.restore.sum') : say(e);
       }
     }
-    const close = () => { sheet.remove(); document.removeEventListener('keydown', onKey); opener?.focus(); };
+    // The page under the sheet takes no focus and no taps while it is open.
+    const close = () => { sheet.remove(); page.inert = false; document.removeEventListener('keydown', onKey); opener?.focus(); };
     /** Escape closes the sheet, as its button does. @param {KeyboardEvent} e */
     const onKey = (e) => { if (e.key === 'Escape') close(); };
     const sheet = h('div', { class: 'home-sheet' },
