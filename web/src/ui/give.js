@@ -23,8 +23,11 @@ const ownCards = () => [...app.cards.values()]
 
 /** The code's side here: as large as the room above the row of cards
  * allows, between these. Measured (fit() below), not worked out from the
- * window: the room is whatever the CSS around it leaves. */
-const SIDE_MIN = 180, SIDE_MAX = 300;
+ * window: the room is whatever the CSS around it leaves. A phone gives it
+ * under 300; a large screen's room lets it grow, the paper with it, up to
+ * where a code on a 2K monitor is in proportion to the screen and still
+ * leaves the row of cards in view. */
+const SIDE_MIN = 180, SIDE_MAX = 520;
 /** Kept clear around the code's square inside the paper, and below the paper. */
 const MARGIN = 16;
 
@@ -50,15 +53,24 @@ export function giveView() {
    * The side the code takes: the one now, plus the room left over (or
    * minus what is missing) across and down. One step lands on it — the
    * square grows as much as the room does — and it holds for every card,
-   * since the paper is laid out the same way for each.
+   * since the paper is laid out the same way for each. Across is measured
+   * against the screen's width, not the paper's: the paper widens with the
+   * code (--give-paper; the CSS keeps its narrowest), so on a large screen
+   * the code is not held to the width a phone would give it.
    */
   function fit() {
     const box = /** @type {HTMLElement|null} */ (body.querySelector('.qr-box'));
     const area = /** @type {HTMLElement|null} */ (body.querySelector('.share-code'));
     if (!box || !area || !main.clientHeight) return;
-    const across = area.clientWidth - 2 * MARGIN - box.offsetWidth;
+    const pad = getComputedStyle(main);
+    const room = main.clientWidth - parseFloat(pad.paddingLeft) - parseFloat(pad.paddingRight);
+    // What the paper puts around the square: its own padding, the square's
+    // white edge, and the margin either side.
+    const around = paper.offsetWidth - area.clientWidth + (box.offsetWidth - side) + 2 * MARGIN;
+    const across = room - around - side;
     const down = main.getBoundingClientRect().bottom - paper.getBoundingClientRect().bottom - MARGIN;
     const next = Math.round(Math.max(SIDE_MIN, Math.min(SIDE_MAX, side + Math.min(across, down))));
+    paper.style.setProperty('--give-paper', `${next + around}px`);
     if (next !== side && laid) { side = next; lay(laid); }
   }
   new ResizeObserver(() => fit()).observe(main);

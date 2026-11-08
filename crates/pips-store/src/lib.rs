@@ -250,6 +250,60 @@ impl fmt::Display for Error {
 
 impl core::error::Error for Error {}
 
+/// What a backup is sealed with and opened by: its owner's public key and
+/// the key derived from their identity's secret (`SHA-256("pips-v1:backup"
+/// || seed)`).
+///
+/// Apart from the identity so that an app can keep it when the identity's
+/// secret is out of its reach (a browser's key, which signs but never shows
+/// itself): derived once, while the secret is in hand, and kept. It opens
+/// and seals backups; it cannot sign. Nothing can check it against the
+/// owner without the secret, so it must be kept as it was derived.
+pub struct BackupKey {
+    owner: PublicKey,
+    key: Zeroizing<[u8; 32]>,
+}
+
+impl BackupKey {
+    /// The backup key of an identity.
+    #[must_use]
+    pub fn of(identity: &SecretKey) -> Self {
+        let mut h = Sha256::new();
+        h.update(KEY_DOMAIN);
+        h.update(identity.seed().as_slice());
+        Self { owner: identity.public_key(), key: Zeroizing::new(<[u8; 32]>::from(h.finalize())) }
+    }
+
+    /// A backup key kept from [`of`](Self::of), with its owner.
+    #[must_use]
+    pub fn from_parts(owner: PublicKey, key: [u8; 32]) -> Self {
+        Self { owner, key: Zeroizing::new(key) }
+    }
+
+    /// The key's bytes, to keep. Wiped when the returned value is dropped.
+    #[must_use]
+    pub fn bytes(&self) -> Zeroizing<[u8; 32]> {
+        self.key.clone()
+    }
+
+    /// Whose backups it seals and opens.
+    #[must_use]
+    pub fn owner(&self) -> PublicKey {
+        self.owner
+    }
+
+    fn cipher(&self) -> XChaCha20Poly1305 {
+        XChaCha20Poly1305::new((&*self.key).into())
+    }
+}
+
+/// Never prints the key.
+impl fmt::Debug for BackupKey {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "BackupKey({})", self.owner.short())
+    }
+}
+
 /// Encrypts a backup to `key`'s owner. `nonce` must be random: fresh bytes
 /// from the platform's secure generator, never reused.
 ///
@@ -258,15 +312,25 @@ impl core::error::Error for Error {}
 /// [`Error::Invalid`] if the backup breaks the rules [`open`] enforces, so
 /// that a file this function writes always opens; [`Error::TooLarge`].
 pub fn seal(backup: &Backup, key: &SecretKey, nonce: [u8; 24]) -> Result<Vec<u8>, Error> {
+    seal_with(backup, &BackupKey::of(key), nonce)
+}
+
+/// [`seal`], with a backup key kept apart from the identity.
+///
+/// # Errors
+///
+/// As [`seal`].
+pub fn seal_with(backup: &Backup, key: &BackupKey, nonce: [u8; 24]) -> Result<Vec<u8>, Error> {
     let body = Zeroizing::new(encode(backup)?);
     // Prove the rules hold before anything is written.
     decode(&body)?;
     let mut out = Vec::with_capacity(HEADER_LEN + body.len() + TAG_LEN);
     out.extend_from_slice(&MAGIC);
     out.push(VERSION);
-    out.extend_from_slice(&key.public_key().to_bytes());
+    out.extend_from_slice(&key.owner.to_bytes());
     out.extend_from_slice(&nonce);
-    let sealed = cipher(key)
+    let sealed = key
+        .cipher()
         .encrypt(XNonce::from_slice(&nonce), Payload { msg: &body, aad: &out })
         .map_err(|_| Error::TooLarge)?;
     out.extend_from_slice(&sealed);
@@ -282,19 +346,28 @@ pub fn seal(backup: &Backup, key: &SecretKey, nonce: [u8; 24]) -> Result<Vec<u8>
 ///
 /// Any [`Error`]; [`Error::OtherOwner`] carries the key it belongs to.
 pub fn open(bytes: &[u8], key: &SecretKey) -> Result<Backup, Error> {
+    open_with(bytes, &BackupKey::of(key))
+}
+
+/// [`open`], with a backup key kept apart from the identity.
+///
+/// # Errors
+///
+/// As [`open`].
+pub fn open_with(bytes: &[u8], key: &BackupKey) -> Result<Backup, Error> {
     let owner = owner(bytes)?;
-    if owner != key.public_key().to_bytes() {
+    if owner != key.owner.to_bytes() {
         return Err(Error::OtherOwner(owner));
     }
     let (header, sealed) = bytes.split_at(HEADER_LEN);
     let nonce = XNonce::from_slice(&header[HEADER_LEN - 24..]);
     let body =
-        Zeroizing::new(cipher(key).decrypt(nonce, Payload { msg: sealed, aad: header }).map_err(|_| Error::Damaged)?);
+        Zeroizing::new(key.cipher().decrypt(nonce, Payload { msg: sealed, aad: header }).map_err(|_| Error::Damaged)?);
     let backup = decode_version(&body, header[4])?;
     // "Mine" must mean signed by this very key.
     for e in backup.cards.iter().filter(|e| e.mine) {
         let card = pips_format::decode(&e.payload).map_err(|_| Error::Invalid("a card does not decode"))?;
-        if pips_sign::verify_card(&card).ok() != Some(key.public_key()) {
+        if pips_sign::verify_card(&card).ok() != Some(key.owner) {
             return Err(Error::Invalid("an own card signed by another key"));
         }
     }
@@ -322,14 +395,6 @@ pub fn owner(bytes: &[u8]) -> Result<[u8; 32], Error> {
     let mut k = [0; 32];
     k.copy_from_slice(&bytes[5..37]);
     Ok(k)
-}
-
-fn cipher(key: &SecretKey) -> XChaCha20Poly1305 {
-    let mut h = Sha256::new();
-    h.update(KEY_DOMAIN);
-    h.update(key.seed().as_slice());
-    let k = Zeroizing::new(<[u8; 32]>::from(h.finalize()));
-    XChaCha20Poly1305::new((&*k).into())
 }
 
 // ------------------------------------------------------------------ body --

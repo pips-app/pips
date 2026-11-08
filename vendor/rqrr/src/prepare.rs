@@ -4,6 +4,11 @@ use crate::identify::match_capstones::CapStoneGroup;
 use crate::identify::Point;
 use lru::LruCache;
 
+/// Regions the cache keeps at once: one per pixel value left after white,
+/// black and the three marks (`PixelColor::Discarded`). Pips: a constant,
+/// checked when compiled, rather than an `unwrap` at run time.
+const REGIONS: NonZeroUsize = NonZeroUsize::new(251).unwrap();
+
 /// An black-and-white image that can be mutated on search for QR codes
 ///
 /// During search for QR codes, some black zones will be recolored in
@@ -218,7 +223,7 @@ where
 
         PreparedImage {
             buffer: buf,
-            cache: LruCache::new(NonZeroUsize::new(251).unwrap()),
+            cache: LruCache::new(REGIONS),
         }
     }
 
@@ -313,7 +318,7 @@ where
 
         PreparedImage {
             buffer: buf,
-            cache: LruCache::new(NonZeroUsize::new(251).unwrap()),
+            cache: LruCache::new(REGIONS),
         }
     }
 
@@ -327,14 +332,17 @@ where
         self.buffer.height()
     }
 
-    pub(crate) fn get_region(&mut self, (x, y): (usize, usize)) -> ColoredRegion {
+    /// The region the pixel belongs to. Pips: `None` for a white pixel (in
+    /// no region) and for one the region cache does not know; both were
+    /// panics, which in WebAssembly cannot be caught.
+    pub(crate) fn get_region(&mut self, (x, y): (usize, usize)) -> Option<ColoredRegion> {
         let color: PixelColor = self.buffer.get_pixel(x, y).into();
-        match color {
-            PixelColor::Discarded(r) => *self.cache.get(&r).unwrap(),
+        Some(match color {
+            PixelColor::Discarded(r) => *self.cache.get(&r)?,
             PixelColor::Black => {
                 let cache_fill = self.cache.len();
                 let reg_idx = if cache_fill == self.cache.cap().get() {
-                    let (c, reg) = self.cache.pop_lru().expect("fill is at capacity (251)");
+                    let (c, reg) = self.cache.pop_lru()?;
                     #[allow(clippy::single_match)]
                     match reg {
                         ColoredRegion::Unclaimed {
@@ -371,8 +379,8 @@ where
             PixelColor::Tmp1 => ColoredRegion::Tmp1,
             PixelColor::Alignment => ColoredRegion::Alignment,
             PixelColor::CapStone => ColoredRegion::CapStone,
-            PixelColor::White => panic!("Tried to color white patch"),
-        }
+            PixelColor::White => return None,
+        })
     }
 
     pub(crate) fn repaint_and_apply<F>(
@@ -385,8 +393,10 @@ where
         F: AreaFiller,
     {
         let src = self.buffer.get_pixel(x, y);
+        // Pips: white is no region, and the same colour is nothing to do;
+        // either paints nothing. It was a panic.
         if PixelColor::White == src || target_color == src {
-            panic!("Cannot repaint with white or same color");
+            return fill;
         }
 
         self.flood_fill(x, y, src, target_color.into(), fill)
@@ -435,7 +445,10 @@ where
     where
         F: AreaFiller,
     {
-        assert_ne!(from, to);
+        // Pips: nothing to fill, rather than an `assert_ne!`.
+        if from == to {
+            return fill;
+        }
         let w = self.width();
         let mut queue = Vec::new();
         queue.push((x, y));
@@ -548,6 +561,38 @@ impl PreparedImage<BasicImageBuffer> {
 mod tests {
     use super::*;
 
+    /// Pips: a white pixel is in no region, and asking for its region is
+    /// answered as such. It was a `panic!`.
+    #[test]
+    fn a_white_pixel_has_no_region() {
+        let mut img = PreparedImage::prepare_from_bitmap(3, 3, |_, _| false);
+        assert_eq!(img.get_region((1, 1)), None);
+    }
+
+    /// Pips: a pixel in a region the cache no longer knows has no region,
+    /// rather than a panic. Eviction repaints a region black, so this is
+    /// not expected; but the cache and the picture are two places, and a
+    /// camera frame should never be able to stop the module.
+    #[test]
+    fn a_pixel_of_a_region_the_cache_does_not_know_has_no_region() {
+        let mut img = PreparedImage::prepare_from_bitmap(3, 3, |_, _| true);
+        img.buffer.set_pixel(1, 1, PixelColor::Discarded(7).into());
+        assert_eq!(img.get_region((1, 1)), None);
+    }
+
+    /// Pips: repainting white, or with the colour already there, paints
+    /// nothing and tells the filler of no row. It was a `panic!`.
+    #[test]
+    fn repainting_white_or_the_same_colour_paints_nothing() {
+        let mut img = PreparedImage::prepare_from_bitmap(3, 3, |x, _| x == 0);
+        let mut rows = 0;
+        let _ = img.repaint_and_apply((2, 2), PixelColor::CapStone, |_: Row| rows += 1);
+        let _ = img.repaint_and_apply((0, 0), PixelColor::Black, |_: Row| rows += 1);
+        assert_eq!(rows, 0);
+        assert_eq!(img.get_pixel_at(2, 2), PixelColor::White);
+        assert_eq!(img.get_pixel_at(0, 0), PixelColor::Black);
+    }
+
     fn img_from_array(array: [[u8; 3]; 3]) -> PreparedImage<BasicImageBuffer> {
         let mut pixels = Vec::new();
         for col in array.iter() {
@@ -567,7 +612,7 @@ mod tests {
 
         PreparedImage {
             buffer,
-            cache: LruCache::new(NonZeroUsize::new(251).unwrap()),
+            cache: LruCache::new(REGIONS),
         }
     }
 
@@ -655,12 +700,12 @@ mod tests {
 
         let reg = test_u.get_region((0, 0));
         let (color, src_x, src_y, pixel_count) = match reg {
-            ColoredRegion::Unclaimed {
+            Some(ColoredRegion::Unclaimed {
                 color,
                 src_x,
                 src_y,
                 pixel_count,
-            } => (color, src_x, src_y, pixel_count),
+            }) => (color, src_x, src_y, pixel_count),
             x => panic!("Expected Region::Unclaimed, got {:?}", x),
         };
         assert_eq!(0, src_x);

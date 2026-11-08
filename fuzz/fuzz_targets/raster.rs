@@ -1,14 +1,35 @@
 //! PNG and Aseprite files, decoded and then converted the way the app does:
-//! exact colours, and the fitted palette offered for many-coloured pictures.
+//! exact colours, the fitted palette offered for many-coloured pictures, and
+//! the nearest colours of a built-in palette — with the app's other choices
+//! (first frame only, upscaling kept) taken from the file's length, so that
+//! every input tries one mix of them without slowing each run down.
 #![no_main]
 use libfuzzer_sys::fuzz_target;
+use pips_format::PaletteRef;
 use pips_raster::{import, Options, Target};
 
 fuzz_target!(|data: &[u8]| {
     if pips_raster::decode(data).is_ok() {
-        // The app's way too: semi-transparent pixels made solid, not refused.
-        for (target, solid_alpha) in [(Target::Auto, false), (Target::Reduce(16), false), (Target::Auto, true)] {
-            if let Ok((picture, _)) = import(data, &Options { target, solid_alpha, ..Options::default() }) {
+        let n = data.len();
+        let builtins = pips_palette::BUILTINS;
+        let id = builtins[n % builtins.len()].id;
+        let fit = u8::try_from(n % 31).unwrap_or(0) + 2;
+        let tries = [
+            (Target::Auto, false),
+            (Target::Reduce(16), false),
+            (Target::Auto, true),
+            (Target::Nearest(PaletteRef::Builtin(id)), n % 2 == 0),
+            (Target::Reduce(fit), n % 3 == 0),
+        ];
+        for (i, (target, solid_alpha)) in tries.into_iter().enumerate() {
+            let mixed = i >= 3;
+            let options = Options {
+                target,
+                solid_alpha,
+                unscale: !(mixed && n % 5 == 0),
+                first_frame_only: mixed && n % 7 < 3,
+            };
+            if let Ok((picture, _)) = import(data, &options) {
                 let mut card = pips_format::Card::new(1, 1);
                 picture.apply_to(&mut card);
                 pips_format::encode(&card).expect("an imported picture is a valid card");

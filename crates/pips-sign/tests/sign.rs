@@ -4,7 +4,8 @@
 use pips_format::{Card, Handle, Network};
 use pips_sign::recovery::{from_paper, from_words, to_paper, to_words, word_list, RecoveryError, PAPER_PREFIX};
 use pips_sign::{
-    open, seal, sign_card, verify_card, Certificate, Error, PublicKey, RecipientCode, SecretKey, CERTIFICATE_LEN,
+    open, seal, sign_card, verify_card, Certificate, Error, Opened, PublicKey, RecipientCode, SecretKey,
+    CERTIFICATE_LEN,
 };
 
 fn key(n: u8) -> SecretKey {
@@ -224,6 +225,7 @@ fn envelope_from_the_author() {
     let c = signed(&author);
     let o = open(&seal(&c, None, None).unwrap()).unwrap();
     assert_eq!(o.card, c);
+    assert_eq!(o.payload, pips_format::encode(&c).unwrap(), "the card's bytes as they came");
     assert_eq!(o.author, Some(author.public_key()));
     assert_eq!((o.certificate, o.sender), (None, None));
 
@@ -264,14 +266,17 @@ fn envelope_tampering_is_caught() {
     // Every single-bit flip is either refused or changes nothing that
     // matters. Deflate ignores a few padding bits, so a flip there leaves the
     // same pixels — and signatures cover the content, not the compression.
-    let original = open(&env).unwrap();
+    // The payload bytes do differ then: they are kept as they came, and the
+    // card's identity (its digest) is what tells two copies apart.
+    let content = |o: &Opened| (o.card.clone(), o.author, o.certificate, o.sender.clone());
+    let original = content(&open(&env).unwrap());
     let mut harmless = 0;
     for at in 0..env.len() {
         for bit in [0x01, 0x02, 0x40, 0x80] {
             let mut b = env.clone();
             b[at] ^= bit;
             if let Ok(o) = open(&b) {
-                assert_eq!(o, original, "flip at {at} changed the content");
+                assert_eq!(content(&o), original, "flip at {at} changed the content");
                 assert!((5..5 + c.pixels.len()).contains(&at), "flip at {at} outside the pixel stream");
                 harmless += 1;
             }
@@ -335,4 +340,72 @@ fn four_letters_name_a_word() {
     let mut prefixes: Vec<&str> = list.iter().map(|w| &w[..w.len().min(4)]).collect();
     prefixes.dedup();
     assert_eq!(prefixes.len(), 2048);
+}
+
+/// A key kept elsewhere, as a browser keeps one: it signs bytes and gives
+/// back the signature, and nothing else of it is seen.
+fn elsewhere(n: u8) -> impl Fn(&[u8]) -> [u8; 64] {
+    use ed25519_dalek::Signer;
+    let key = ed25519_dalek::SigningKey::from_bytes(&[n; 32]);
+    move |m| key.sign(m).to_bytes()
+}
+
+#[test]
+fn signing_in_two_steps_makes_the_same_bytes_as_signing_in_one() {
+    use pips_sign::{attach_card_signature, card_message, seal_signed, sender_message_for};
+    let (author, holder) = (key(1), key(2));
+    let (sign_author, sign_holder) = (elsewhere(1), elsewhere(2));
+
+    // The card.
+    let mut one = card();
+    sign_card(&mut one, &author).unwrap();
+    let mut two = card();
+    let sig = sign_author(&card_message(&two).unwrap());
+    attach_card_signature(&mut two, &author.public_key(), &sig).unwrap();
+    assert_eq!(pips_format::encode(&two).unwrap(), pips_format::encode(&one).unwrap());
+
+    // A numbered copy.
+    let cert = Certificate::issue(&author, &one, 3, 10, holder.public_key(), 20_400).unwrap();
+    let m = Certificate::message_to_issue(&author.public_key(), &one, 3, 10, holder.public_key(), 20_400).unwrap();
+    let cert2 =
+        Certificate::with_signature(&author.public_key(), &one, 3, 10, holder.public_key(), 20_400, &sign_author(&m))
+            .unwrap();
+    assert_eq!(cert2.to_bytes(), cert.to_bytes());
+
+    // Handed on by its holder.
+    let env = seal(&one, Some(&cert), Some((&holder, "mira"))).unwrap();
+    let m = sender_message_for(&one, Some(&cert), "mira").unwrap();
+    let env2 = seal_signed(&one, Some(&cert), Some((&holder.public_key(), "mira", &sign_holder(&m)))).unwrap();
+    assert_eq!(env2, env);
+    assert!(open(&env2).unwrap().sender.is_some());
+}
+
+#[test]
+fn a_signature_made_elsewhere_is_checked_before_it_is_used() {
+    use pips_sign::{attach_card_signature, card_message, seal_signed, sender_message_for};
+    let (author, holder) = (key(1), key(2));
+    let wrong = elsewhere(9);
+
+    let mut c = card();
+    let bad = wrong(&card_message(&c).unwrap());
+    assert_eq!(attach_card_signature(&mut c, &author.public_key(), &bad), Err(Error::BadSignature));
+    assert_eq!(c.signature, None, "nothing attached");
+
+    sign_card(&mut c, &author).unwrap();
+    let m = Certificate::message_to_issue(&author.public_key(), &c, 1, 0, holder.public_key(), 1).unwrap();
+    assert_eq!(
+        Certificate::with_signature(&author.public_key(), &c, 1, 0, holder.public_key(), 1, &wrong(&m)),
+        Err(Error::BadSignature)
+    );
+    // Only the card's author issues copies, in two steps as in one.
+    assert_eq!(
+        Certificate::message_to_issue(&holder.public_key(), &c, 1, 0, holder.public_key(), 1),
+        Err(Error::NotAuthor)
+    );
+
+    let m = sender_message_for(&c, None, "mira").unwrap();
+    assert_eq!(seal_signed(&c, None, Some((&holder.public_key(), "mira", &wrong(&m)))), Err(Error::BadSignature));
+    // Signed for one nick, it does not pass for another.
+    let good = elsewhere(2)(&m);
+    assert_eq!(seal_signed(&c, None, Some((&holder.public_key(), "mila", &good))), Err(Error::BadSignature));
 }

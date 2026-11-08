@@ -41,11 +41,10 @@ pub fn find_and_rank_possible_neighbors(capstones: &[CapStone], idx: usize) -> V
         }
     }
 
-    res.sort_unstable_by(|a, b| {
-        (a.score)
-            .partial_cmp(&(b.score))
-            .expect("Neighbor distance should never cause a div by 0")
-    });
+    // Pips: `total_cmp`, not `partial_cmp(..).expect(..)`. A score is never
+    // NaN here (a NaN fails the threshold above), so the order is the same,
+    // and no input can turn it into a panic.
+    res.sort_unstable_by(|a, b| a.score.total_cmp(&b.score));
     res.iter().map(|n| (n.h_index, n.v_index)).collect()
 }
 

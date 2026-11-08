@@ -355,3 +355,36 @@ fn tags_follow_the_rules() {
     let body = encode_body(&b).unwrap();
     assert_eq!(decode(&body), Err(Error::Invalid("too many tags")));
 }
+
+/// A backup key kept apart from the identity (as an app keeps it once the
+/// identity's secret is out of its reach) seals the same bytes and opens
+/// the same backups; one kept wrong opens nothing.
+#[test]
+fn a_backup_key_kept_apart_does_what_the_identity_does() {
+    use pips_store::{open_with, seal_with, BackupKey};
+    let id = key(1);
+    let kept = BackupKey::from_parts(id.public_key(), *BackupKey::of(&id).bytes());
+    let nonce = [5; 24];
+    let file = seal(&sample(), &id, nonce).unwrap();
+    assert_eq!(seal_with(&sample(), &kept, nonce).unwrap(), file, "byte for byte");
+    assert_eq!(open_with(&file, &kept).unwrap(), sample());
+    assert_eq!(open(&seal_with(&sample(), &kept, nonce).unwrap(), &id).unwrap(), sample());
+
+    let mut bytes = *BackupKey::of(&id).bytes();
+    bytes[0] ^= 1;
+    assert_eq!(open_with(&file, &BackupKey::from_parts(id.public_key(), bytes)), Err(Error::Damaged));
+    assert!(matches!(open_with(&file, &BackupKey::of(&key(2))), Err(Error::OtherOwner(_))));
+}
+
+/// The key is what the format says (crate documentation): SHA-256 of the
+/// domain and the seed. Backups already saved depend on it.
+#[test]
+fn the_backup_key_is_the_one_the_format_names() {
+    use sha2::{Digest, Sha256};
+    let seed = [7u8; 32];
+    let mut h = Sha256::new();
+    h.update(b"pips-v1:backup");
+    h.update(seed);
+    let want: [u8; 32] = h.finalize().into();
+    assert_eq!(*pips_store::BackupKey::of(&SecretKey::from_seed(&seed)).bytes(), want);
+}

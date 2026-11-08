@@ -5,7 +5,7 @@ One target per parser of outside input, for cargo-fuzz (nightly Rust):
 | Target | What it feeds | Checked beyond "no panic" |
 |---|---|---|
 | `card` | card payloads and `.pips` files | decode → encode → decode is the same card |
-| `envelope` | envelopes, certificates, recipient codes, words, paper keys | |
+| `envelope` | envelopes, certificates, recipient codes, words, paper keys | an envelope that opens reads back from its stored bytes as the same card |
 | `base45` | QR text | accepted text encodes back to itself |
 | `palette` | `.hex` / `.gpl` | |
 | `raster` | PNG / Aseprite, then the app's import | an imported picture is a valid card |

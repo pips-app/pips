@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<!-- Nothing is allowed unless named here, and each is named for a reason:
+     the app's own scripts, styles and workers. The page itself compiles no
+     WebAssembly — the core runs in its worker — so it has no
+     'wasm-unsafe-eval', and it fetches nothing. Images from itself: the
+     icon (without one, a browser asks for /favicon.ico, and the CSP
+     refusing it is an error on every start). Trusted Types: only the
+     policy in src/trust.js can make a script URL. The identity key will
+     live in this origin's storage; this policy is what guards it. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'; require-trusted-types-for 'script'; trusted-types pips">
+<meta name="referrer" content="no-referrer">
+<meta name="color-scheme" content="dark">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="css/app.css">
+<title>Pips</title>
+<script type="module" src="src/main.js"></script>
+</head>
+<body>
+<noscript>Pips needs JavaScript. · Для Pips нужен JavaScript.</noscript>
+</body>
+</html>

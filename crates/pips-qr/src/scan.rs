@@ -8,12 +8,19 @@ use alloc::vec::Vec;
 
 /// Largest frame accepted, in pixels: a 1920×1080 camera frame and more.
 pub const MAX_PIXELS: usize = 2560 * 1440;
+/// Longest side accepted, either way round. `rqrr`'s arithmetic on points
+/// is sized for sides up to this (see `FAR` in its `geometry.rs`); a frame
+/// of few pixels but a very long side would take it past an `i32`.
+pub const MAX_SIDE: usize = 2560;
 
 /// Every QR symbol found in an RGBA frame, as text. Symbols that fail their
 /// error correction are skipped; an oversized or inconsistent frame yields
 /// nothing.
 #[must_use]
 pub fn read_rgba(rgba: &[u8], width: usize, height: usize) -> Vec<String> {
+    if width > MAX_SIDE || height > MAX_SIDE {
+        return Vec::new();
+    }
     let Some(n) = width.checked_mul(height).filter(|&n| n > 0 && n <= MAX_PIXELS) else { return Vec::new() };
     if rgba.len() != n * 4 {
         return Vec::new();

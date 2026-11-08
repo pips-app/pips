@@ -740,6 +740,24 @@ fn format_syndromes(u: u16) -> Result<[GF16; 64], [GF16; 64]> {
 mod tests {
     use super::*;
 
+    /// Pips: the asserts left in the decoder hold for every input, because
+    /// they rest on these tables, not on the picture: every block carries
+    /// error correction (`correct_block`), and the bits of the largest grid a
+    /// version can be read from fit the raw buffer (`RawData::push`). The
+    /// mask is three bits of the format word, so `mask_bit` sees 0..=7.
+    #[test]
+    fn the_tables_keep_the_decoders_asserts_true() {
+        for (version, info) in VERSION_DATA_BASE.iter().enumerate().skip(1) {
+            assert!(info.data_bytes <= MAX_PAYLOAD_SIZE, "version {version}");
+            for ecc in &info.ecc {
+                assert!(ecc.bs > ecc.dw, "version {version}");
+            }
+        }
+        // Version::from_size reads sizes up to 180 as version 40.
+        let largest = (0..=200).filter(|&s| Version::from_size(s).is_ok()).max().unwrap();
+        assert!(largest * largest <= MAX_PAYLOAD_SIZE * 8, "{largest}");
+    }
+
     #[test]
     fn test_mask_0() {
         let test = [

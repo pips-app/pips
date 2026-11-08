@@ -25,6 +25,9 @@ serde-wasm-bindgen = "0.6"
 
 [dev-dependencies]
 sha2 = { version = "0.10", default-features = false }
+# A signer standing in for a browser's (WebCrypto) in the tests of a key
+# kept elsewhere: the library pips-sign signs with, used from outside.
+ed25519-dalek = { version = "2", default-features = false, features = ["fast", "zeroize"] }
 
 [lints]
 workspace = true

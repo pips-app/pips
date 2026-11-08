@@ -17,6 +17,7 @@ use pips_sign::{recovery, Certificate, RecipientCode, SecretKey};
 use serde::{Deserialize, Serialize};
 
 use crate::b64;
+use crate::codes::{self, Code};
 use pips_raster::Target;
 
 // ------------------------------------------------------------------ backup --
@@ -123,7 +124,7 @@ pub struct BackupData {
 }
 
 fn store_err(e: pips_store::Error) -> ApiError {
-    let mut x = err(e.code(), e);
+    let mut x = err(codes::of_store(&e), e);
     if let pips_store::Error::OtherOwner(k) = e {
         if let Ok(k) = pips_sign::PublicKey::from_bytes(&k) {
             // The short form, so the app can say whose backup it is.
@@ -154,7 +155,7 @@ fn to_store(d: &BackupData) -> Result<pips_store::Backup> {
                 .iter()
                 .find(|(n, _)| *n == h.network)
                 .map(|(_, n)| *n)
-                .ok_or_else(|| err("invalid_backup", format!("unknown network {:?}", h.network)))?,
+                .ok_or_else(|| err(Code::InvalidBackup, format!("unknown network {:?}", h.network)))?,
             text: h.text.clone(),
         }),
     };
@@ -166,16 +167,16 @@ fn to_store(d: &BackupData) -> Result<pips_store::Backup> {
                 "collection" => Place::Collection,
                 "archive" => Place::Archive,
                 "trash" => Place::Bin,
-                _ => return Err(err("invalid_backup", "unknown state")),
+                _ => return Err(err(Code::InvalidBackup, "unknown state")),
             };
             let certificate = match &c.cert {
                 None => None,
-                Some(b) => Some(b.as_slice().try_into().map_err(|_| err("invalid_backup", "certificate length"))?),
+                Some(b) => Some(b.as_slice().try_into().map_err(|_| err(Code::InvalidBackup, "certificate length"))?),
             };
             let sender = match &c.from {
                 None => None,
                 Some(f) => Some(Sender {
-                    key: from_hex32(&f.key).ok_or_else(|| err("invalid_backup", "sender key"))?,
+                    key: from_hex32(&f.key).ok_or_else(|| err(Code::InvalidBackup, "sender key"))?,
                     nick: f.nick.clone(),
                 }),
             };
@@ -200,7 +201,8 @@ fn to_store(d: &BackupData) -> Result<pips_store::Backup> {
                                 Ok(pips_store::Issued {
                                     edition: i.edition,
                                     day: i.day,
-                                    holder: from_hex32(&i.holder).ok_or_else(|| err("invalid_backup", "holder key"))?,
+                                    holder: from_hex32(&i.holder)
+                                        .ok_or_else(|| err(Code::InvalidBackup, "holder key"))?,
                                     nick: i.nick.clone(),
                                 })
                             })
@@ -295,7 +297,7 @@ pub fn recovery_words() -> &'static [&'static str] {
 /// `not_a_backup`, `newer_version`, `too_large`.
 pub fn backup_owner(bytes: &[u8]) -> Result<KeyData> {
     let k = pips_store::owner(bytes).map_err(store_err)?;
-    let k = pips_sign::PublicKey::from_bytes(&k).map_err(|_| err("not_a_backup", "owner is not a key"))?;
+    let k = pips_sign::PublicKey::from_bytes(&k).map_err(|_| err(Code::NotABackup, "owner is not a key"))?;
     Ok(key_data(&k))
 }
 
@@ -369,7 +371,7 @@ pub fn import_picture(bytes: &[u8], o: ImportOptions) -> Result<Imported> {
             E::DelayOutOfRange(ms) => vec![u32::from(ms)],
             _ => Vec::new(),
         };
-        ApiError { args, ..err(e.code(), e) }
+        ApiError { args, ..err(codes::of_raster(&e), e) }
     })?;
     let mut card = Card::new(1, 1);
     picture.apply_to(&mut card);
@@ -391,8 +393,8 @@ pub fn import_picture(bytes: &[u8], o: ImportOptions) -> Result<Imported> {
 /// translations) and an English message (for logs).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct ApiError {
-    /// Stable identifier, e.g. `"bad_signature"`.
-    pub code: &'static str,
+    /// Stable identifier, e.g. `"bad_signature"` (see [`Code`]).
+    pub code: Code,
     /// Human-readable detail.
     pub message: String,
     /// Numbers a translated message needs, e.g. the place of a bad pixel.
@@ -404,14 +406,14 @@ pub struct ApiError {
 pub type Result<T> = core::result::Result<T, ApiError>;
 
 #[allow(clippy::needless_pass_by_value)] // takes errors by value at call sites
-fn err(code: &'static str, message: impl ToString) -> ApiError {
+fn err(code: Code, message: impl ToString) -> ApiError {
     ApiError { code, message: message.to_string(), args: Vec::new() }
 }
 
 impl ApiError {
     /// An error with a code and an English message.
     #[must_use]
-    pub fn new(code: &'static str, message: impl ToString) -> Self {
+    pub fn new(code: Code, message: impl ToString) -> Self {
         err(code, message)
     }
 }
@@ -431,14 +433,14 @@ impl From<pips_format::Error> for ApiError {
     fn from(e: pips_format::Error) -> Self {
         use pips_format::Error as E;
         let code = match e {
-            E::UnsupportedVersion(v) if newer(v) => "newer_version",
-            E::UnknownCriticalFlag(_) | E::UnknownCriticalExtension | E::UnknownPalette(_) => "newer_version",
+            E::UnsupportedVersion(v) if newer(v) => Code::NewerVersion,
+            E::UnknownCriticalFlag(_) | E::UnknownCriticalExtension | E::UnknownPalette(_) => Code::NewerVersion,
             // A field the person typed, named so that the app can say which.
-            E::BadText(pips_format::Field::Title) => "bad_title",
-            E::BadText(pips_format::Field::Author) => "bad_author",
-            E::BadHandle => "bad_handle",
-            E::BadLink => "bad_site",
-            _ => "invalid_card",
+            E::BadText(pips_format::Field::Title) => Code::BadTitle,
+            E::BadText(pips_format::Field::Author) => Code::BadAuthor,
+            E::BadHandle => Code::BadHandle,
+            E::BadLink => Code::BadSite,
+            _ => Code::InvalidCard,
         };
         err(code, e)
     }
@@ -449,15 +451,15 @@ impl From<pips_sign::Error> for ApiError {
         use pips_sign::Error as E;
         let code = match e {
             E::Format(f) => return f.into(),
-            E::Unsigned => "unsigned",
-            E::BadSignature => "bad_signature",
-            E::BadKey => "bad_key",
-            E::NotAuthor => "not_author",
-            E::BadEdition => "bad_edition",
-            E::BadNick => "bad_nick",
-            E::UnsupportedVersion(v) if newer(v) => "newer_version",
-            E::UnknownFlag(_) => "newer_version",
-            _ => "invalid_code",
+            E::Unsigned => Code::Unsigned,
+            E::BadSignature => Code::BadSignature,
+            E::BadKey => Code::BadKey,
+            E::NotAuthor => Code::NotAuthor,
+            E::BadEdition => Code::BadEdition,
+            E::BadNick => Code::BadNick,
+            E::UnsupportedVersion(v) if newer(v) => Code::NewerVersion,
+            E::UnknownFlag(_) => Code::NewerVersion,
+            _ => Code::InvalidCode,
         };
         err(code, e)
     }
@@ -513,7 +515,7 @@ pub struct ImportedPalette {
 ///
 /// `bad_palette`, with the line in the message.
 pub fn parse_palette(bytes: &[u8]) -> Result<ImportedPalette> {
-    let p = pips_palette::parse(bytes).map_err(|e| err("bad_palette", e))?;
+    let p = pips_palette::parse(bytes).map_err(|e| err(Code::BadPalette, e))?;
     Ok(ImportedPalette { name: p.name, colors: rgb_list(&p.palette) })
 }
 
@@ -589,7 +591,7 @@ fn to_card(d: &CardData) -> Result<Card> {
         PaletteData::Builtin(id) => PaletteRef::Builtin(*id),
         PaletteData::Inline(cs) => {
             let rgb: Vec<Rgb> = cs.iter().map(|c| Rgb::new(c[0], c[1], c[2])).collect();
-            PaletteRef::Inline(Palette::new(&rgb).map_err(|e| err("bad_palette", e))?)
+            PaletteRef::Inline(Palette::new(&rgb).map_err(|e| err(Code::BadPalette, e))?)
         }
     };
     let handle = match &d.handle {
@@ -599,7 +601,7 @@ fn to_card(d: &CardData) -> Result<Card> {
                 .iter()
                 .find(|(n, _)| *n == h.network)
                 .map(|(_, n)| *n)
-                .ok_or_else(|| err("invalid_card", format!("unknown network {:?}", h.network)))?;
+                .ok_or_else(|| err(Code::InvalidCard, format!("unknown network {:?}", h.network)))?;
             Some(Handle { network, text: h.text.clone() })
         }
     };
@@ -663,18 +665,19 @@ pub struct Rgba {
     pub rgba: Vec<u8>,
 }
 
-/// Renders frame `frame` of a card.
+/// Renders frame `frame` of a card. A card too large to share still shows:
+/// its pixels are checked, not compressed.
 ///
 /// # Errors
 ///
 /// `invalid_card` for an invalid card or a frame past the last.
 pub fn render(card: &CardData, frame: u8) -> Result<Rgba> {
     let c = to_card(card)?;
-    pips_format::encode(&c)?; // all rules, including pixel indices
+    pips_format::validate(&c)?; // all rules, pixel indices among them
     if frame >= c.frames() {
-        return Err(err("invalid_card", "no such frame"));
+        return Err(err(Code::InvalidCard, "no such frame"));
     }
-    let palette = c.palette.resolve().ok_or_else(|| err("invalid_card", "unknown palette"))?;
+    let palette = c.palette.resolve().ok_or_else(|| err(Code::InvalidCard, "unknown palette"))?;
     let n = usize::from(c.width) * usize::from(c.height);
     let start = n * usize::from(frame);
     let mut rgba = vec![0u8; n * 4];
@@ -713,7 +716,7 @@ impl Identity {
     ///
     /// `bad_seed` unless exactly 32 bytes.
     pub fn from_seed(seed: &[u8]) -> Result<Self> {
-        let seed: &[u8; 32] = seed.try_into().map_err(|_| err("bad_seed", "a seed is 32 bytes"))?;
+        let seed: &[u8; 32] = seed.try_into().map_err(|_| err(Code::BadSeed, "a seed is 32 bytes"))?;
         Ok(Self(SecretKey::from_seed(seed)))
     }
 
@@ -723,7 +726,7 @@ impl Identity {
     ///
     /// `bad_words`, saying which word or what is wrong.
     pub fn from_words(words: &str) -> Result<Self> {
-        recovery::from_words(words).map(Self).map_err(|e| err("bad_words", e))
+        recovery::from_words(words).map(Self).map_err(|e| err(Code::BadWords, e))
     }
 
     /// From a scanned paper key.
@@ -732,7 +735,7 @@ impl Identity {
     ///
     /// `bad_paper_key`.
     pub fn from_paper(text: &str) -> Result<Self> {
-        recovery::from_paper(text).map(Self).map_err(|e| err("bad_paper_key", e))
+        recovery::from_paper(text).map(Self).map_err(|e| err(Code::BadPaperKey, e))
     }
 
     /// The seed to store.
@@ -823,7 +826,7 @@ impl Identity {
     ///
     /// `invalid_backup` naming the broken rule, `too_large`, `bad_nonce`.
     pub fn seal_backup(&self, data: &BackupData, nonce: &[u8]) -> Result<Vec<u8>> {
-        let nonce: [u8; 24] = nonce.try_into().map_err(|_| err("bad_nonce", "a nonce is 24 bytes"))?;
+        let nonce: [u8; 24] = nonce.try_into().map_err(|_| err(Code::BadNonce, "a nonce is 24 bytes"))?;
         pips_store::seal(&to_store(data)?, &self.0, nonce).map_err(store_err)
     }
 
@@ -836,6 +839,180 @@ impl Identity {
     pub fn open_backup(&self, bytes: &[u8]) -> Result<BackupData> {
         pips_store::open(bytes, &self.0).map(|b| from_store(&b)).map_err(store_err)
     }
+
+    /// The key backups are sealed with, to keep once the seed is out of
+    /// reach ([`seal_backup_with`]). It opens backups; it cannot sign.
+    #[must_use]
+    pub fn backup_key(&self) -> Vec<u8> {
+        pips_store::BackupKey::of(&self.0).bytes().to_vec()
+    }
+}
+
+// ------------------------------------------------------- a key kept elsewhere --
+//
+// For an identity whose secret the app does not hold: a browser's key,
+// which signs but never shows itself (docs/REWRITE.md, О1). Each signing
+// is two calls: what to sign, then the result from the signature, which
+// the core checks against the public key before it uses it. The bytes are
+// the same as an Identity's own.
+
+/// A public key from its 32 bytes.
+fn public_key(bytes: &[u8]) -> Result<pips_sign::PublicKey> {
+    let b: &[u8; 32] = bytes.try_into().map_err(|_| err(Code::BadKey, "a public key is 32 bytes"))?;
+    Ok(pips_sign::PublicKey::from_bytes(b)?)
+}
+
+/// A signature from its 64 bytes.
+fn signature(bytes: &[u8]) -> Result<[u8; 64]> {
+    bytes.try_into().map_err(|_| err(Code::BadSignature, "a signature is 64 bytes"))
+}
+
+/// A public key as the app shows it, from its 32 bytes.
+///
+/// # Errors
+///
+/// `bad_key`.
+pub fn key_of(bytes: &[u8]) -> Result<KeyData> {
+    Ok(key_data(&public_key(bytes)?))
+}
+
+/// What the author signs for a card from the editor.
+///
+/// # Errors
+///
+/// `invalid_card`.
+pub fn card_to_sign(card: &CardData) -> Result<Vec<u8>> {
+    Ok(pips_sign::card_message(&to_card(card)?)?)
+}
+
+/// The card's payload, signed by `author` with `signature` over
+/// [`card_to_sign`].
+///
+/// # Errors
+///
+/// `bad_signature`, `bad_key`, `invalid_card`.
+pub fn signed_card(card: &CardData, author: &[u8], signature_bytes: &[u8]) -> Result<Vec<u8>> {
+    let mut c = to_card(card)?;
+    pips_sign::attach_card_signature(&mut c, &public_key(author)?, &signature(signature_bytes)?)?;
+    Ok(pips_format::encode(&c)?)
+}
+
+/// The Base45 text of a recipient code for `key` and `nick`.
+///
+/// # Errors
+///
+/// `bad_key`, `bad_nick`.
+pub fn recipient_code(key: &[u8], nick: &str) -> Result<String> {
+    let code = RecipientCode { key: public_key(key)?, nick: nick.into() }.to_bytes()?;
+    Ok(pips_base45::encode(&code))
+}
+
+/// What `author` signs to issue copy `edition` of `of` of an own card to the
+/// person whose recipient code was scanned (as [`Identity::issue`]).
+///
+/// # Errors
+///
+/// `not_author`, `bad_edition`, `invalid_code`, `invalid_card`, `bad_key`.
+pub fn edition_to_sign(
+    payload: &[u8],
+    edition: u16,
+    of: u16,
+    recipient: &[u8],
+    day: u32,
+    author: &[u8],
+) -> Result<Vec<u8>> {
+    let card = pips_format::decode(payload)?;
+    let to = RecipientCode::from_bytes(recipient)?;
+    Ok(Certificate::message_to_issue(&public_key(author)?, &card, edition, of, to.key, day)?)
+}
+
+/// The certificate, from `signature` over [`edition_to_sign`] with the
+/// same arguments.
+///
+/// # Errors
+///
+/// `bad_signature`, and the errors of [`edition_to_sign`].
+pub fn edition(
+    payload: &[u8],
+    edition: u16,
+    of: u16,
+    recipient: &[u8],
+    day: u32,
+    author: &[u8],
+    signature_bytes: &[u8],
+) -> Result<Vec<u8>> {
+    let card = pips_format::decode(payload)?;
+    let to = RecipientCode::from_bytes(recipient)?;
+    let cert = Certificate::with_signature(
+        &public_key(author)?,
+        &card,
+        edition,
+        of,
+        to.key,
+        day,
+        &signature(signature_bytes)?,
+    )?;
+    Ok(cert.to_bytes().to_vec())
+}
+
+/// An envelope for an own card, optionally with a certificate: nothing in
+/// it is signed by the envelope (the card carries its own signature).
+///
+/// # Errors
+///
+/// `invalid_card`, or a certificate that does not match the card.
+pub fn seal_own(payload: &[u8], certificate: Option<&[u8]>) -> Result<Vec<u8>> {
+    let card = pips_format::decode(payload)?;
+    let cert = certificate.map(Certificate::from_bytes).transpose()?;
+    Ok(pips_sign::seal(&card, cert.as_ref(), None)?)
+}
+
+/// What a sender signs to pass someone else's card on as `nick` (as
+/// [`Identity::seal_as_sender`]: never with a certificate).
+///
+/// # Errors
+///
+/// `invalid_card`, `bad_nick`.
+pub fn sender_to_sign(payload: &[u8], nick: &str) -> Result<Vec<u8>> {
+    let card = pips_format::decode(payload)?;
+    Ok(pips_sign::sender_message_for(&card, None, nick)?)
+}
+
+/// The envelope, from `signature` by `sender` over [`sender_to_sign`].
+///
+/// # Errors
+///
+/// `bad_signature`, `bad_key`, and the errors of [`sender_to_sign`].
+pub fn sealed_by(payload: &[u8], nick: &str, sender: &[u8], signature_bytes: &[u8]) -> Result<Vec<u8>> {
+    let card = pips_format::decode(payload)?;
+    Ok(pips_sign::seal_signed(&card, None, Some((&public_key(sender)?, nick, &signature(signature_bytes)?)))?)
+}
+
+/// A backup key kept apart from its identity, with its owner.
+fn backup_key(owner: &[u8], key: &[u8]) -> Result<pips_store::BackupKey> {
+    let k: [u8; 32] = key.try_into().map_err(|_| err(Code::BadSeed, "a backup key is 32 bytes"))?;
+    Ok(pips_store::BackupKey::from_parts(public_key(owner)?, k))
+}
+
+/// Encrypts a backup with a backup key kept apart from the identity
+/// ([`Identity::backup_key`]). `nonce`: 24 bytes from
+/// `crypto.getRandomValues`.
+///
+/// # Errors
+///
+/// As [`Identity::seal_backup`], and `bad_key`.
+pub fn seal_backup_with(data: &BackupData, owner: &[u8], key: &[u8], nonce: &[u8]) -> Result<Vec<u8>> {
+    let nonce: [u8; 24] = nonce.try_into().map_err(|_| err(Code::BadNonce, "a nonce is 24 bytes"))?;
+    pips_store::seal_with(&to_store(data)?, &backup_key(owner, key)?, nonce).map_err(store_err)
+}
+
+/// Decrypts and checks a backup with a backup key kept apart.
+///
+/// # Errors
+///
+/// As [`Identity::open_backup`], and `bad_key`.
+pub fn open_backup_with(bytes: &[u8], owner: &[u8], key: &[u8]) -> Result<BackupData> {
+    pips_store::open_with(bytes, &backup_key(owner, key)?).map(|b| from_store(&b)).map_err(store_err)
 }
 
 // ---------------------------------------------------------------- receiving --
@@ -894,15 +1071,11 @@ pub struct SenderData {
 /// partly verified is ever returned.
 pub fn open_envelope(bytes: &[u8]) -> Result<Opened> {
     let o = pips_sign::open(bytes)?;
-    // Layout: 'E', version, flags, u16 length, payload. `open` has just
-    // checked all of it.
-    let len = usize::from(u16::from_le_bytes([bytes[3], bytes[4]]));
-    let payload = bytes[5..5 + len].to_vec();
     let digest = hex_digest(&o.card)?;
     Ok(Opened {
         card: from_card(&o.card),
         unknown_extensions: o.card.extensions.len(),
-        payload,
+        payload: o.payload,
         digest,
         author: o.author.as_ref().map(key_data),
         certificate: o.certificate.map(|c| CertificateData {
@@ -1035,11 +1208,11 @@ pub const MAX_LINK: usize = 16 * 1024;
 /// result fits [`MAX_LINK`].
 pub fn card_link(base: &str, envelope: &[u8]) -> Result<String> {
     if !base.starts_with("https://") || base.contains('#') || envelope.first() != Some(&b'E') {
-        return Err(err("bad_link", "base must be https without a fragment; payload must be an envelope"));
+        return Err(err(Code::BadLink, "base must be https without a fragment; payload must be an envelope"));
     }
     let link = format!("{base}#{}", b64::encode(envelope));
     if link.len() > MAX_LINK {
-        return Err(err("bad_link", "card too large for a link"));
+        return Err(err(Code::BadLink, "card too large for a link"));
     }
     Ok(link)
 }
@@ -1051,19 +1224,19 @@ pub fn card_link(base: &str, envelope: &[u8]) -> Result<String> {
 /// `bad_link`.
 pub fn parse_link(url: &str) -> Result<Vec<u8>> {
     if url.len() > MAX_LINK {
-        return Err(err("bad_link", "link too long"));
+        return Err(err(Code::BadLink, "link too long"));
     }
-    let fragment = url.split_once('#').map(|(_, f)| f).ok_or_else(|| err("bad_link", "no card in link"))?;
-    let bytes = b64::decode(fragment).ok_or_else(|| err("bad_link", "damaged link"))?;
+    let fragment = url.split_once('#').map(|(_, f)| f).ok_or_else(|| err(Code::BadLink, "no card in link"))?;
+    let bytes = b64::decode(fragment).ok_or_else(|| err(Code::BadLink, "damaged link"))?;
     // The first byte names what follows, as in a code: a card's envelope,
     // 'E'. A capital letter this version does not know is something a newer
     // app puts in a link, so it is said to be that — not a broken link. One
     // it knows (a recipient code, a carousel frame) is no link's.
     match bytes.first() {
         Some(b'E') => Ok(bytes),
-        Some(b'R' | &pips_qr::carousel::KIND) => Err(err("bad_link", "not a card")),
-        Some(b'A'..=b'Z') => Err(err("newer_version", "a newer kind of link")),
-        _ => Err(err("bad_link", "no card in link")),
+        Some(b'R' | &pips_qr::carousel::KIND) => Err(err(Code::BadLink, "not a card")),
+        Some(b'A'..=b'Z') => Err(err(Code::NewerVersion, "a newer kind of link")),
+        _ => Err(err(Code::BadLink, "no card in link")),
     }
 }
 
@@ -1091,7 +1264,7 @@ pub enum QrPlan {
 ///
 /// `too_large`.
 pub fn qr_plan(bytes: &[u8]) -> Result<QrPlan> {
-    match pips_qr::plan(bytes).map_err(|e| err("too_large", e))? {
+    match pips_qr::plan(bytes).map_err(|e| err(Code::TooLarge, e))? {
         pips_qr::Plan::Single(text) => Ok(QrPlan::Single { text }),
         pips_qr::Plan::Carousel(e) => Ok(QrPlan::Carousel { fragments: e.fragments() }),
     }
@@ -1113,7 +1286,7 @@ pub struct MatrixData {
 ///
 /// `too_large`.
 pub fn qr_matrix(text: &str) -> Result<MatrixData> {
-    let m = pips_qr::matrix::Matrix::encode(text).map_err(|e| err("too_large", e))?;
+    let m = pips_qr::matrix::Matrix::encode(text).map_err(|e| err(Code::TooLarge, e))?;
     let size = m.size();
     let modules = (0..size * size).map(|i| u8::from(m.get(i % size, i / size))).collect();
     Ok(MatrixData { size, modules })
@@ -1125,7 +1298,7 @@ pub fn qr_matrix(text: &str) -> Result<MatrixData> {
 ///
 /// `too_large`.
 pub fn qr_svg(text: &str) -> Result<String> {
-    Ok(pips_qr::matrix::Matrix::encode(text).map_err(|e| err("too_large", e))?.to_svg(4))
+    Ok(pips_qr::matrix::Matrix::encode(text).map_err(|e| err(Code::TooLarge, e))?.to_svg(4))
 }
 
 /// Shows a large message as a loop of codes.
@@ -1138,7 +1311,7 @@ impl Carousel {
     ///
     /// `too_large`.
     pub fn new(bytes: &[u8]) -> Result<Self> {
-        Encoder::new(bytes, pips_qr::DEFAULT_FRAGMENT).map(Self).map_err(|e| err("too_large", e))
+        Encoder::new(bytes, pips_qr::DEFAULT_FRAGMENT).map(Self).map_err(|e| err(Code::TooLarge, e))
     }
 
     /// Fewest frames that carry the message.
@@ -1194,7 +1367,7 @@ impl Joiner {
     pub fn push(&mut self, frame: &[u8]) -> Result<JoinProgress> {
         let refused = |e: pips_qr::carousel::FrameError| {
             let newer = matches!(e, pips_qr::carousel::FrameError::UnsupportedVersion(v) if newer(v));
-            err(if newer { "newer_version" } else { "bad_frame" }, e)
+            err(if newer { Code::NewerVersion } else { Code::BadFrame }, e)
         };
         match self.0.push(frame).map_err(refused)? {
             Progress::Partial { have, need } => Ok(JoinProgress::Partial { have, need }),

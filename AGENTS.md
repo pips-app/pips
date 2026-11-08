@@ -10,6 +10,9 @@ QR-код, без сервера. Здесь собрано то, что сто�
 2. `web/README.md` — устройство приложения и правила кода. **Обязательно.**
 3. `DECISIONS.md` — решения и причины. Прежде чем «исправлять» странное
    поведение, найди его здесь: часто оно выбрано нарочно.
+   `docs/REWRITE.md` — идёт переписывание веб-приложения: решения, план,
+   статус. Новое пишется в `web-next/`; `web/` чинится только по
+   необходимости. Начни с «Статуса» в его конце и обнови его, уходя.
 4. Файлы, которые собираешься менять, — **целиком**, а не кусками вокруг
    найденного места. И их соседей: кто их вызывает, кого вызывают они.
 
@@ -78,6 +81,8 @@ QR-код, без сервера. Здесь собрано то, что сто�
    npx --yes -p typescript@5.9.3 tsc -p web/jsconfig.json
    node --test tests/unit/*.test.mjs
    cd tests/e2e && npm test            # и BROWSER=firefox npm test, если трогал ввод/фокус
+   cd tests/next && npm test           # web-next: и BROWSER=firefox, и BROWSER=webkit — все три
+   npx --yes -p typescript@5.9.3 tsc -p web-next/jsconfig.json      # если трогал web-next
    cargo fmt --all --check && cargo clippy --workspace --all-targets -- -D warnings && cargo test --workspace   # если трогал Rust
    ```
 5. **Посмотри глазами.** Сделай скриншоты Playwright (он есть в окружении

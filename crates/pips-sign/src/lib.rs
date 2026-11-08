@@ -37,7 +37,10 @@ use core::fmt;
 use ed25519_dalek::{Signer as _, SigningKey, VerifyingKey};
 use zeroize::Zeroizing;
 
-pub use objects::{open, seal, sign_card, verify_card, Certificate, Opened, RecipientCode, Sender, CERTIFICATE_LEN};
+pub use objects::{
+    attach_card_signature, card_message, open, seal, seal_signed, sender_message_for, sign_card, verify_card,
+    Certificate, Opened, RecipientCode, Sender, CERTIFICATE_LEN,
+};
 
 /// An Ed25519 signing key. Wiped from memory when dropped.
 pub struct SecretKey(SigningKey);

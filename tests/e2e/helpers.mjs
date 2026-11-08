@@ -10,10 +10,10 @@ import { readFile, mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, normalize, extname } from 'node:path';
 import { deflateSync, crc32 } from 'node:zlib';
-import { chromium, firefox } from 'playwright';
+import { chromium, firefox, webkit } from 'playwright';
 
-/** BROWSER=firefox runs the same journeys in Firefox. */
-const engine = process.env.BROWSER === 'firefox' ? firefox : chromium;
+/** BROWSER=firefox runs the same journeys in Firefox; BROWSER=webkit in Safari's engine, which every browser on an iPhone uses. */
+const engine = { firefox, webkit }[process.env.BROWSER ?? ''] ?? chromium;
 /**
  * A folder to measure into: with it, every page writes which of the app's
  * code ran (Chromium's JS coverage) as it closes; tests/coverage-report.mjs
