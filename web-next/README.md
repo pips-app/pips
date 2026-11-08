@@ -15,6 +15,7 @@ the site is packed from `web/` alone. The rules of `web/README.md` and
 | `src/core/worker.js` | The core's worker: the WebAssembly runs here, never on the page. |
 | `src/core/serve.js` | The worker's side: one message a job, one answer each; a panic ends the worker. |
 | `src/core/ops.js` | The jobs the worker does, by name: the core's functions the app may call. |
+| `src/core/keys.js` | The person's key, in the worker: made, checked, kept hidden from the page (WebCrypto), restored, signing. |
 | `src/core/client.js` | The page's side: jobs one at a time, each with a limit; a stopped worker is replaced. |
 | `src/core/limits.js` | The limits, each from a measurement (`tests/next/measure.mjs`). |
 | `src/errors.js` | One model of errors: every code has words; a mistake of the app is said as one. |

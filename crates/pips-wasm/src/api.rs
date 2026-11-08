@@ -867,6 +867,15 @@ fn signature(bytes: &[u8]) -> Result<[u8; 64]> {
     bytes.try_into().map_err(|_| err(Code::BadSignature, "a signature is 64 bytes"))
 }
 
+/// A public key as the app shows it, from its 32 bytes.
+///
+/// # Errors
+///
+/// `bad_key`.
+pub fn key_of(bytes: &[u8]) -> Result<KeyData> {
+    Ok(key_data(&public_key(bytes)?))
+}
+
 /// What the author signs for a card from the editor.
 ///
 /// # Errors

@@ -12,11 +12,12 @@ core.initSync({ module: await readFile(new URL('pkg/pips_wasm_bg.wasm', web)) })
 const { dictionaries, setLanguage } = await import(new URL('src/i18n.js', web).href);
 const { say, APP_MISTAKES } = await import(new URL('src/errors.js', web).href);
 const { CLIENT_CODES } = await import(new URL('src/core/client.js', web).href);
+const { KEY_CODES } = await import(new URL('src/core/keys.js', web).href);
 
 /** @type {string[]} */
-const codes = [...core.errorCodes(), ...CLIENT_CODES];
+const codes = [...core.errorCodes(), ...CLIENT_CODES, ...KEY_CODES];
 
-test('every code the core or its client can give has words, or is a mistake of the app', () => {
+test('every code the core, its client or the key can give has words, or is a mistake of the app', () => {
   const missing = codes.filter((c) => !APP_MISTAKES.has(c) && !Object.hasOwn(dictionaries.ru, `error.${c}`));
   assert.deepEqual(missing, []);
   const unknown = [...APP_MISTAKES].filter((c) => !codes.includes(c));

@@ -10,7 +10,7 @@ import { dictionaries, t } from './i18n.js';
  * Codes that mean a mistake in the app, not in what the person gave it:
  * bytes or options the app itself built wrong, a job that does not exist.
  */
-export const APP_MISTAKES = new Set(['bad_seed', 'bad_nonce', 'bad_options', 'unknown_op', 'internal']);
+export const APP_MISTAKES = new Set(['bad_seed', 'bad_nonce', 'bad_options', 'unknown_op', 'internal', 'no_key']);
 
 /**
  * What to tell the person about an error: the words for its code, or, for

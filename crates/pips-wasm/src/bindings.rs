@@ -137,6 +137,12 @@ pub fn qr_svg(text: &str) -> Js<String> {
 // A key kept elsewhere (a browser's): each signing in two steps, what to
 // sign and then the result from the signature (api.rs, same section).
 
+/// `{ hex, short }` of a public key's 32 bytes.
+#[wasm_bindgen(js_name = keyData)]
+pub fn key_data(bytes: &[u8]) -> Js<JsValue> {
+    js(&api::key_of(bytes).map_err(thrown)?)
+}
+
 /// What the author signs for an editor card.
 #[wasm_bindgen(js_name = cardToSign)]
 pub fn card_to_sign(card_data: JsValue) -> Js<Vec<u8>> {

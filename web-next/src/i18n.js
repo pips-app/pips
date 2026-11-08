@@ -59,6 +59,7 @@ const ru = {
   'error.core_timeout': 'Это заняло слишком долго, и работа остановлена. Попробуйте ещё раз',
   'error.core_crashed': 'Работа с этим файлом сломалась и остановлена; это записано в журнал. Попробуйте ещё раз',
   'error.core_unavailable': 'Часть приложения не загрузилась. Перезагрузите страницу',
+  'error.key_lost': 'Новый ключ потерялся, не успев сохраниться: начните заново',
   'error.app': 'Что-то пошло не так — это записано в журнал',
 };
 
@@ -102,6 +103,7 @@ const en = {
   'error.core_timeout': 'This took too long and was stopped. Try again',
   'error.core_crashed': 'Working on this file broke and was stopped; it is in the journal. Try again',
   'error.core_unavailable': 'Part of the app did not load. Reload the page',
+  'error.key_lost': 'The new key was lost before it was saved: start again',
   'error.app': 'Something went wrong — it is in the journal',
 };
 
