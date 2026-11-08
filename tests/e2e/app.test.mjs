@@ -77,9 +77,12 @@ test('the browser itself refuses markup that is not one of the app\'s icons, and
     // The refusals met on purpose, as this browser reports them in the
     // console: each words them its own way (Chromium names the trusted
     // type, Firefox the policy directive), so only this phone's messages
-    // about them are taken away — anything else still fails the run.
-    const met = env.errors.filter((/** @type {string} */ e) => e.startsWith('trustfox:') && /trusted|require-trusted-types-for|Content[- ]Security/i.test(e));
-    for (const e of met) env.errors.splice(env.errors.indexOf(e), 1);
+    // about them are taken away — anything else still fails the run. One
+    // each, the string into innerHTML and the second policy; Firefox
+    // writes them a moment after the refusals, so they are waited for.
+    const met = () => env.errors.filter((/** @type {string} */ e) => e.startsWith('trustfox:') && /trusted|require-trusted-types-for|Content[- ]Security/i.test(e));
+    await until(() => met().length >= 2, 'the browser said both refusals');
+    for (const e of met()) env.errors.splice(env.errors.indexOf(e), 1);
   }
   assert.equal(r.otherMarkup, !!r.enforced, 'other markup through the policy');
   assert.equal(r.otherScript, !!r.enforced, 'another site\'s script through the policy');
