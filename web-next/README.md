@@ -12,7 +12,7 @@ the site is packed from `web/` alone. The rules of `web/README.md` and
 | `index.html` | The page. Its CSP allows nothing that is not named, each thing with its reason. |
 | `src/main.js` | The start: language, the core's client, the state; the first run or where the app lands. |
 | `src/ui/onboarding.js` | The first run: a new key's words shown once and three asked back, or a key restored from its words with its backup; then the name. |
-| `src/ui/home.js` | Where the app lands for now: the profile's key, its words checked (never shown). |
+| `src/ui/home.js` | Where the app lands for now: the profile's key, its words checked (never shown), the backup saved and added, the key switched. |
 | `src/ui/words-entry.js` | Typing the 24 words (from `web/`). |
 | `src/ui/identicon.js`, `src/ui/qr.js` | A key's mark; a QR code from the core's matrix. |
 | `src/icons.js` | Icons built as SVG elements, never parsed from markup. |

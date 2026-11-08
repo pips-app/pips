@@ -226,7 +226,7 @@ export function createState(core, { now = Date.now } = {}) {
       return { envelope, ...next };
     },
 
-    /** A backup of every card and the profile, sealed by the key. @returns {Promise<{ bytes: Uint8Array, count: number }>} */
+    /** A backup of every card and the profile, sealed by the key: bytes the core made, in a buffer of their own. @returns {Promise<{ bytes: Uint8Array<ArrayBuffer>, count: number }>} */
     async makeBackup() {
       const recs = [...cards.values()].map(({ rec }) => rec);
       const data = { created: now(), profile, cards: recs };

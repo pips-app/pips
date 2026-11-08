@@ -6,6 +6,7 @@
 // restored from its words, with its backup. Each test is a new phone.
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import { setup } from './helpers.mjs';
 
 /** @type {Awaited<ReturnType<typeof setup>>} */
@@ -114,4 +115,109 @@ test('a key restored from its words is the same key; the name is asked for when 
   await q.getByRole('heading', { name: 'Профиль' }).waitFor();
   assert.match(await q.getByRole('main').innerText(), new RegExp(`Ключ ${key}`));
   await q.context().close();
+});
+
+/**
+ * Saves a backup from the profile; the file as downloaded, ready to be
+ * chosen on another phone (a download goes with its phone, so its bytes are kept).
+ * @param {Page} p
+ */
+async function saveBackup(p) {
+  const [download] = await Promise.all([p.waitForEvent('download'), p.getByRole('button', { name: 'Сохранить копию' }).click()]);
+  await p.getByRole('status').filter({ hasText: 'Копия сохранена' }).waitFor();
+  const name = download.suggestedFilename();
+  return { name, mimeType: 'application/octet-stream', buffer: await readFile(/** @type {string} */ (await download.path())) };
+}
+
+/** Types the words into the restore screen and waits until they name a key. @param {Page} p @param {string[]} words */
+async function typeWords(p, words) {
+  await p.getByLabel('Слово № 1', { exact: true }).fill(words.join(' '));
+  await p.getByText('Ключ найден').waitFor();
+}
+
+/** The short key the profile shows. @param {Page} p */
+const shortKey = async (p) => (await p.getByRole('main').innerText()).match(/Ключ ([0-9a-f·]+)/)?.[1];
+
+test('a backup saved from the profile brings back the profile on a new phone, with the key from its words', async () => {
+  const { p, words } = await newKey('kitsu');
+  const key = await shortKey(p);
+  await p.getByText('Копии ещё нет', { exact: false }).waitFor();
+  const file = await saveBackup(p);
+  assert.match(file.name, /^pips-\d{4}-\d{2}-\d{2}\.pipsbak$/);
+  await p.getByText(/Последняя: .+, 0 карточек/).waitFor();
+  await p.context().close();
+
+  const q = await env.page();
+  await q.getByRole('button', { name: 'У меня уже есть ключ' }).click();
+  const [chooser] = await Promise.all([q.waitForEvent('filechooser'), q.getByRole('button', { name: 'Выбрать файл копии' }).click()]);
+  await chooser.setFiles(file);
+  await q.getByText(file.name).waitFor();
+  await typeWords(q, words);
+  await q.getByText('подходит к копии', { exact: false }).waitFor();
+  await q.getByRole('button', { name: 'Восстановить' }).click();
+  // The name came back with the backup: it is not asked for.
+  await q.getByRole('heading', { name: 'Профиль' }).waitFor();
+  const main = await q.getByRole('main').innerText();
+  assert.match(main, /kitsu/);
+  assert.match(main, new RegExp(`Ключ ${key}`));
+  assert.match(main, /Последняя: .+, 0 карточек/, 'a backup restored onto an empty phone is as good as one just made');
+  await q.context().close();
+});
+
+test('another key’s backup is not opened; switching to that key from its words opens it', async () => {
+  const a = await newKey('aoi');
+  const file = await saveBackup(a.p);
+  const aKey = await shortKey(a.p);
+  await a.p.context().close();
+
+  const { p } = await newKey('beni');
+  const [chooser] = await Promise.all([p.waitForEvent('filechooser'), p.getByRole('button', { name: 'Добавить из копии' }).click()]);
+  await chooser.setFiles(file);
+  const said = p.getByRole('status').filter({ hasText: 'Это копия другого ключа' });
+  await said.waitFor();
+  await said.getByRole('button', { name: 'Сменить ключ' }).click();
+  // The file goes along: only its key's words are asked for.
+  await p.getByRole('heading', { name: 'Другой ключ' }).waitFor();
+  await p.getByText(file.name).waitFor();
+  await typeWords(p, a.words);
+  await p.getByRole('button', { name: 'Восстановить' }).click();
+  await p.getByRole('status').filter({ hasText: 'Ключ сменён' }).waitFor();
+  assert.equal(await shortKey(p), aKey);
+  // The name already given stays; the backup's does not replace it.
+  assert.match(await p.getByRole('main').innerText(), /beni/);
+  await p.context().close();
+});
+
+test('switching key can be backed out of, and switching to the same key says so', async () => {
+  const { p, words } = await newKey('kitsu');
+  const key = await shortKey(p);
+  await p.getByRole('button', { name: 'Сменить ключ' }).click();
+  await p.getByRole('heading', { name: 'Другой ключ' }).waitFor();
+  await p.getByRole('button', { name: 'Назад' }).click();
+  await p.getByRole('heading', { name: 'Профиль' }).waitFor();
+  assert.equal(await shortKey(p), key);
+
+  await p.getByRole('button', { name: 'Сменить ключ' }).click();
+  await typeWords(p, words);
+  await p.getByRole('button', { name: 'Восстановить' }).click();
+  await p.getByRole('status').filter({ hasText: 'Это тот же ключ — он на месте' }).waitFor();
+  assert.equal(await shortKey(p), key);
+  await p.reload();
+  await p.getByRole('heading', { name: 'Профиль' }).waitFor();
+  assert.equal(await shortKey(p), key);
+  await p.context().close();
+});
+
+test('an own backup added on the same phone adds nothing twice; a file that is not a backup is said so', async () => {
+  const { p } = await newKey('kitsu');
+  const file = await saveBackup(p);
+  const add = async (/** @type {{ name: string, mimeType: string, buffer: Buffer }} */ f) => {
+    const [chooser] = await Promise.all([p.waitForEvent('filechooser'), p.getByRole('button', { name: 'Добавить из копии' }).click()]);
+    await chooser.setFiles(f);
+  };
+  await add(file);
+  await p.getByRole('status').filter({ hasText: 'Из копии добавлено: 0' }).waitFor();
+  await add({ name: 'notes.pipsbak', mimeType: 'application/octet-stream', buffer: Buffer.from('not a backup at all') });
+  await p.getByRole('status').filter({ hasText: 'Это не резервная копия Pips' }).waitFor();
+  await p.context().close();
 });

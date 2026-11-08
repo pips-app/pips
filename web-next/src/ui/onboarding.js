@@ -33,9 +33,12 @@ const BACKUP_MAX = 64 * 1024 * 1024;
  * @param {{ call(op: string, ...args: unknown[]): Promise<any> }} o.core
  * @param {State} o.app
  * @param {() => void} o.done the app can start
- * @param {'welcome' | 'name'} [o.start] 'name': a key is kept, the name is not
+ * @param {'welcome' | 'name' | 'switch'} [o.start] 'name': a key is kept, the name is not;
+ *   'switch': from the profile, another key in place of this one
+ * @param {() => void} [o.cancel] back out of switching
+ * @param {{ bytes: Uint8Array, name: string } | null} [o.file] switching to the key of this backup
  */
-export function onboarding({ root, core, app, done, start = 'welcome' }) {
+export function onboarding({ root, core, app, done, start = 'welcome', cancel = () => {}, file: chosen = null }) {
   const page = h('main', { class: 'onb' });
   replace(root, page);
   /** The core's word list, asked for once. @type {Promise<string[]>} */
@@ -155,7 +158,11 @@ export function onboarding({ root, core, app, done, start = 'welcome' }) {
    * key can be checked against it before anything is kept; then the key
    * from its 24 words.
    */
-  async function restore() {
+  /**
+   * The same, from the profile: another key takes this one's place. The
+   * cards on the device stay; the person's own become a former self's.
+   */
+  async function restore(switching = false) {
     /** The key the words give, waiting in the worker. @type {{ hex: string, short: string } | null} */
     let key = null;
     /** @type {{ bytes: Uint8Array, name: string, owner: { hex: string, short: string } } | null} */
@@ -192,9 +199,7 @@ export function onboarding({ root, core, app, done, start = 'welcome' }) {
       if (!f) return;
       try {
         if (f.size > BACKUP_MAX) throw { code: 'too_large' };
-        const bytes = new Uint8Array(await f.arrayBuffer());
-        file = { bytes, name: f.name, owner: await core.call('backupOwner', bytes) };
-        paintFile();
+        await take(new Uint8Array(await f.arrayBuffer()), f.name);
       } catch (e) {
         file = null;
         paintFile(say(e));
@@ -202,7 +207,13 @@ export function onboarding({ root, core, app, done, start = 'welcome' }) {
       }
       paint();
     }
-    paintFile();
+    /** A backup file, by its owner. @param {Uint8Array} bytes @param {string} name */
+    async function take(bytes, name) {
+      file = { bytes, name, owner: await core.call('backupOwner', bytes) };
+      paintFile();
+    }
+    if (chosen) await take(chosen.bytes, chosen.name);
+    else paintFile();
 
     const entry = wordsEntry(await list, async (s) => {
       key = null;
@@ -234,11 +245,14 @@ export function onboarding({ root, core, app, done, start = 'welcome' }) {
       else name();
     }
 
-    show(heading(t('onb.restore.title')), h('p', {}, t('onb.restore.lead')),
+    // Switching: the person's own cards will be a former self's, said before it is done.
+    const own = [...app.cards.values()].filter((e) => e.rec.mine).length;
+    const warning = switching && own ? h('div', { class: 'note box warn' }, icon('lines'), h('p', {}, t('onb.switch.own', own))) : '';
+    show(heading(t(switching ? 'onb.switch.title' : 'onb.restore.title')), h('p', {}, t(switching ? 'onb.switch.lead' : 'onb.restore.lead')), warning,
       h('div', { class: 'group' }, h('h2', {}, t('onb.restore.file')), fileBox, fileInput),
       h('div', { class: 'group' }, h('h2', {}, t('onb.restore.key')), h('p', { class: 'hint' }, t('onb.restore.words.lead')), entry.el, status),
       h('div', { class: 'onb-grow' }), go,
-      h('button', { type: 'button', class: 'btn plain wide', onclick: async () => { await core.call('keyDrop'); welcome(); } }, t('onb.back')));
+      h('button', { type: 'button', class: 'btn plain wide', onclick: async () => { await core.call('keyDrop'); if (switching) cancel(); else welcome(); } }, t('onb.back')));
   }
 
   /** The name on the person's cards. The key is kept by now: only forward. */
@@ -266,6 +280,7 @@ export function onboarding({ root, core, app, done, start = 'welcome' }) {
   }
 
   if (start === 'name') name();
+  else if (start === 'switch') void restore(true);
   else welcome();
 }
 
