@@ -3,7 +3,7 @@
 //! Data crosses as plain objects; byte fields arrive as `Uint8Array`.
 //! Errors are thrown as `{ code, message }` objects, so the app can switch
 //! on `code` and translate. Every `Result` below fails that way, with the
-//! codes listed in [`crate::api`].
+//! codes listed in [`crate::codes`].
 #![allow(clippy::missing_errors_doc)]
 // Signatures are shaped by the JS boundary: wasm-bindgen passes owned
 // values, and return values are consumed by JavaScript, not Rust.
@@ -13,6 +13,7 @@ use serde::Serialize;
 use wasm_bindgen::prelude::*;
 
 use crate::api::{self, ApiError, CardData};
+use crate::codes::Code;
 
 type Js<T> = Result<T, JsValue>;
 
@@ -26,7 +27,14 @@ fn thrown(e: ApiError) -> JsValue {
 }
 
 fn card(value: JsValue) -> Js<CardData> {
-    serde_wasm_bindgen::from_value(value).map_err(|e| thrown(ApiError::new("invalid_card", e)))
+    serde_wasm_bindgen::from_value(value).map_err(|e| thrown(ApiError::new(Code::InvalidCard, e)))
+}
+
+/// Every error code the core can throw, so the app can check it has words
+/// for each.
+#[wasm_bindgen(js_name = errorCodes)]
+pub fn error_codes() -> Js<JsValue> {
+    js(&Code::ALL)
 }
 
 /// Every built-in palette.
@@ -73,7 +81,7 @@ pub fn import_picture(bytes: &[u8], options: JsValue) -> Js<JsValue> {
     let o = if options.is_undefined() || options.is_null() {
         api::ImportOptions::default()
     } else {
-        serde_wasm_bindgen::from_value(options).map_err(|e| thrown(ApiError::new("bad_options", e)))?
+        serde_wasm_bindgen::from_value(options).map_err(|e| thrown(ApiError::new(Code::BadOptions, e)))?
     };
     js(&api::import_picture(bytes, o).map_err(thrown)?)
 }
@@ -167,7 +175,7 @@ impl Identity {
     /// Encrypts `{ created, profile, cards }` to this identity.
     #[wasm_bindgen(js_name = sealBackup)]
     pub fn seal_backup(&self, data: JsValue, nonce: &[u8]) -> Js<Vec<u8>> {
-        let d = serde_wasm_bindgen::from_value(data).map_err(|e| thrown(ApiError::new("invalid_backup", e)))?;
+        let d = serde_wasm_bindgen::from_value(data).map_err(|e| thrown(ApiError::new(Code::InvalidBackup, e)))?;
         self.0.seal_backup(&d, nonce).map_err(thrown)
     }
     /// Decrypts and checks a backup of this identity.

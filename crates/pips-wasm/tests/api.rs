@@ -118,7 +118,7 @@ fn large_card_over_carousel() {
 
 /// The code a refusal comes with.
 fn code<T>(r: Result<T, pips_wasm::api::ApiError>) -> &'static str {
-    r.map(drop).unwrap_err().code
+    r.map(drop).unwrap_err().code.as_str()
 }
 
 /// What a newer app made is said as such — not as damage — so the person
@@ -309,7 +309,7 @@ fn import_errors_carry_their_numbers() {
         std::fs::read(concat!(env!("CARGO_MANIFEST_DIR"), "/../pips-raster/tests/aseprite/transparency.aseprite"))
             .unwrap();
     let e = import_picture(&file, ImportOptions::default()).unwrap_err();
-    assert_eq!((e.code, e.args.as_slice()), ("partial_alpha", &[3, 4, 1][..]));
+    assert_eq!((e.code.as_str(), e.args.as_slice()), ("partial_alpha", &[3, 4, 1][..]));
     assert_eq!(import_picture(b"nope", ImportOptions::default()).unwrap_err().code, "unknown_format");
 }
 
@@ -370,5 +370,39 @@ fn backup_round_trip_restores_records_and_editions() {
     assert_eq!(back.cards[0].editions.as_ref().unwrap().issued[0].holder, artist.public_key().hex);
 
     let e = artist.open_backup(&file).unwrap_err();
-    assert_eq!((e.code, e.message), ("other_owner", me.public_key().short));
+    assert_eq!((e.code.as_str(), e.message), ("other_owner", me.public_key().short));
+}
+
+/// Every error a picture or a backup can fail with today has a code of its
+/// own in the core's list, not the fallback for an error the list does not
+/// know; and the list names each code once.
+#[test]
+fn every_error_has_its_own_code() {
+    use pips_raster::Error as R;
+    use pips_store::Error as S;
+    use pips_wasm::codes::{of_raster, of_store, Code};
+    let raster = [
+        R::UnknownFormat,
+        R::TooLarge,
+        R::Malformed("x"),
+        R::Unsupported("x"),
+        R::PartialAlpha { x: 0, y: 0, frame: 0 },
+        R::TooBig { width: 1, height: 1 },
+        R::TooManyColors(33),
+        R::TooManyFrames,
+        R::UnequalDelays,
+        R::DelayOutOfRange(1),
+    ];
+    for e in &raster {
+        assert_eq!(of_raster(e).as_str(), e.code(), "{e:?}");
+    }
+    let store = [S::NotABackup, S::NewerVersion(2), S::OtherOwner([0; 32]), S::Damaged, S::TooLarge, S::Invalid("x")];
+    for e in &store {
+        assert_eq!(of_store(e).as_str(), e.code(), "{e:?}");
+    }
+    let mut names: Vec<_> = Code::ALL.iter().map(|c| c.as_str()).collect();
+    names.sort_unstable();
+    names.dedup();
+    assert_eq!(names.len(), Code::ALL.len(), "a code listed twice");
+    assert!(Code::ALL.iter().all(|&c| Code::named(c.as_str()) == Some(c)));
 }

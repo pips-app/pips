@@ -19,3 +19,4 @@
 pub mod api;
 mod b64;
 pub mod bindings;
+pub mod codes;
