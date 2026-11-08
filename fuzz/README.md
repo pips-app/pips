@@ -12,7 +12,7 @@ One target per parser of outside input, for cargo-fuzz (nightly Rust):
 | `backup` | backup bodies and whole files | |
 | `carousel` | a stream of carousel frames | |
 | `link` | scanned text and links: what they are, the card a link carries | a link or a code read as a card gives an envelope |
-| `scan` | camera frames for the QR reader | |
+| `scan` | camera frames for the QR reader: a width in two bytes, so frames wider than 255 and past the reader's limit too | |
 
 ```sh
 cargo install cargo-fuzz
