@@ -1,0 +1,11 @@
+/* The phone's measuring page (measure.js): the app's tokens and controls,
+   laid out as the profile is. */
+.msr { max-width: 480px; margin: 0 auto; padding: calc(18px + var(--safe-t)) 16px calc(24px + var(--safe-b)); }
+.msr h1 { margin: 0 0 14px; font: 600 23px/1.15 var(--serif); }
+.msr > p { color: var(--text2); margin: 0 0 16px; }
+.msr .btn { margin-top: 12px; }
+.msr-steps { margin: 16px 0 12px; padding-left: 22px; color: var(--text2); font-size: 13.5px; }
+.msr-steps li { overflow-wrap: anywhere; }
+/* The line to send: whole, wrapped, selectable. */
+.msr-line { width: 100%; border: 0; border-radius: 12px; padding: 10px 12px; background: var(--raise); color: var(--text);
+  box-shadow: inset 0 0 0 1px var(--line); font: 12px/1.4 ui-monospace, monospace; resize: vertical; }

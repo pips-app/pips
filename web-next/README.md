@@ -1,8 +1,9 @@
 # web-next — the new app
 
 The web app written again, beside the one in `web/`, layer by layer
-(`docs/REWRITE.md`: the plan, the stages, where we are). Not published yet:
-the site is packed from `web/` alone. The rules of `web/README.md` and
+(`docs/REWRITE.md`: the plan, the stages, where we are). Published as a
+preview at `…/next/` beside the old app (`scripts/build-site.sh`), to be
+tried on a phone; it takes `web/`'s place at stage 6. The rules of `web/README.md` and
 `AGENTS.md` hold here too; what is new is below.
 
 ## What is here
@@ -36,6 +37,8 @@ the site is packed from `web/` alone. The rules of `web/README.md` and
 | `src/i18n.js` | The words, Russian and English, with the same keys and arguments. |
 | `src/dom.js` | Building DOM without HTML (from `web/`). |
 | `css/app.css` | Styles; the tokens come over from `web/css/` with the screens. |
+| `dev/measure.html`, `dev/measure.js`, `dev/measure-worker.js`, `dev/measure.css` | Not the app: a page to open on a phone, which times the core's slowest jobs and gives a line to send back (the limits rest on such numbers). No key, no storage. |
+| `dev/measure-ops.js` | What both that page and `tests/next/measure.mjs` time, so the phone and the desktop measure the same. |
 
 ## Running
 

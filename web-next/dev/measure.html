@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<!-- The app's own policy (index.html), with this page's one Trusted Types
+     policy: only the measuring worker can be started. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; font-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'; require-trusted-types-for 'script'; trusted-types measure">
+<meta name="referrer" content="no-referrer">
+<meta name="color-scheme" content="dark">
+<link rel="icon" href="../icons/icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../css/app.css">
+<link rel="stylesheet" href="measure.css">
+<title>Замер Pips</title>
+<script type="module" src="measure.js"></script>
+</head>
+<body>
+<noscript>Нужен JavaScript.</noscript>
+</body>
+</html>

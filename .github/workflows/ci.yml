@@ -129,10 +129,10 @@ jobs:
           npx playwright install --with-deps webkit
           BROWSER=webkit npm test -- --test-reporter=spec
 
-  # The new app (web-next/, docs/REWRITE.md), not published yet: its type
-  # check, its unit tests, and its tests in all three engines — each of
-  # which counts from the start. Not needed by the deploy: what is
-  # published is web/.
+  # The new app (web-next/, docs/REWRITE.md), published as a preview at
+  # next/ (scripts/build-site.sh): its type check, its unit tests, and its
+  # tests in all three engines — each of which counts from the start.
+  # Needed by the deploy: nothing is published that fails here.
   next:
     name: New app — type check, tests in Chromium, Firefox and WebKit
     runs-on: ubuntu-24.04
@@ -165,7 +165,7 @@ jobs:
   deploy:
     name: Publish to GitHub Pages
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: [rust, site]
+    needs: [rust, site, next]
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:

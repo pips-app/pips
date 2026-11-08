@@ -1,5 +1,7 @@
 #!/bin/sh
-# Assembles the published site in _site/ from web/.
+# Assembles the published site in _site/ from web/, and the new app from
+# web-next/ in _site/next/ (docs/REWRITE.md: a preview, to be tried on a
+# phone, until it takes web/'s place at stage 6).
 #
 # Needs node (for the module list, scripts/module-graph.mjs, and the
 # files' hashes).
@@ -15,6 +17,7 @@
 set -eu
 cd "$(dirname "$0")/.."
 [ -f web/pkg/pips_wasm_bg.wasm ] || { echo "web/pkg is missing: run scripts/build-wasm.sh first" >&2; exit 1; }
+cmp -s web/pkg/pips_wasm_bg.wasm web-next/pkg/pips_wasm_bg.wasm || { echo "web-next/pkg is missing or stale: run scripts/build-wasm.sh" >&2; exit 1; }
 version="pips-${1:-$(git rev-parse --short HEAD 2>/dev/null || date -u +%Y%m%d%H%M)}"
 
 rm -rf _site
@@ -56,4 +59,14 @@ hashes=$(cd _site && printf '%s\n' $list | grep -v '^sw\.js$' | node -e '
 sed -i -e "s|^const HASHES = .*|const HASHES = $hashes;|" _site/sw.js
 grep -q '^const HASHES = {"' _site/sw.js || { echo "sw.js template changed: HASHES not set" >&2; exit 1; }
 
+# The new app, as it is: no service worker of its own yet (stage 6), so
+# nothing to version or hash. Under web/'s worker's scope, which passes on
+# what it does not know to the network. Its dev/ is published too: the
+# measuring page, to be opened on a phone.
+next=$(cd web-next && find . -type f ! -name 'README.md' ! -name '*.d.ts' ! -name 'jsconfig.json' ! -name '.gitignore' | sed 's|^\./||' | LC_ALL=C sort)
+for f in $next; do
+    mkdir -p "_site/next/$(dirname "$f")"
+    cp "web-next/$f" "_site/next/$f"
+done
+echo "_site/next: $(printf '%s\n' $next | wc -l) files"
 echo "_site: $(printf '%s\n' $list | wc -l) files, $(du -sh _site | cut -f1), cache $version"

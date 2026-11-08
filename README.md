@@ -55,7 +55,7 @@ envelope.
 | `crates/pips-wasm` | one facade over all of the above for the web app |
 | `crates/pips-scan` | QR reading for browsers without `BarcodeDetector`, loaded on demand |
 | `web/` | the app: plain ES modules, no build step, strict CSP |
-| `web-next/` | the app written again, layer by layer, not published yet ([docs/REWRITE.md](docs/REWRITE.md)) |
+| `web-next/` | the app written again, layer by layer, published as a preview at `next/` ([docs/REWRITE.md](docs/REWRITE.md)) |
 | `vendor/rqrr` | the QR reader `pips-qr` uses, with fixes of ours (`PIPS.md`) |
 
 Each crate does one thing and is `no_std` where it can be; most come with a
