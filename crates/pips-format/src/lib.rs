@@ -83,6 +83,19 @@ use core::fmt;
 pub use codec::{canonical_bytes, decode, decode_file, digest, encode, encode_file};
 pub use pips_palette::Palette;
 
+/// Checks every rule a card keeps except one: that its payload fits
+/// [`limits::MAX_PAYLOAD`], which only compressing it can tell. For showing
+/// a card, where the compression [`encode`] does would cost the most time
+/// of all (a large animated card takes it a quarter of a second) and tell
+/// nothing about the picture.
+///
+/// # Errors
+///
+/// What [`encode`] would refuse the card for, but its size.
+pub fn validate(card: &Card) -> Result<(), Error> {
+    validate::card(card)
+}
+
 /// Format version this crate reads and writes.
 pub const VERSION: u8 = 1;
 /// Prefix of a `.pips` file. A QR code carries the bare payload.

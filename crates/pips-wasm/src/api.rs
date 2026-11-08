@@ -665,14 +665,15 @@ pub struct Rgba {
     pub rgba: Vec<u8>,
 }
 
-/// Renders frame `frame` of a card.
+/// Renders frame `frame` of a card. A card too large to share still shows:
+/// its pixels are checked, not compressed.
 ///
 /// # Errors
 ///
 /// `invalid_card` for an invalid card or a frame past the last.
 pub fn render(card: &CardData, frame: u8) -> Result<Rgba> {
     let c = to_card(card)?;
-    pips_format::encode(&c)?; // all rules, including pixel indices
+    pips_format::validate(&c)?; // all rules, pixel indices among them
     if frame >= c.frames() {
         return Err(err(Code::InvalidCard, "no such frame"));
     }

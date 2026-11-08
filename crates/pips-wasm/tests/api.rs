@@ -234,6 +234,26 @@ fn render_and_palettes() {
     assert_eq!(&img.rgba[4..8], &[p1.colors[1][0], p1.colors[1][1], p1.colors[1][2], 255]);
     assert_eq!(render(&card, 1).unwrap_err().code, "invalid_card");
 
+    // A card too large to share still shows (it is checked, not
+    // compressed); a pixel outside the palette does not.
+    let mut big = editor_card();
+    big.width = 128;
+    big.height = 128;
+    big.frames = 16;
+    big.delay_ms = 100;
+    big.palette = PaletteData::Inline((0..32).map(|i| [i * 8, 0, 0]).collect());
+    let mut s = 1u32;
+    big.pixels = (0..128 * 128 * 16)
+        .map(|_| {
+            s = s.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+            u8::try_from(s >> 27).unwrap()
+        })
+        .collect();
+    assert!(share_size(&big).is_err(), "too large to share");
+    assert_eq!(render(&big, 15).unwrap().rgba.len(), 128 * 128 * 4);
+    big.pixels[7] = 200;
+    assert_eq!(render(&big, 0).unwrap_err().code, "invalid_card");
+
     assert_eq!(palettes().len(), 33);
     let imported = parse_palette(b"GIMP Palette\nName: Two\n0 0 0\n255 255 255\n").unwrap();
     assert_eq!(imported.colors, vec![[0, 0, 0], [255, 255, 255]]);
