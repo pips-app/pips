@@ -17,8 +17,9 @@ before(async () => {
 });
 after(() => env.close());
 
-test('the app starts, and its core answers from the worker', async () => {
-  await page.getByRole('status').filter({ hasText: 'Ядро на месте и отвечает.' }).waitFor();
+test('the app starts, and its core answers from the worker: the first run asks for a key', async () => {
+  // The first run is shown once the core in its worker has said there is no key.
+  await page.getByRole('button', { name: 'Создать ключ' }).waitFor();
   assert.equal(await page.getByRole('heading', { name: 'Pips' }).count(), 1);
 });
 

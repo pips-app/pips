@@ -1,0 +1,21 @@
+/* The first run (src/ui/onboarding.js): one page at a time, the step's
+   buttons at the bottom, the page scrolling when it is longer than the
+   screen. From web/css/app.css (.onb). */
+.onb { min-height: 100dvh; padding: calc(28px + var(--safe-t)) 16px calc(20px + var(--safe-b)); display: flex; flex-direction: column;
+  max-width: 480px; margin: 0 auto; }
+/* A long page scrolls; its parts never squeeze into each other. */
+.onb > * { flex-shrink: 0; }
+.onb h1 { font: 600 23px/1.15 var(--serif); margin: 0 0 6px; letter-spacing: -.01em; }
+.onb > p { color: var(--text2); font-size: 14px; margin: 0 0 14px; }
+.onb .onb-grow { flex: 1 0 16px; }
+.onb .btn + .btn { margin-top: 8px; }
+.onb .word-grid { margin-bottom: 14px; }
+.onb .onb-title { font: 600 32px/1.1 var(--serif); letter-spacing: -.015em; margin: 0 0 12px; }
+.onb .onb-logo { width: 72px; height: 72px; image-rendering: pixelated; margin: 12px 0 22px; }
+.onb .onb-paper { display: flex; justify-content: center; margin: 0 0 14px; }
+.onb .onb-paper canvas { width: min(240px, 70vw); image-rendering: pixelated; background: #fff; padding: 12px; border-radius: 12px; }
+.onb .onb-asked { display: flex; flex-direction: column; gap: 10px; }
+.onb .onb-asked .field { margin: 0; }
+.onb .onb-status { min-height: 1.5em; margin: 10px 2px 0; font-size: 13.5px; }
+.onb .idcard { margin-bottom: 18px; }
+.onb .onb-facts { display: flex; flex-direction: column; gap: 12px; }

@@ -1,13 +1,104 @@
-/* Pips, the new app — styles. For now only the page; the tokens and the
-   kit come over from web/css/ with the screens (docs/REWRITE.md, stage 5),
-   unchanged unless a decision says otherwise. */
+/* Pips, the new app — shared tokens and base controls. Every screen has its
+   own file beside this one. The tokens, fonts and controls come from
+   web/css/app.css unchanged: the look is the old app's (docs/REWRITE.md);
+   what is rewritten is underneath. */
+@import url(onboarding.css);
+@import url(home.css);
+
+@font-face { font-family: "Literata"; font-style: normal; font-weight: 200 900; font-display: swap;
+  src: url(../fonts/literata-cyrillic-opsz-normal.woff2) format("woff2");
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116; }
+@font-face { font-family: "Literata"; font-style: normal; font-weight: 200 900; font-display: swap;
+  src: url(../fonts/literata-latin-opsz-normal.woff2) format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "IBM Plex Sans"; font-weight: 400; font-display: swap;
+  src: url(../fonts/ibm-plex-sans-cyrillic-400-normal.woff2) format("woff2"); unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116; }
+@font-face { font-family: "IBM Plex Sans"; font-weight: 400; font-display: swap;
+  src: url(../fonts/ibm-plex-sans-latin-400-normal.woff2) format("woff2"); unicode-range: U+0000-00FF, U+2000-206F, U+2212; }
+@font-face { font-family: "IBM Plex Sans"; font-weight: 500; font-display: swap;
+  src: url(../fonts/ibm-plex-sans-cyrillic-500-normal.woff2) format("woff2"); unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116; }
+@font-face { font-family: "IBM Plex Sans"; font-weight: 500; font-display: swap;
+  src: url(../fonts/ibm-plex-sans-latin-500-normal.woff2) format("woff2"); unicode-range: U+0000-00FF, U+2000-206F, U+2212; }
+@font-face { font-family: "IBM Plex Sans"; font-weight: 600; font-display: swap;
+  src: url(../fonts/ibm-plex-sans-cyrillic-600-normal.woff2) format("woff2"); unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116; }
+@font-face { font-family: "IBM Plex Sans"; font-weight: 600; font-display: swap;
+  src: url(../fonts/ibm-plex-sans-latin-600-normal.woff2) format("woff2"); unicode-range: U+0000-00FF, U+2000-206F, U+2212; }
 
 :root {
-  /* From web/css/app.css. */
-  --void: #1a1b21; --text: #e9ebf1; --text2: #a3a8b5;
+  --void: #1a1b21; --raise: #1f2129; --raise2: #272a33; --line: #2b2e38; --line2: #23262e;
+  --text: #e9ebf1; --text2: #a3a8b5; --text3: #737888;
+  --cobalt: #3b5fa8; --cobalt-hi: #6d8fd6; --warn-bg: #3a2327; --warn: #e8a7a1;
+  --serif: "Literata", Georgia, serif; --sans: "IBM Plex Sans", system-ui, sans-serif;
+  --safe-b: env(safe-area-inset-bottom, 0px); --safe-t: env(safe-area-inset-top, 0px);
+  color-scheme: dark;
 }
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { margin: 0; min-height: 100%; background: var(--void); color: var(--text); }
+body { font: 400 15px/1.5 var(--sans); -webkit-font-smoothing: antialiased; }
+button, input, select, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus { outline: none; }
+:focus-visible { outline: 2px solid var(--cobalt-hi); outline-offset: 2px; border-radius: 6px; }
+/* A page's heading takes focus so that a screen reader starts there; it is
+   not a control, and shows no ring. */
+h1[tabindex="-1"]:focus-visible { outline: none; }
+[hidden] { display: none !important; }
+svg.i { width: 22px; height: 22px; stroke: currentColor; fill: none; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; flex: 0 0 auto; }
 
-html, body { margin: 0; background: var(--void); color: var(--text); font: 16px/1.4 system-ui, sans-serif; }
+/* -------------------------------------------------------------- controls -- */
+.btn { border: 0; border-radius: 13px; min-height: 48px; padding: 12px 16px; background: var(--raise2); color: #dde0e8;
+  font-weight: 500; font-size: 14.5px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
+.btn.key { background: var(--cobalt); color: #f2efe7; }
+.btn.plain { background: none; color: var(--text2); }
+.btn.wide { width: 100%; }
+.btn:disabled { opacity: .45; cursor: default; }
+.row-btns { display: flex; gap: 8px; }
+.row-btns .btn { flex: 1; min-width: 0; }
+.text-btn { border: 0; background: none; color: var(--cobalt-hi); font-weight: 500; padding: 10px; border-radius: 10px; min-height: 44px; }
+.field { display: flex; align-items: center; gap: 10px; background: var(--raise); border-radius: 12px; min-height: 48px;
+  padding: 0 12px; box-shadow: inset 0 0 0 1px var(--line); margin-bottom: 8px; }
+.field label { font-size: 12px; color: var(--text3); min-width: 64px; }
+.field input { flex: 1; min-width: 0; border: 0; background: none; padding: 12px 0; font-size: 15px; color: var(--text); }
+/* The whole field shows focus, along its own edge, not the input inside it. */
+.field input:focus-visible { outline: none; }
+.field:focus-within { box-shadow: inset 0 0 0 2px var(--cobalt-hi); }
+.field.bad { box-shadow: inset 0 0 0 2px var(--warn); }
+.field .i { stroke: var(--cobalt-hi); stroke-width: 2; }
+.group { margin-top: 24px; }
+.group h2 { margin: 0 0 8px; font-size: 12px; font-weight: 500; color: var(--text3); letter-spacing: .02em; }
+.hint { font-size: 12.5px; color: var(--text3); line-height: 1.5; margin: 12px 2px 0; }
+.wrong { color: var(--warn); }
+/* A note with an icon at its start: what is so, in a sentence or two. */
+.note { display: flex; gap: 12px; align-items: flex-start; font-size: 13.5px; color: var(--text2); margin: 0 2px 12px; }
+.note .i { width: 20px; height: 20px; margin-top: 1px; }
+.note.box { background: var(--raise2); color: var(--text); border-radius: 13px; padding: 12px 14px; margin: 0 0 14px; }
+.note.box .i { stroke: var(--cobalt-hi); }
+.note.warn { background: var(--warn-bg); color: var(--warn); }
+.note.warn .i { stroke: currentColor; }
+.note p { margin: 0; }
+.note b { font-weight: 600; }
 
-.shell { padding: 24px 16px; }
-.shell-status { color: var(--text2); }
+.idcard { display: flex; align-items: center; gap: 14px; padding: 14px; border-radius: 14px; background: var(--raise); box-shadow: inset 0 0 0 1px var(--line); }
+.idcard canvas { width: 52px; height: 52px; border-radius: 10px; image-rendering: pixelated; flex: none; }
+.idcard > div { min-width: 0; } /* a flex item: without this, a long nick would push past the card instead of wrapping */
+.idcard b { display: block; font: 600 18px var(--serif); overflow-wrap: anywhere; }
+.idcard small { color: var(--text3); font-size: 12px; letter-spacing: .02em; }
+
+/* The 24 words, shown or typed: numbered cells, three across. */
+.word-grid { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.word-grid li { min-width: 0; display: flex; align-items: baseline; gap: 6px; padding: 7px 8px; border-radius: 9px; font-size: 14px;
+  background: var(--raise); box-shadow: inset 0 0 0 1px var(--line); overflow-wrap: anywhere; }
+.word-grid li > span { min-width: 14px; color: var(--text3); font-size: 11px; user-select: none; }
+.word-grid.shown li { user-select: text; -webkit-user-select: text; }
+.word-grid.entry li { padding: 0 0 0 8px; }
+.word-grid.entry li:focus-within { box-shadow: inset 0 0 0 2px var(--cobalt-hi); }
+.word-grid.entry li.bad { box-shadow: inset 0 0 0 2px var(--warn); }
+.word-grid input { flex: 1; min-width: 0; border: 0; background: none; padding: 7px 6px 7px 0; font: 14px var(--sans); color: var(--text); }
+.word-grid input:focus-visible { outline: none; }
+
+/* A refused tap or a full field says so with a shake; without motion, an outline. */
+.shake { animation: shake .32s; }
+@keyframes shake { 20%, 60% { transform: translateX(-5px); } 40%, 80% { transform: translateX(5px); } }
+@media (prefers-reduced-motion: reduce) {
+  .shake { animation: none; outline: 2px solid var(--warn); outline-offset: 2px; }
+}

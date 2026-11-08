@@ -1,0 +1,19 @@
+/* Where the app lands once there is a key (src/ui/home.js): for now the
+   profile's key and the person's name; the screens come at stage 5. */
+.home { max-width: 480px; margin: 0 auto; padding: calc(18px + var(--safe-t)) 16px calc(24px + var(--safe-b)); }
+.home h1 { margin: 0 0 14px; font: 600 23px/1.15 var(--serif); }
+/* Checking the words: a sheet over the page. */
+.home-sheet { position: fixed; inset: 0; z-index: 10; background: rgba(10, 11, 14, .66); display: flex; align-items: flex-end;
+  padding: 14px 14px calc(14px + var(--safe-b)); overflow-y: auto; }
+.home-sheet > div { width: 100%; max-width: 480px; margin: auto auto 0; background: #24262e; border-radius: 18px; padding: 18px 16px 16px;
+  box-shadow: 0 0 0 1px #30333c; }
+/* On the narrowest phones the sheet gives its margins to the words: the
+   longest (eight letters) stays whole in a third of the width. */
+@media (max-width: 359px) {
+  .home-sheet { padding: 8px 8px calc(8px + var(--safe-b)); }
+  .home-sheet > div { padding: 16px 10px 12px; }
+}
+.home-sheet h2 { margin: 0 0 4px; font: 600 19px var(--serif); }
+.home-sheet p { margin: 0 0 14px; color: var(--text2); font-size: 13.5px; }
+.home-sheet .word-grid { margin-bottom: 12px; }
+.home-sheet .home-verdict { min-height: 1.5em; margin: 0 2px 14px; font-size: 14px; }
