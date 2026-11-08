@@ -1,5 +1,6 @@
 #!/usr/bin/env sh
-# Builds the WebAssembly core and its JavaScript glue into web/pkg/.
+# Builds the WebAssembly core and its JavaScript glue into web/pkg/ (and a
+# copy into web-next/pkg/).
 # Needs: rustup target add wasm32-unknown-unknown
 #        cargo install wasm-bindgen-cli --version <the wasm-bindgen version in Cargo.lock>
 set -eu
@@ -19,4 +20,8 @@ cargo build -p pips-wasm -p pips-scan --release --target wasm32-unknown-unknown
 for m in pips_wasm pips_scan; do
     wasm-bindgen --target web --out-dir web/pkg "target/wasm32-unknown-unknown/release/$m.wasm"
 done
+# The new app (web-next/, docs/REWRITE.md) loads the same core from its
+# own folder, so that each app is served from its folder alone.
+mkdir -p web-next/pkg
+cp web/pkg/* web-next/pkg/
 ls -l web/pkg/*.wasm

@@ -55,7 +55,8 @@ envelope.
 | `crates/pips-wasm` | one facade over all of the above for the web app |
 | `crates/pips-scan` | QR reading for browsers without `BarcodeDetector`, loaded on demand |
 | `web/` | the app: plain ES modules, no build step, strict CSP |
-| `vendor/rqrr` | the QR reader `pips-qr` uses, with one fix of ours (`PIPS.md`) |
+| `web-next/` | the app written again, layer by layer, not published yet ([docs/REWRITE.md](docs/REWRITE.md)) |
+| `vendor/rqrr` | the QR reader `pips-qr` uses, with fixes of ours (`PIPS.md`) |
 
 Each crate does one thing and is `no_std` where it can be; most come with a
 small command-line tool (`pips-card`, `pips-sign`, `pips-qr`, `pips-raster`,
@@ -72,7 +73,7 @@ provides all of it.
 
 ```sh
 cargo test --workspace      # the core
-scripts/build-wasm.sh       # the core for the browser, into web/pkg/
+scripts/build-wasm.sh       # the core for the browser, into web/pkg/ (and web-next/pkg/)
 scripts/serve.sh            # http://localhost:8000
 ```
 
@@ -86,6 +87,13 @@ laying the page out on every frame; unit tests (`tests/unit`, plain node) cover 
 ```sh
 node --test tests/unit/*.test.mjs
 cd tests/e2e && npm ci && npx playwright install chromium && npm test
+```
+
+The new app's tests (`tests/next`) run the same way, in Chromium, Firefox
+and WebKit alike:
+
+```sh
+cd tests/next && npm ci && npm test       # BROWSER=firefox, BROWSER=webkit
 ```
 
 What the tests reach of the app's code can be measured (Chromium and node),

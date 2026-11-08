@@ -1,0 +1,13 @@
+/* Pips, the new app — styles. For now only the page; the tokens and the
+   kit come over from web/css/ with the screens (docs/REWRITE.md, stage 5),
+   unchanged unless a decision says otherwise. */
+
+:root {
+  /* From web/css/app.css. */
+  --void: #1a1b21; --text: #e9ebf1; --text2: #a3a8b5;
+}
+
+html, body { margin: 0; background: var(--void); color: var(--text); font: 16px/1.4 system-ui, sans-serif; }
+
+.shell { padding: 24px 16px; }
+.shell-status { color: var(--text2); }

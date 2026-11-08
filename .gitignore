@@ -1,6 +1,7 @@
 /target
 **/*.rs.bk
 /web/pkg/
+/web-next/pkg/
 /_site/
 /tests/e2e/results-*/
 /vendor/*/target

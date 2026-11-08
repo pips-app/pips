@@ -129,6 +129,39 @@ jobs:
           npx playwright install --with-deps webkit
           BROWSER=webkit npm test -- --test-reporter=spec
 
+  # The new app (web-next/, docs/REWRITE.md), not published yet: its type
+  # check, its unit tests, and its tests in all three engines — each of
+  # which counts from the start. Not needed by the deploy: what is
+  # published is web/.
+  next:
+    name: New app — type check, tests in Chromium, Firefox and WebKit
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: ./.github/actions/core
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: tests/next/package-lock.json
+      - name: Type-check the new app
+        run: npx --yes -p typescript@5.9.3 tsc -p web-next/jsconfig.json
+      - name: Install the browsers
+        working-directory: tests/next
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium firefox webkit
+      - name: Tests in Chromium
+        working-directory: tests/next
+        run: npm test -- --test-reporter=spec
+      - name: Tests in Firefox
+        working-directory: tests/next
+        run: BROWSER=firefox npm test -- --test-reporter=spec
+      - name: Tests in WebKit
+        working-directory: tests/next
+        run: BROWSER=webkit npm test -- --test-reporter=spec
+
   deploy:
     name: Publish to GitHub Pages
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'

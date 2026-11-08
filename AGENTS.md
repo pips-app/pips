@@ -81,6 +81,8 @@ QR-код, без сервера. Здесь собрано то, что сто�
    npx --yes -p typescript@5.9.3 tsc -p web/jsconfig.json
    node --test tests/unit/*.test.mjs
    cd tests/e2e && npm test            # и BROWSER=firefox npm test, если трогал ввод/фокус
+   cd tests/next && npm test           # web-next: и BROWSER=firefox, и BROWSER=webkit — все три
+   npx --yes -p typescript@5.9.3 tsc -p web-next/jsconfig.json      # если трогал web-next
    cargo fmt --all --check && cargo clippy --workspace --all-targets -- -D warnings && cargo test --workspace   # если трогал Rust
    ```
 5. **Посмотри глазами.** Сделай скриншоты Playwright (он есть в окружении
