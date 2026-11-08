@@ -279,19 +279,16 @@ test('a camera granted after the scanner was left is switched off at once', asyn
 
 /**
  * Closes the app's storage connection from underneath it, as a browser does
- * on its own (Firefox on Android, after a while in the background). In
- * Chromium, really: its DevTools clear the site's storage, which closes
- * every connection. Elsewhere, the same steps by hand: the app's own
- * connection is found as it next starts a transaction, closed, and told
- * so with the close event a browser fires.
+ * on its own (Firefox on Android, after a while in the background): the
+ * app's own connection is found as it next starts a transaction, closed,
+ * and told so with the close event a browser fires. The same in every
+ * engine. Chromium's DevTools used to do it for real by clearing the
+ * site's storage; in the Chromium of Playwright 1.64 that clear goes on
+ * erasing the data after it closes the connection, and aborts the
+ * reopening too — the site's data being wiped, not a connection closed.
  * @param {import('playwright').Page} p
  */
 async function takeStorageAway(p) {
-  if (p.context().browser()?.browserType().name() === 'chromium') {
-    const cdp = await p.context().newCDPSession(p);
-    await cdp.send('Storage.clearDataForOrigin', { origin: new URL(p.url()).origin, storageTypes: 'indexeddb' });
-    return;
-  }
   await p.evaluate(async () => {
     const proto = IDBDatabase.prototype, open = proto.transaction;
     /** @type {IDBDatabase | null} */
