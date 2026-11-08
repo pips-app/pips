@@ -67,6 +67,9 @@ export function coreClient({ script, limits, otherLimit, bootLimit }) {
     worker = w;
     ready = false;
     w.onmessage = (e) => { if (worker === w) heard(e.data); };
+    // An answer that could not be copied back: the running job's (one at
+    // a time), lost; the worker itself is fine.
+    w.onmessageerror = () => { if (worker === w) settle(null, new CoreError({ code: 'internal', message: 'an answer could not be read' })); };
     // A script that fails to load, or an error the worker did not catch.
     w.onerror = (e) => {
       e.preventDefault();
@@ -106,15 +109,22 @@ export function coreClient({ script, limits, otherLimit, bootLimit }) {
       return next();
     }
     if (!running || m.id !== running.id) return;
-    window.clearTimeout(timer);
+    // The worker closes itself after a panic; it is not reused.
+    if (!m.ok && m.error.code === 'core_crashed') return stop('core_crashed', m.error.message);
+    settle(m.ok ? { value: m.value } : null, m.ok ? null : new CoreError(m.error));
+  }
+
+  /**
+   * Ends the running job with its value or its error, and starts the next.
+   * @param {{ value: unknown } | null} done @param {CoreError | null} failed
+   */
+  function settle(done, failed) {
     const job = running;
+    if (!job) return;
+    window.clearTimeout(timer);
     running = null;
-    if (m.ok) job.resolve(m.value);
-    else if (m.error.code === 'core_crashed') {
-      // The worker closes itself after a panic; it is not reused.
-      running = job;
-      return stop('core_crashed', m.error.message);
-    } else job.reject(new CoreError(m.error));
+    if (done) job.resolve(done.value);
+    else job.reject(/** @type {CoreError} */ (failed));
     next();
   }
 
@@ -124,9 +134,15 @@ export function coreClient({ script, limits, otherLimit, bootLimit }) {
     if (!ready) return;
     const job = /** @type {Job} */ (queue.shift());
     running = job;
+    try {
+      worker.postMessage({ id: job.id, op: job.op, args: job.args });
+    } catch (e) {
+      // Arguments that cannot be copied (a function, a detached buffer):
+      // a mistake in the app. The job fails now; the worker never saw it.
+      return settle(null, new CoreError({ code: 'internal', message: String(e) }));
+    }
     const limit = Object.hasOwn(limits, job.op) ? limits[job.op] : otherLimit;
     timer = window.setTimeout(() => stop('core_timeout', `${job.op} took over ${limit} ms`), limit);
-    worker.postMessage({ id: job.id, op: job.op, args: job.args });
   }
 
   return {

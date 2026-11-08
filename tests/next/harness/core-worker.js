@@ -21,6 +21,8 @@ serve(async () => ({
   slow(ms) { const end = Date.now() + ms; while (Date.now() < end) { /* on purpose */ } return ms; },
   /** Traps in WebAssembly. */
   trap() { /** @type {any} */ (new WebAssembly.Instance(new WebAssembly.Module(TRAP)).exports).t(); },
+  /** Answers, then throws where nothing catches it: the worker's own error. */
+  throwLater() { setTimeout(() => { throw new Error('thrown later, on purpose'); }); return 'thrown later'; },
   /** A mistake in JavaScript, not in the core. */
   mistake() { throw new TypeError('on purpose'); },
 }));

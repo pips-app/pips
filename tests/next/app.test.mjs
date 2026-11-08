@@ -23,30 +23,29 @@ test('the app starts, and its core answers from the worker', async () => {
 });
 
 test('a script URL not made by the app’s policy is refused', async () => {
-  env.expectError(/requires 'TrustedScriptURL'/);
-  const refused = await page.evaluate(() => {
-    /** @param {() => unknown} f */
-    const tried = (f) => { try { f(); return 'allowed'; } catch (e) { return /** @type {Error} */ (e).name; } };
-    return {
-      plain: tried(() => new Worker('/src/core/worker.js', { type: 'module' })),
-      // The policy names the app's workers only; a second policy cannot be made.
-      other: tried(() => /** @type {any} */ (window).trustedTypes.createPolicy('other', { createScriptURL: (/** @type {string} */ s) => s })),
-    };
-  });
-  assert.deepEqual(refused, { plain: 'TypeError', other: 'TypeError' });
+  /** @param {string} what */
+  const tried = (what) => page.evaluate((what) => {
+    try {
+      if (what === 'plain') new Worker('/src/core/worker.js', { type: 'module' });
+      // The policy names the app's workers only; a second one cannot be made.
+      else /** @type {any} */ (window).trustedTypes.createPolicy('other', { createScriptURL: (/** @type {string} */ s) => s });
+      return 'allowed';
+    } catch (e) { return /** @type {Error} */ (e).name; }
+  }, what);
+  // Each browser says so once, in its own words.
+  assert.equal(await env.expecting(/TrustedScriptURL|injection sink/, 1, () => tried('plain')), 'TypeError');
+  assert.equal(await env.expecting(/TrustedTypePolicy|Trusted Types policy/, 1, () => tried('policy')), 'TypeError');
 });
 
 test('a script written into the page does not run', async () => {
-  env.expectError(/requires 'TrustedScript'|Content.Security.Policy|script-src|Refused to execute/i);
-  const ran = await page.evaluate(() => {
+  const ran = await env.expecting(/TrustedScript\b|injection sink/, 1, () => page.evaluate(() => {
     const w = /** @type {any} */ (window);
     w.ran = false;
     const s = document.createElement('script');
-    // Through the DOM's text, which Trusted Types guards too; whichever
-    // stops it, it must not run.
-    // An inline script runs as it is appended, or never.
+    // Through the DOM's text, which Trusted Types guards; an inline script
+    // runs as it is appended, or never.
     try { s.textContent = 'window.ran = true'; document.head.append(s); } catch { /* refused: good */ }
     return w.ran;
-  });
+  }));
   assert.equal(ran, false);
 });

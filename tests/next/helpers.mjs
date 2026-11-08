@@ -51,34 +51,55 @@ async function serve() {
 /**
  * One browser and server for a test file. Every error a page writes is
  * kept; `close()` fails the test with them, so no test passes over an
- * error it did not expect. A test that expects one takes it with
- * `expectError()`.
+ * error it did not expect. A test that causes one on purpose wraps the
+ * cause in `expecting()`, saying how many such errors the browser writes:
+ * it waits for them (some browsers write them a moment later), and lets
+ * through only those, written then, that match.
  */
 export async function setup() {
   const site = await serve();
   const browser = await engine.launch();
   /** @type {string[]} */
   const errors = [];
-  /** @type {RegExp[]} */
-  const expected = [];
+  /** Called with each error as it is written. @type {Set<() => void>} */
+  const heard = new Set();
+  /** @param {string} e */
+  const write = (e) => { errors.push(e); for (const f of heard) f(); };
   return {
     url: site.url,
     /** A fresh page at `path`. @param {string} path */
     async page(path = '') {
       const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, locale: 'ru-RU' });
       const p = await ctx.newPage();
-      p.on('pageerror', (e) => errors.push(e.message));
-      p.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
+      p.on('pageerror', (e) => write(e.message));
+      p.on('console', (m) => { if (m.type() === 'error') write(m.text()); });
       await p.goto(new URL(path, site.url).href);
       return p;
     },
-    /** An error the test causes on purpose. @param {RegExp} pattern */
-    expectError(pattern) { expected.push(pattern); },
+    /**
+     * Runs `cause`, which makes the page write `count` errors matching
+     * `pattern` on purpose; waits for them, and keeps them out of the
+     * test's failures. Any other error stays.
+     * @template T @param {RegExp} pattern @param {number} count @param {() => Promise<T>} cause @returns {Promise<T>}
+     */
+    async expecting(pattern, count, cause) {
+      const from = errors.length;
+      const matched = () => errors.slice(from).filter((e) => pattern.test(e)).length;
+      const value = await cause();
+      if (matched() < count) {
+        await new Promise((ok) => {
+          const f = () => { if (matched() >= count) { heard.delete(f); ok(undefined); } };
+          heard.add(f);
+        });
+      }
+      const during = errors.splice(from);
+      errors.push(...during.filter((e) => !pattern.test(e)));
+      return value;
+    },
     async close() {
       await browser.close();
       await site.close();
-      const unexpected = errors.filter((e) => !expected.some((x) => x.test(e)));
-      if (unexpected.length) throw new Error(`errors on the page:\n${unexpected.join('\n')}`);
+      if (errors.length) throw new Error(`errors on the page:\n${errors.join('\n')}`);
     },
   };
 }

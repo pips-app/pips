@@ -4,7 +4,7 @@
 // fresh worker — the page never reloads, never waits forever.
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { setup } from './helpers.mjs';
+import { setup, engineName } from './helpers.mjs';
 
 /** @type {Awaited<ReturnType<typeof setup>>} */
 let env;
@@ -68,12 +68,43 @@ test('what is not a job of the core is refused, and the worker stays', async () 
   assert.equal(await restarts(), before);
 });
 
+test('arguments that cannot reach the worker fail their job at once, and the next job runs in the same worker', async () => {
+  const before = await restarts();
+  const [bad, next] = await page.evaluate(() => {
+    const core = /** @type {any} */ (window).core;
+    const t = performance.now();
+    const bad = core.call('palettes', () => 1).then(() => 'done', (/** @type {any} */ e) => e.code);
+    const next = core.call('errorCodes').then(() => performance.now() - t);
+    return Promise.all([bad, next]);
+  });
+  assert.equal(bad, 'internal');
+  // Well inside the general limit (5000 ms here): it did not wait it out.
+  assert.ok(next < 2500, `the next job took ${next} ms`);
+  assert.equal(await restarts(), before, 'the worker was not stopped');
+});
+
+test('an error in the worker after it started stops it, and the next job runs in a fresh one', async () => {
+  const before = await restarts();
+  assert.deepEqual(await run('throwLater'), { value: 'thrown later' });
+  await page.waitForFunction((n) => /** @type {any} */ (window).core.restarts === n, before + 1);
+  assert.ok((await run('palettes')).value.length > 0);
+});
+
 test('a core that does not load fails each job with core_unavailable, and is tried again', async () => {
-  for (const worker of ['no-core-worker.js', 'missing-worker.js']) {
-    if (worker === 'missing-worker.js') env.expectError(/missing-worker|Failed to load|404|Not Found|error loading|could not be loaded/i);
+  // How many errors the browser writes for each try: a missing script is
+  // said by Firefox and WebKit, not by Chromium.
+  const missing = engineName === 'chromium' ? 0 : 1;
+  const cases = [
+    ['no-core-worker.js', 0],
+    ['missing-worker.js', missing],
+    // Never says it is ready: given up on after the boot limit.
+    ['silent-worker.js', 0],
+  ];
+  for (const [worker, said] of /** @type {[string, number][]} */ (cases)) {
     const p = await env.page(`__test__/core.html?worker=${worker}`);
     await p.waitForFunction(() => /** @type {any} */ (window).harness);
-    const code = () => p.evaluate(() => /** @type {any} */ (window).core.call('palettes').then(() => 'done', (/** @type {any} */ e) => e.code));
+    const code = () => env.expecting(/missing-worker|Failed to load resource: .*404/, said,
+      () => p.evaluate(() => /** @type {any} */ (window).core.call('palettes').then(() => 'done', (/** @type {any} */ e) => e.code)));
     assert.equal(await code(), 'core_unavailable', worker);
     assert.equal(await code(), 'core_unavailable', `${worker}, again`);
     await p.context().close();
