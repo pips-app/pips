@@ -13,11 +13,12 @@ const { dictionaries, setLanguage } = await import(new URL('src/i18n.js', web).h
 const { say, APP_MISTAKES } = await import(new URL('src/errors.js', web).href);
 const { CLIENT_CODES } = await import(new URL('src/core/client.js', web).href);
 const { KEY_CODES } = await import(new URL('src/core/keys.js', web).href);
+const { STORE_CODES } = await import(new URL('src/store.js', web).href);
 
 /** @type {string[]} */
-const codes = [...core.errorCodes(), ...CLIENT_CODES, ...KEY_CODES];
+const codes = [...core.errorCodes(), ...CLIENT_CODES, ...KEY_CODES, ...STORE_CODES];
 
-test('every code the core, its client or the key can give has words, or is a mistake of the app', () => {
+test('every code the core, its client, the key or storage can give has words, or is a mistake of the app', () => {
   const missing = codes.filter((c) => !APP_MISTAKES.has(c) && !Object.hasOwn(dictionaries.ru, `error.${c}`));
   assert.deepEqual(missing, []);
   const unknown = [...APP_MISTAKES].filter((c) => !codes.includes(c));

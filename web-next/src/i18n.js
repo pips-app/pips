@@ -60,6 +60,10 @@ const ru = {
   'error.core_crashed': 'Работа с этим файлом сломалась и остановлена; это записано в журнал. Попробуйте ещё раз',
   'error.core_unavailable': 'Часть приложения не загрузилась. Перезагрузите страницу',
   'error.key_lost': 'Новый ключ потерялся, не успев сохраниться: начните заново',
+  'error.newer_data': 'Данные на этом устройстве сохранила более новая версия Pips — обновите страницу',
+  'error.upgrade_failed': 'Не получилось обновить сохранённые данные; ничего не изменилось. Перезагрузите страницу',
+  'error.store_unavailable': 'Хранилище браузера не открылось. Перезагрузите страницу; если не поможет — освободите место на устройстве',
+  'error.store_replaced': 'Pips открыт в другой вкладке, более новой версии, — продолжайте там',
   'error.app': 'Что-то пошло не так — это записано в журнал',
 };
 
@@ -104,6 +108,10 @@ const en = {
   'error.core_crashed': 'Working on this file broke and was stopped; it is in the journal. Try again',
   'error.core_unavailable': 'Part of the app did not load. Reload the page',
   'error.key_lost': 'The new key was lost before it was saved: start again',
+  'error.newer_data': 'A newer version of Pips saved the data on this device — reload the page',
+  'error.upgrade_failed': 'The saved data could not be upgraded; nothing has changed. Reload the page',
+  'error.store_unavailable': 'The browser’s storage would not open. Reload the page; if that does not help, free some space on the device',
+  'error.store_replaced': 'Pips is open in another tab, a newer version — carry on there',
   'error.app': 'Something went wrong — it is in the journal',
 };
 
