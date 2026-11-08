@@ -129,12 +129,6 @@ pub fn qr_matrix(text: &str) -> Js<JsValue> {
     js(&api::qr_matrix(text).map_err(thrown)?)
 }
 
-/// An SVG QR code, for printing.
-#[wasm_bindgen(js_name = qrSvg)]
-pub fn qr_svg(text: &str) -> Js<String> {
-    api::qr_svg(text).map_err(thrown)
-}
-
 // A key kept elsewhere (a browser's): each signing in two steps, what to
 // sign and then the result from the signature (api.rs, same section).
 

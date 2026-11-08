@@ -1293,15 +1293,6 @@ pub fn qr_matrix(text: &str) -> Result<MatrixData> {
     Ok(MatrixData { size, modules })
 }
 
-/// Draws text as an SVG QR code, for printing.
-///
-/// # Errors
-///
-/// `too_large`.
-pub fn qr_svg(text: &str) -> Result<String> {
-    Ok(pips_qr::matrix::Matrix::encode(text).map_err(|e| err(Code::TooLarge, e))?.to_svg(4))
-}
-
 /// Shows a large message as a loop of codes.
 pub struct Carousel(Encoder);
 

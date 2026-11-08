@@ -254,12 +254,6 @@ export function qrMatrix(text) {
   return { size, modules };
 }
 
-/** @param {string} text */
-export function qrSvg(text) {
-  const m = qrMatrix(text);
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${m.size} ${m.size}"></svg>`;
-}
-
 /** The stub's recovery words: its own, not BIP39. */
 export const recoveryWords = () => ['demo', 'stub', ...Array.from({ length: 256 }, (_, i) => i.toString(16).padStart(2, '0'))];
 
