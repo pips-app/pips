@@ -11,6 +11,7 @@
 
 use serde::Serialize;
 use wasm_bindgen::prelude::*;
+use zeroize::Zeroizing;
 
 use crate::api::{self, ApiError, CardData};
 use crate::codes::Code;
@@ -206,51 +207,73 @@ pub fn sealed_by(payload: &[u8], nick: &str, sender: &[u8], signature: &[u8]) ->
     api::sealed_by(payload, nick, sender, signature).map_err(thrown)
 }
 
+// Secrets cross the boundary so that no copy is left behind in the
+// module's memory. One coming in is taken owned (a borrowed one is freed
+// unwiped by the glue) and wiped when dropped; one going out is copied
+// straight into a JavaScript value and its buffer wiped (a returned
+// `Vec` or `String` would be freed unwiped after JavaScript copied it).
+// What JavaScript then does with its copy is the page's (core/keys.js).
+
+/// A secret's bytes as JavaScript's own, its buffer wiped as it drops.
+fn secret_bytes(bytes: &Zeroizing<Vec<u8>>) -> js_sys::Uint8Array {
+    js_sys::Uint8Array::from(bytes.as_slice())
+}
+
+/// A secret text as JavaScript's own, its buffer wiped as it drops.
+fn secret_text(text: &Zeroizing<String>) -> js_sys::JsString {
+    js_sys::JsString::from(text.as_str())
+}
+
 /// Encrypts `{ created, profile, cards }` with a backup key kept apart.
 #[wasm_bindgen(js_name = sealBackupWith)]
-pub fn seal_backup_with(data: JsValue, owner: &[u8], key: &[u8], nonce: &[u8]) -> Js<Vec<u8>> {
+pub fn seal_backup_with(data: JsValue, owner: &[u8], key: Vec<u8>, nonce: &[u8]) -> Js<Vec<u8>> {
+    let key = Zeroizing::new(key);
     let d = serde_wasm_bindgen::from_value(data).map_err(|e| thrown(ApiError::new(Code::InvalidBackup, e)))?;
-    api::seal_backup_with(&d, owner, key, nonce).map_err(thrown)
+    api::seal_backup_with(&d, owner, &key, nonce).map_err(thrown)
 }
 
 /// Decrypts and checks a backup with a backup key kept apart.
 #[wasm_bindgen(js_name = openBackupWith)]
-pub fn open_backup_with(bytes: &[u8], owner: &[u8], key: &[u8]) -> Js<JsValue> {
-    js(&api::open_backup_with(bytes, owner, key).map_err(thrown)?)
+pub fn open_backup_with(bytes: &[u8], owner: &[u8], key: Vec<u8>) -> Js<JsValue> {
+    let key = Zeroizing::new(key);
+    js(&api::open_backup_with(bytes, owner, &key).map_err(thrown)?)
 }
 
-/// The user's key.
+/// The user's key. Boxed: the glue moves the object it holds out of its
+/// own allocation to drop it, and a move leaves the old bytes behind; so it
+/// holds a box, whose move is only a pointer, and the key is wiped where it
+/// lives when dropped (`SecretKey` wipes itself).
 #[wasm_bindgen]
-pub struct Identity(api::Identity);
+pub struct Identity(Box<api::Identity>);
 
 #[wasm_bindgen]
 impl Identity {
     /// From the stored seed or 32 fresh random bytes.
     #[wasm_bindgen(js_name = fromSeed)]
-    pub fn from_seed(seed: &[u8]) -> Js<Identity> {
-        api::Identity::from_seed(seed).map(Self).map_err(thrown)
+    pub fn from_seed(seed: Vec<u8>) -> Js<Identity> {
+        api::Identity::from_seed(&Zeroizing::new(seed)).map(|id| Self(Box::new(id))).map_err(thrown)
     }
     /// From the 24 recovery words.
     #[wasm_bindgen(js_name = fromWords)]
-    pub fn from_words(words: &str) -> Js<Identity> {
-        api::Identity::from_words(words).map(Self).map_err(thrown)
+    pub fn from_words(words: String) -> Js<Identity> {
+        api::Identity::from_words(&Zeroizing::new(words)).map(|id| Self(Box::new(id))).map_err(thrown)
     }
     /// From a scanned paper key.
     #[wasm_bindgen(js_name = fromPaper)]
-    pub fn from_paper(text: &str) -> Js<Identity> {
-        api::Identity::from_paper(text).map(Self).map_err(thrown)
+    pub fn from_paper(text: String) -> Js<Identity> {
+        api::Identity::from_paper(&Zeroizing::new(text)).map(|id| Self(Box::new(id))).map_err(thrown)
     }
     /// The seed to store.
-    pub fn seed(&self) -> Vec<u8> {
-        self.0.seed()
+    pub fn seed(&self) -> js_sys::Uint8Array {
+        secret_bytes(&self.0.seed())
     }
     /// The 24 recovery words.
-    pub fn words(&self) -> String {
-        self.0.words()
+    pub fn words(&self) -> js_sys::JsString {
+        secret_text(&self.0.words())
     }
     /// The paper-key text.
-    pub fn paper(&self) -> String {
-        self.0.paper()
+    pub fn paper(&self) -> js_sys::JsString {
+        secret_text(&self.0.paper())
     }
     /// `{ hex, short }`.
     #[wasm_bindgen(js_name = publicKey)]
@@ -270,8 +293,8 @@ impl Identity {
     }
     /// The key backups are sealed with, to keep apart (`sealBackupWith`).
     #[wasm_bindgen(js_name = backupKey)]
-    pub fn backup_key(&self) -> Vec<u8> {
-        self.0.backup_key()
+    pub fn backup_key(&self) -> js_sys::Uint8Array {
+        secret_bytes(&self.0.backup_key())
     }
     /// Signs an editor card; returns its payload.
     #[wasm_bindgen(js_name = signCard)]

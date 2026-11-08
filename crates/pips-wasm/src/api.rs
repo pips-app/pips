@@ -15,6 +15,7 @@ use pips_palette::{Palette, Rgb};
 use pips_qr::carousel::{Decoder, Encoder, Progress};
 use pips_sign::{recovery, Certificate, RecipientCode, SecretKey};
 use serde::{Deserialize, Serialize};
+use zeroize::Zeroizing;
 
 use crate::b64;
 use crate::codes::{self, Code};
@@ -738,22 +739,22 @@ impl Identity {
         recovery::from_paper(text).map(Self).map_err(|e| err(Code::BadPaperKey, e))
     }
 
-    /// The seed to store.
+    /// The seed to store; wiped from memory when dropped, as every secret here.
     #[must_use]
-    pub fn seed(&self) -> Vec<u8> {
-        self.0.seed().to_vec()
+    pub fn seed(&self) -> Zeroizing<Vec<u8>> {
+        Zeroizing::new(self.0.seed().to_vec())
     }
 
     /// The 24 recovery words.
     #[must_use]
-    pub fn words(&self) -> String {
-        (*recovery::to_words(&self.0)).clone()
+    pub fn words(&self) -> Zeroizing<String> {
+        recovery::to_words(&self.0)
     }
 
     /// The paper-key text, to draw as a QR code for printing.
     #[must_use]
-    pub fn paper(&self) -> String {
-        (*recovery::to_paper(&self.0)).clone()
+    pub fn paper(&self) -> Zeroizing<String> {
+        recovery::to_paper(&self.0)
     }
 
     /// The public key.
@@ -843,8 +844,8 @@ impl Identity {
     /// The key backups are sealed with, to keep once the seed is out of
     /// reach ([`seal_backup_with`]). It opens backups; it cannot sign.
     #[must_use]
-    pub fn backup_key(&self) -> Vec<u8> {
-        pips_store::BackupKey::of(&self.0).bytes().to_vec()
+    pub fn backup_key(&self) -> Zeroizing<Vec<u8>> {
+        Zeroizing::new(pips_store::BackupKey::of(&self.0).bytes().to_vec())
     }
 }
 
@@ -990,8 +991,8 @@ pub fn sealed_by(payload: &[u8], nick: &str, sender: &[u8], signature_bytes: &[u
 
 /// A backup key kept apart from its identity, with its owner.
 fn backup_key(owner: &[u8], key: &[u8]) -> Result<pips_store::BackupKey> {
-    let k: [u8; 32] = key.try_into().map_err(|_| err(Code::BadSeed, "a backup key is 32 bytes"))?;
-    Ok(pips_store::BackupKey::from_parts(public_key(owner)?, k))
+    let k = Zeroizing::new(<[u8; 32]>::try_from(key).map_err(|_| err(Code::BadSeed, "a backup key is 32 bytes"))?);
+    Ok(pips_store::BackupKey::from_parts(public_key(owner)?, *k))
 }
 
 /// Encrypts a backup with a backup key kept apart from the identity

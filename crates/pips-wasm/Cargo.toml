@@ -22,6 +22,11 @@ serde = { version = "1", features = ["derive"] }
 serde_bytes = "0.11"
 wasm-bindgen = "0.2"
 serde-wasm-bindgen = "0.6"
+# Secrets handed to JavaScript as its own values, copied straight from a
+# buffer that is then wiped (bindings.rs); both already come with the above
+# and with pips-sign.
+js-sys = "0.3"
+zeroize = { version = "1", default-features = false, features = ["alloc"] }
 
 [dev-dependencies]
 sha2 = { version = "0.10", default-features = false }

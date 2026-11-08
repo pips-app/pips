@@ -461,6 +461,7 @@ name = "pips-wasm"
 version = "0.1.0"
 dependencies = [
  "ed25519-dalek",
+ "js-sys",
  "pips-base45",
  "pips-format",
  "pips-palette",
@@ -473,6 +474,7 @@ dependencies = [
  "serde_bytes",
  "sha2",
  "wasm-bindgen",
+ "zeroize",
 ]
 
 [[package]]
