@@ -23,13 +23,18 @@ import { SCAN_WORKER, scriptURL } from './trust.js';
 const VIDEO_SIDE = 960;
 const PICTURE_SIDE = 2048;
 /**
- * A small picture (a card picture a messenger halved, a screenshot of
- * one) can have codes of two pixels a module, which the reader misses;
- * up to twice as large, smoothed, they read — tried when the first look
- * found nothing, and only if it is much larger than that look.
+ * A picture where the first look found nothing is looked at again, larger,
+ * smoothed, one step after another until a code is found: a card picture
+ * a messenger shrank to 3/4 and saved as JPEG has codes of two and a half
+ * pixels a module, which the reader mostly misses as they are. Measured on
+ * 40 such pictures, each with its own code (10.11.2026, Chromium and
+ * WebKit): about a quarter read as they are; at ×1.25, ×1.5 or ×1.9 one
+ * step or another read all 40 — no one step did. (web/ looked once more,
+ * at ×2, and missed some.) Steps past the largest look are not taken, nor
+ * one hardly larger than the look before it.
  */
-const UPSCALE = 2;
-const WORTH_UPSCALING = 1.4;
+const STEPS = [1.25, 1.5, 1.9];
+const WORTH_A_STEP = 1.1;
 
 /**
  * A reader for this browser.
@@ -71,10 +76,17 @@ export async function qrReader({ native = true, client } = {}) {
       const h0 = video ? src.videoHeight : src.height;
       if (!w0 || !h0) return [];
       const k = Math.min(1, (video ? VIDEO_SIDE : PICTURE_SIDE) / Math.max(w0, h0));
-      const found = await at(src, w0, h0, k);
+      let found = await at(src, w0, h0, k);
       if (found.length || video) return found;
-      const k2 = Math.min(UPSCALE, PICTURE_SIDE / Math.max(w0, h0));
-      return k2 > k * WORTH_UPSCALING ? at(src, w0, h0, k2) : found;
+      let last = k;
+      for (const step of STEPS) {
+        const next = Math.min(k * step, PICTURE_SIDE / Math.max(w0, h0));
+        if (next < last * WORTH_A_STEP) continue;
+        found = await at(src, w0, h0, next);
+        if (found.length) return found;
+        last = next;
+      }
+      return found;
     },
   };
 }

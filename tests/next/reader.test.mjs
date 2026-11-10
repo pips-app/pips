@@ -25,26 +25,28 @@ test('a code in a picture reads as its text, through the reader’s own worker',
   assert.deepEqual(await read('PIPS TEST 1', 6, 4), ['PIPS TEST 1']);
 });
 
-test('a picture where nothing is found is looked at again, twice as large; one already large is not', async () => {
+test('a picture where nothing is found is looked at again, larger, step by step until a code is found; one already large is not', async () => {
   // The rule, not one picture: which halved pictures read at all depends on
   // how their pixels fell, and differs between engines.
   const looks = await page.evaluate(async () => {
     const { qrReader } = await import('/src/reader.js');
-    /** @param {number} side */
-    const sizes = async (side) => {
+    /** @param {number} side @param {number} foundAt which look finds a code (0: none) */
+    const sizes = async (side, foundAt) => {
       /** @type {number[]} */
       const seen = [];
-      const client = { call: async (/** @type {string} */ _op, /** @type {Uint8Array} */ _px, /** @type {number} */ w) => { seen.push(w); return seen.length > 1 ? ['found'] : []; } };
+      const client = { call: async (/** @type {string} */ _op, /** @type {Uint8Array} */ _px, /** @type {number} */ w) => { seen.push(w); return seen.length === foundAt ? ['found'] : []; } };
       const r = await qrReader({ native: false, client });
       const cv = new OffscreenCanvas(side, side);
       /** @type {OffscreenCanvasRenderingContext2D} */ (cv.getContext('2d')).fillRect(0, 0, side, side);
       const got = await r.read(await createImageBitmap(cv));
       return { seen, got };
     };
-    return { small: await sizes(300), large: await sizes(1800) };
+    return { second: await sizes(300, 2), none: await sizes(300, 0), large: await sizes(1960, 0), near: await sizes(1200, 0) };
   });
-  assert.deepEqual(looks.small, { seen: [300, 600], got: ['found'] });
-  assert.deepEqual(looks.large, { seen: [1800], got: [] }, 'twice 1800 is past the largest look (2048): not worth it');
+  assert.deepEqual(looks.second, { seen: [300, 375], got: ['found'] }, 'found on the first step: no more looks');
+  assert.deepEqual(looks.none, { seen: [300, 375, 450, 570], got: [] }, 'every step, then nothing');
+  assert.deepEqual(looks.large, { seen: [1960], got: [] }, '1960 has no room worth a step below the largest look (2048)');
+  assert.deepEqual(looks.near, { seen: [1200, 1500, 1800, 2048], got: [] }, 'the last step held to the largest look');
 });
 
 test('a picture with no code reads as nothing', async () => {

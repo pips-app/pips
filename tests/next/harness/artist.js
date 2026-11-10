@@ -12,11 +12,15 @@ const w = /** @type {any} */ (window);
 const core = coreClient({ script: new URL('./core-worker.js', import.meta.url), limits: {}, otherLimit: 20000, bootLimit: 10000 });
 w.core = core;
 
-/** A card as the editor makes one; `pixels` from a seed, so cards differ. @param {string} title @param {number} [side] @param {number} [seed] */
-const card = (title, side = 8, seed = 1) => {
+/**
+ * A card as the editor makes one; `pixels` from a seed, so cards differ;
+ * `frame` the paper it is shown on.
+ * @param {string} title @param {number} [side] @param {number} [seed] @param {number} [frame]
+ */
+const card = (title, side = 8, seed = 1, frame = 0) => {
   let s = seed;
   return {
-    width: side, height: side, opaque: true, frame: 0, frames: 1, delay_ms: 100, palette: { builtin: 0 },
+    width: side, height: side, opaque: true, frame, frames: 1, delay_ms: 100, palette: { builtin: 0 },
     title, author: w.nick, handle: null, link: '',
     pixels: Uint8Array.from({ length: side * side }, () => { s = (Math.imul(s, 1664525) + 1013904223) >>> 0; return (s >>> 16) % 16; }),
   };
@@ -38,8 +42,8 @@ w.asKey = async (words, nick) => {
   await core.call('keyRestore', { words });
   await core.call('keyKeep', { switching: true });
 };
-/** An envelope of a new card, as its author sends it. @param {string} title @param {number} [side] @param {number} [seed] */
-w.envelope = async (title, side, seed) => core.call('sealOwn', await core.call('signCard', card(title, side, seed)), undefined);
+/** An envelope of a new card, as its author sends it. @param {string} title @param {number} [side] @param {number} [seed] @param {number} [frame] */
+w.envelope = async (title, side, seed, frame) => core.call('sealOwn', await core.call('signCard', card(title, side, seed, frame)), undefined);
 /** The same card passed on by someone else (`nick` as its sender). @param {Uint8Array} envelope @param {string} nick */
 w.passOn = async (envelope, nick) => core.call('sealAsSender', (await core.call('openEnvelope', envelope)).payload, nick);
 
@@ -78,5 +82,16 @@ w.paperKey = async () => {
   const made = await core.call('keyNew');
   await core.call('keyDrop');
   return made.paper;
+};
+/**
+ * A picture as a messenger passes it on: decoded, scaled by `scale`, and
+ * encoded again as JPEG — anything inside the PNG is gone.
+ * @param {Uint8Array} png @param {number} scale
+ */
+w.reencoded = async (png, scale) => {
+  const img = await createImageBitmap(new Blob([png], { type: 'image/png' }));
+  const cv = new OffscreenCanvas(Math.round(img.width * scale), Math.round(img.height * scale));
+  /** @type {OffscreenCanvasRenderingContext2D} */ (cv.getContext('2d')).drawImage(img, 0, 0, cv.width, cv.height);
+  return [...new Uint8Array(await (await cv.convertToBlob({ type: 'image/jpeg', quality: 0.8 })).arrayBuffer())];
 };
 w.harness = true;

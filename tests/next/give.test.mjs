@@ -160,3 +160,33 @@ test('a numbered copy for someone who already has the card takes the plain one�
   assert.deepEqual(await cards(b.p), ['Сердце @pixelfox · №1']);
   for (const x of [p, b.p]) await x.context().close();
 });
+
+test('a card as a picture: it opens as the card from the file; after a messenger re-encodes it, by its code, on every paper', async () => {
+  const me = await newKey(env, 'pixelfox');
+  const elsewhere = await artist(env, 'pixelfox', me.words);
+  const papers = Array.from({ length: 8 }, (_, f) => f);
+  const file = asFile('own.pips', await elsewhere.pipsFile(await Promise.all(papers.map((f) => elsewhere.envelope(`Бумага ${f}`, 8, f + 1, f)))));
+  await tab(me.p, 'Сканер');
+  await toldAfter(me.p, () => choose(me.p, 'Файл .pips', [file]));
+  const b = await newKey(env, 'mossfern');
+  for (const f of papers) {
+    await tab(me.p, 'Отдать');
+    await me.p.getByRole('button', { name: `Бумага ${f}`, exact: true }).click();
+    await me.p.getByRole('heading', { name: `Бумага ${f}` }).waitFor();
+    const [download] = await Promise.all([me.p.waitForEvent('download'), me.p.getByRole('button', { name: 'Картинкой' }).click()]);
+    const png = [...await readFile(/** @type {string} */ (await download.path()))];
+    await tab(b.p, 'Сканер');
+    if (f === 0) assert.equal(await toldAfter(b.p, () => choose(b.p, 'Из картинки', [asFile('card.png', png, 'image/png')])), 'Карточка в коллекции', 'the card inside the file');
+    // At 3/4 too, as a messenger shrinks it (src/reader.js, STEPS).
+    for (const scale of [1, 0.75]) {
+      const jpeg = asFile('card.jpg', await elsewhere.reencoded(png, scale), 'image/jpeg');
+      const said = await Promise.race([
+        toldAfter(b.p, () => choose(b.p, 'Из картинки', [jpeg])),
+        b.p.getByText('На картинке не нашлось QR-кода').waitFor().then(() => `not read: paper ${f}, ${scale * 100}%`),
+      ]);
+      assert.equal(said, f > 0 && scale === 1 ? 'Карточка в коллекции' : 'Такая карточка уже есть', `paper ${f}, ${scale * 100}%`);
+    }
+  }
+  assert.equal((await cards(b.p)).length, 8);
+  for (const x of [me.p, b.p, elsewhere.p]) await x.context().close();
+});

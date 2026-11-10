@@ -2,7 +2,8 @@
 // Give: one's own cards, ready to be handed over. The card chosen shows its
 // code, to be scanned from this screen — one code, or a carousel for a large
 // card — and the ways for someone who is not in the room: the same envelope
-// as a link or a .pips file. An own card goes out signed by its author, as
+// as a link, a .pips file, or a picture of the card that carries it
+// (ui/card-picture.js: its code drawn on it, the envelope inside). An own card goes out signed by its author, as
 // a plain copy or as a numbered one (ui/edition.js).
 // From web/src/ui/give.js and web/src/collection/share.js; the paper and
 // the row of small cards come with the collection's art at stage 5.
@@ -15,6 +16,7 @@ import { MAGIC, linkBase } from '../formats/links.js';
 import { codeShow, keepAwake } from './qr.js';
 import { fileName, sendFile, sendLink } from './send.js';
 import { livePanel } from './edition.js';
+import { cardPicture } from './card-picture.js';
 
 /** @typedef {ReturnType<typeof import('../state.js').createState>} State */
 /** @typedef {import('../state.js').Entry} Entry */
@@ -88,11 +90,21 @@ export function give({ root, tell, core, app }) {
           code.el,
           h('p', { class: 'give-note' }, t('give.hint')),
           h('p', { class: 'give-note small' }, code.plan.kind === 'single' ? t('give.single', env.length) : t('give.carousel', code.plan.fragments)),
-          h('div', { class: 'row-btns give-ways', role: 'group', 'aria-label': t('share.ways') },
+          h('div', { class: 'row-btns stack give-ways', role: 'group', 'aria-label': t('share.ways') },
             h('button', { type: 'button', class: 'btn', onclick: async () => sendLink(tell, await core.call('cardLink', linkBase(location), env), name, t('share.link.text', name)) }, icon('link'), t('share.link')),
-            h('button', { type: 'button', class: 'btn', onclick: () => sendFile(tell, new File([new Uint8Array([...MAGIC, ...env])], fileName(name, 'pips'), { type: 'application/octet-stream' }), name) }, icon('file'), t('share.file'))));
+            h('button', { type: 'button', class: 'btn', onclick: () => sendFile(tell, new File([new Uint8Array([...MAGIC, ...env])], fileName(name, 'pips'), { type: 'application/octet-stream' }), name) }, icon('file'), t('share.file')),
+            h('button', { type: 'button', class: 'btn', onclick: () => void picture(env) }, icon('image'), t('share.png'))));
       } catch (err) {
         if (mine === turn) replace(body, h('p', { class: 'wrong', role: 'alert' }, say(err)));
+      }
+    }
+
+    /** The card as one picture to post or send, the envelope inside it. @param {Uint8Array} env */
+    async function picture(env) {
+      try {
+        await sendFile(tell, new File([await cardPicture(core, e.card, env)], fileName(name, 'png'), { type: 'image/png' }), name);
+      } catch (err) {
+        tell(say(err), { wrong: true });
       }
     }
   }

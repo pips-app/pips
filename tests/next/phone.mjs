@@ -53,8 +53,10 @@ export async function artist(env, nick, words = '') {
   const call = (f, ...args) => p.evaluate(([f, args]) => /** @type {any} */ (window)[f](...args.map((a) => (Array.isArray(a) && a.every((x) => typeof x === 'number') ? Uint8Array.from(a) : a))), /** @type {const} */ ([f, args]));
   return {
     p,
-    /** A new card's envelope, as bytes. @param {string} title @param {number} [side] @param {number} [seed] */
-    envelope: async (title, side, seed) => /** @type {number[]} */ ([...Object.values(await call('envelope', title, side, seed))]),
+    /** A new card's envelope, as bytes. @param {string} title @param {number} [side] @param {number} [seed] @param {number} [frame] */
+    envelope: async (title, side, seed, frame) => /** @type {number[]} */ ([...Object.values(await call('envelope', title, side, seed, frame))]),
+    /** @param {number[]} png @param {number} scale */
+    reencoded: (png, scale) => /** @type {Promise<number[]>} */ (call('reencoded', png, scale)),
     /** @param {number[]} env @param {string} nick */
     passOn: async (env, nick) => /** @type {number[]} */ ([...Object.values(await call('passOn', env, nick))]),
     /** @param {string} text @param {number} [module] */
