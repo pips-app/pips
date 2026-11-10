@@ -15,6 +15,7 @@ import { PUBLISHED, linkBase } from '../formats/links.js';
 import { scanner } from './scanner.js';
 import { sheet } from './sheet.js';
 import { qrCanvas } from './qr.js';
+import { copyLabel } from './edition.js';
 
 /** @typedef {ReturnType<typeof import('../state.js').createState>} State */
 /** @typedef {{ call(op: string, ...args: unknown[]): Promise<any> }} Core */
@@ -46,7 +47,7 @@ function refused(e, via) {
 export function arrivedWords(app, r) {
   const e = app.cards.get(r.digest);
   const ed = e?.rec.edition;
-  if (r.status === 'numbered' && ed) return t('receive.numbered', t('edition.copy.of', ed.edition, ed.of));
+  if (r.status === 'numbered' && ed) return t('receive.numbered', copyLabel(ed.edition, ed.of));
   if (r.status !== 'added' || !e) return t(r.status === 'added' ? 'receive.got' : 'receive.dup');
   const note = nameNotes(app, e.card.author, e.author?.hex, e.rec.from)[0];
   return note ? t('receive.got-note', note) : t('receive.got');

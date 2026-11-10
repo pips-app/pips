@@ -84,3 +84,79 @@ test('an own card as a file: saved, and opened on another phone', async () => {
   await p.context().close();
   await b.p.context().close();
 });
+
+/** The recipient code a phone shows, as a picture. @param {Page} p */
+async function recipientCode(p) {
+  await tab(p, 'Сканер');
+  await p.getByRole('button', { name: 'Код получателя' }).click();
+  const dialog = p.getByRole('dialog', { name: 'Код получателя' });
+  const picture = asFile('recipient.png', await codeOnScreen(p, 'Код получателя'), 'image/png');
+  await dialog.getByRole('button', { name: 'Закрыть' }).click();
+  return picture;
+}
+
+/**
+ * The author issues the next numbered copy to the recipient whose code is
+ * `code`, with `run` typed when it is the first; gives the copy's code and
+ * what the question said.
+ * @param {Page} p @param {ReturnType<typeof asFile>} code @param {string} [run]
+ */
+async function issue(p, code, run) {
+  await tab(p, 'Отдать');
+  await p.getByRole('button', { name: 'Экземпляр №' }).click();
+  if (run) await p.getByRole('spinbutton', { name: 'Тираж' }).fill(run);
+  await p.getByRole('button', { name: /^Выдать №\d+$/ }).click();
+  const scan = p.getByRole('dialog', { name: 'Код получателя' });
+  await choose(p, 'Из картинки', [code]);
+  const ask = p.getByRole('dialog', { name: /^Выдать №\d+( из \d+)?\?$/ });
+  const question = (await ask.getByText(/Номер будет занят/).innerText()).trim();
+  await ask.getByRole('button', { name: 'Выдать', exact: true }).click();
+  await scan.waitFor({ state: 'detached' });
+  const label = question.match(/^Выдать (№\d+(?: из \d+)?)/)?.[1] ?? '';
+  const shown = p.getByRole('dialog', { name: label });
+  const copy = asFile('copy.png', await codeOnScreen(p, label), 'image/png');
+  await shown.getByRole('button', { name: 'Готово' }).click();
+  return { copy, question };
+}
+
+test('numbered copies: issued to a scanned recipient code, once each, until the run is complete', async () => {
+  const p = await withOwnCard('pixelfox', 'Тираж');
+  const b = await newKey(env, 'mossfern');
+  const c = await newKey(env, 'lumen');
+  const first = await issue(p, await recipientCode(b.p), '2');
+  assert.match(first.question, /^Выдать №1 из 2 для @mossfern \(ключ [0-9a-f]{2}(·[0-9a-f]{2}){3}\)\? Номер будет занят\.$/);
+  await tab(b.p, 'Сканер');
+  assert.equal(await toldAfter(b.p, () => choose(b.p, 'Из картинки', [first.copy])), 'Карточка в коллекции');
+  assert.deepEqual(await cards(b.p), ['Тираж @pixelfox · №1 из 2']);
+
+  const second = await issue(p, await recipientCode(c.p));
+  assert.match(second.question, /^Выдать №2 из 2 для @lumen/);
+  // The run is complete: said on the button, which no longer issues.
+  await tab(p, 'Отдать');
+  await p.getByRole('button', { name: 'Экземпляр №' }).click();
+  assert.equal(await p.getByRole('button', { name: 'Тираж разошёлся' }).isDisabled(), true);
+  await p.getByText('Выдано 2 из 2').waitFor();
+  assert.deepEqual(await p.getByRole('list', { name: 'Выданные экземпляры' }).getByRole('listitem').allInnerTexts().then((l) => l.map((s) => s.replace(/\s+\S+$/, '').replace(/\s+/g, ' '))), ['№2 @lumen', '№1 @mossfern']);
+  for (const x of [p, b.p, c.p]) await x.context().close();
+});
+
+test('a numbered copy for someone who already has the card takes the plain one’s place, and says so; a code that is not a recipient’s is said in the frame', async () => {
+  const p = await withOwnCard('pixelfox', 'Сердце');
+  const b = await newKey(env, 'mossfern');
+  // The plain card first, from the screen.
+  await tab(p, 'Отдать');
+  const plain = asFile('plain.png', await codeOnScreen(p, 'Сердце'), 'image/png');
+  await tab(b.p, 'Сканер');
+  await toldAfter(b.p, () => choose(b.p, 'Из картинки', [plain]));
+  // A plain card's code where a recipient code should be: said, nothing issued.
+  await p.getByRole('button', { name: 'Экземпляр №' }).click();
+  await p.getByRole('button', { name: 'Выдать №1' }).click();
+  await choose(p, 'Из картинки', [plain]);
+  await p.getByRole('dialog', { name: 'Код получателя' }).getByText('Это не код получателя. Попросите открыть «Сканер» → «Код получателя»').waitFor();
+  await p.getByRole('dialog', { name: 'Код получателя' }).getByRole('button', { name: 'Отмена' }).click();
+  const { copy } = await issue(p, await recipientCode(b.p));
+  await tab(b.p, 'Сканер');
+  assert.equal(await toldAfter(b.p, () => choose(b.p, 'Из картинки', [copy])), 'Теперь у вас №1 — он заменил прежнюю копию');
+  assert.deepEqual(await cards(b.p), ['Сердце @pixelfox · №1']);
+  for (const x of [p, b.p]) await x.context().close();
+});

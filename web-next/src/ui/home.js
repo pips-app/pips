@@ -13,6 +13,7 @@ import { identicon } from './identicon.js';
 import { wordsEntry } from './words-entry.js';
 import { onboarding } from './onboarding.js';
 import { sheet } from './sheet.js';
+import { copyLabel } from './edition.js';
 
 /** The largest backup the core opens (pips-store's MAX_FILE): a larger file is refused before it is read. */
 const BACKUP_MAX = 64 * 1024 * 1024;
@@ -190,7 +191,7 @@ function cardList(app) {
         h('b', {}, e.card.title || t('card.untitled')),
         h('small', {}, [
           e.rec.mine ? t('home.cards.mine') : e.card.author ? `@${e.card.author}` : '',
-          e.rec.edition ? t('edition.copy.of', e.rec.edition.edition, e.rec.edition.of) : '',
+          e.rec.edition ? copyLabel(e.rec.edition.edition, e.rec.edition.of) : '',
           e.rec.from && e.rec.from.key !== e.author?.hex ? t('home.cards.from', e.rec.from.nick) : '',
         ].filter(Boolean).join(' · ')))))
       : h('p', { class: 'hint' }, t('home.cards.none')));

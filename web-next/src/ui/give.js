@@ -2,7 +2,8 @@
 // Give: one's own cards, ready to be handed over. The card chosen shows its
 // code, to be scanned from this screen — one code, or a carousel for a large
 // card — and the ways for someone who is not in the room: the same envelope
-// as a link or a .pips file. An own card goes out signed by its author.
+// as a link or a .pips file. An own card goes out signed by its author, as
+// a plain copy or as a numbered one (ui/edition.js).
 // From web/src/ui/give.js and web/src/collection/share.js; the paper and
 // the row of small cards come with the collection's art at stage 5.
 
@@ -13,6 +14,7 @@ import { say } from '../errors.js';
 import { MAGIC, linkBase } from '../formats/links.js';
 import { codeShow, keepAwake } from './qr.js';
 import { fileName, sendFile, sendLink } from './send.js';
+import { livePanel } from './edition.js';
 
 /** @typedef {ReturnType<typeof import('../state.js').createState>} State */
 /** @typedef {import('../state.js').Entry} Entry */
@@ -60,21 +62,38 @@ export function give({ root, tell, core, app }) {
     chosen = e.rec.digest;
     buttons.forEach((b, i) => b.setAttribute('aria-pressed', String(list[i] === e)));
     const name = e.card.title || t('card.untitled');
-    try {
-      const env = await core.call('sealOwn', e.rec.payload, undefined);
-      const code = await codeShow(core, env, name);
-      if (mine !== turn) return code.stop();
-      stop = code.stop;
-      replace(panel,
-        h('h2', { class: 'give-title' }, name),
-        code.el,
-        h('p', { class: 'give-note' }, t('give.hint')),
-        h('p', { class: 'give-note small' }, code.plan.kind === 'single' ? t('give.single', env.length) : t('give.carousel', code.plan.fragments)),
-        h('div', { class: 'row-btns give-ways', role: 'group', 'aria-label': t('share.ways') },
-          h('button', { type: 'button', class: 'btn', onclick: async () => sendLink(tell, await core.call('cardLink', linkBase(location), env), name, t('share.link.text', name)) }, icon('link'), t('share.link')),
-          h('button', { type: 'button', class: 'btn', onclick: () => sendFile(tell, new File([new Uint8Array([...MAGIC, ...env])], fileName(name, 'pips'), { type: 'application/octet-stream' }), name) }, icon('file'), t('share.file'))));
-    } catch (err) {
-      if (mine === turn) replace(panel, h('p', { class: 'wrong', role: 'alert' }, say(err)));
+    // Copy or numbered: the panel of numbers lies where the code was.
+    const body = h('div', {});
+    const modes = /** @type {HTMLButtonElement[]} */ ([
+      h('button', { type: 'button', 'aria-pressed': 'true', onclick: () => mode(0) }, t('give.mode.copy')),
+      h('button', { type: 'button', 'aria-pressed': 'false', onclick: () => mode(1) }, t('give.mode.edition')),
+    ]);
+    /** @param {number} which */
+    const mode = (which) => {
+      modes.forEach((b, i) => b.setAttribute('aria-pressed', String(i === which)));
+      if (which === 1) { stop(); stop = livePanel(body, { core, app, tell, digest: e.rec.digest }); } else void copy();
+    };
+    replace(panel, h('h2', { class: 'give-title' }, name), h('div', { class: 'give-modes', role: 'group', 'aria-label': t('give.mode') }, modes), body);
+    await copy();
+
+    async function copy() {
+      stop();
+      stop = () => {};
+      try {
+        const env = await core.call('sealOwn', e.rec.payload, undefined);
+        const code = await codeShow(core, env, name);
+        if (mine !== turn || modes[1].getAttribute('aria-pressed') === 'true') return code.stop();
+        stop = code.stop;
+        replace(body,
+          code.el,
+          h('p', { class: 'give-note' }, t('give.hint')),
+          h('p', { class: 'give-note small' }, code.plan.kind === 'single' ? t('give.single', env.length) : t('give.carousel', code.plan.fragments)),
+          h('div', { class: 'row-btns give-ways', role: 'group', 'aria-label': t('share.ways') },
+            h('button', { type: 'button', class: 'btn', onclick: async () => sendLink(tell, await core.call('cardLink', linkBase(location), env), name, t('share.link.text', name)) }, icon('link'), t('share.link')),
+            h('button', { type: 'button', class: 'btn', onclick: () => sendFile(tell, new File([new Uint8Array([...MAGIC, ...env])], fileName(name, 'pips'), { type: 'application/octet-stream' }), name) }, icon('file'), t('share.file'))));
+      } catch (err) {
+        if (mine === turn) replace(body, h('p', { class: 'wrong', role: 'alert' }, say(err)));
+      }
     }
   }
 
