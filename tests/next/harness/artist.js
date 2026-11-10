@@ -44,6 +44,8 @@ w.asKey = async (words, nick) => {
 };
 /** An envelope of a new card, as its author sends it. @param {string} title @param {number} [side] @param {number} [seed] @param {number} [frame] */
 w.envelope = async (title, side, seed, frame) => core.call('sealOwn', await core.call('signCard', card(title, side, seed, frame)), undefined);
+/** A card's bytes alone, signed, as .pips files held them before envelopes. @param {string} title */
+w.bareCard = async (title) => core.call('signCard', card(title));
 /** The same card passed on by someone else (`nick` as its sender). @param {Uint8Array} envelope @param {string} nick */
 w.passOn = async (envelope, nick) => core.call('sealAsSender', (await core.call('openEnvelope', envelope)).payload, nick);
 

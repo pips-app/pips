@@ -188,3 +188,36 @@ test('the recipient code is shown for an artist to scan; a recipient code or a p
   await a.p.context().close();
   await p.context().close();
 });
+
+test('a name already here with another key is said on arrival; so is one’s own name with a key not one’s own', async () => {
+  const real = await artist(env, 'pixelfox');
+  const other = await artist(env, 'pixelfox');
+  const me = await artist(env, 'mossfern');
+  const { p } = await newKey(env, 'mossfern');
+  const files = {
+    real: asFile('real.pips', await real.pipsFile([await real.envelope('Настоящая')])),
+    other: asFile('other.pips', await other.pipsFile([await other.envelope('Другая')])),
+    mine: asFile('mine.pips', await me.pipsFile([await me.envelope('Моё имя')])),
+  };
+  await scanner(p);
+  assert.equal(await toldAfter(p, () => choose(p, 'Файл .pips', [files.real])), 'Карточка в коллекции');
+  assert.match(await toldAfter(p, () => choose(p, 'Файл .pips', [files.other])), /^Карточка в коллекции\. У @pixelfox в вашей коллекции есть и другой ключ: [0-9a-f]{2}(·[0-9a-f]{2}){3}\.$/);
+  assert.equal(await toldAfter(p, () => choose(p, 'Файл .pips', [files.mine])), 'Карточка в коллекции. @mossfern — это ваше имя, но ключ не ваш.');
+  for (const x of [real, other, me]) await x.p.context().close();
+  await p.context().close();
+});
+
+test('a .pips file from before envelopes — a bare signed card — still opens, checked; a forged one does not', async () => {
+  const a = await artist(env, 'pixelfox');
+  const { p } = await newKey(env, 'mossfern');
+  const bare = await a.bareCard('Старая');
+  const forged = [...bare];
+  forged[forged.length - 70] ^= 0x01;
+  const MAGIC = [0x50, 0x50, 0x1a, 0x0a];
+  await scanner(p);
+  assert.equal(await toldAfter(p, () => choose(p, 'Файл .pips', [asFile('old.pips', [...MAGIC, ...bare])])), 'Карточка в коллекции');
+  assert.equal(await toldAfter(p, () => choose(p, 'Файл .pips', [asFile('forged.pips', [...MAGIC, ...forged])])), 'Подпись не сходится: код повреждён или подделан. Карточка не добавлена');
+  assert.deepEqual(await cards(p), ['Старая @pixelfox']);
+  await a.p.context().close();
+  await p.context().close();
+});

@@ -57,6 +57,8 @@ export async function artist(env, nick, words = '') {
     envelope: async (title, side, seed, frame) => /** @type {number[]} */ ([...Object.values(await call('envelope', title, side, seed, frame))]),
     /** @param {number[]} png @param {number} scale */
     reencoded: (png, scale) => /** @type {Promise<number[]>} */ (call('reencoded', png, scale)),
+    /** @param {string} title */
+    bareCard: async (title) => /** @type {number[]} */ ([...Object.values(await call('bareCard', title))]),
     /** @param {number[]} env @param {string} nick */
     passOn: async (env, nick) => /** @type {number[]} */ ([...Object.values(await call('passOn', env, nick))]),
     /** @param {string} text @param {number} [module] */
