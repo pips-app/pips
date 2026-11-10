@@ -1,0 +1,20 @@
+/* The frame around the screens (src/ui/shell.js): the tab bar along the
+   bottom, one line of messages over the top. From web/css/app.css. */
+.shell-view { padding-bottom: calc(76px + var(--safe-b)); } /* the tab bar's height: nothing hides under it */
+.shell-tabs { position: fixed; left: 0; right: 0; bottom: 0; z-index: 100; display: flex; justify-content: space-around;
+  padding: 6px max(8px, calc((100% - 520px) / 2)) calc(6px + var(--safe-b)); background: linear-gradient(#1a1b2100, var(--void) 38%); }
+.shell-tabs button { flex: 1; max-width: 88px; border: 0; background: none; color: #7a7f8e; display: flex; flex-direction: column; align-items: center;
+  gap: 3px; font-size: 10.5px; font-weight: 500; padding: 6px 0 2px; min-height: 48px; }
+.shell-tabs button .i { width: 24px; height: 24px; }
+.shell-tabs button[aria-current="page"] { color: var(--text); }
+/* Narrower than any phone (a phone zoomed in): the names would run into
+   each other; the icons stay, the names are still read out. */
+@media (max-width: 299px) { .shell-tabs button span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; } }
+.shell-tell { position: fixed; left: max(14px, calc((100% - 460px) / 2)); right: max(14px, calc((100% - 460px) / 2)); top: calc(14px + var(--safe-t)); z-index: 1500;
+  display: flex; align-items: center; gap: 10px; background: #2e313b; border-radius: 13px; padding: 6px 6px 6px 16px;
+  min-height: 48px; font-size: 14px; box-shadow: 0 14px 30px -12px #000; transition: opacity .2s, transform .2s; }
+.shell-tell.wrong span { color: var(--warn); }
+/* Gone, it fades out; and once faded it is out of reach — of the Tab key and of screen readers too. */
+.shell-tell[hidden] { display: flex !important; visibility: hidden; opacity: 0; transform: translateY(-12px); pointer-events: none; transition: opacity .2s, transform .2s, visibility 0s .2s; }
+.shell-tell span { flex: 1; }
+@media (prefers-reduced-motion: reduce) { .shell-tell, .shell-tell[hidden] { transition: none; transform: none; } }

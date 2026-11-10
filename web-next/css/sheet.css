@@ -1,0 +1,14 @@
+/* A sheet over the page (src/ui/sheet.js), from the bottom on a phone. */
+.sheet { position: fixed; inset: 0; z-index: 1000; background: rgba(10, 11, 14, .66); display: flex; align-items: flex-end;
+  padding: 14px 14px calc(14px + var(--safe-b)); overflow-y: auto; }
+.sheet > div { width: 100%; max-width: 480px; margin: auto auto 0; background: #24262e; border-radius: 18px; padding: 18px 16px 16px;
+  box-shadow: 0 0 0 1px #30333c; }
+/* On the narrowest phones the sheet gives its margins to what is in it:
+   the longest of the 24 words (eight letters) stays whole in a third of the width. */
+@media (max-width: 359px) {
+  .sheet { padding: 8px 8px calc(8px + var(--safe-b)); }
+  .sheet > div { padding: 16px 10px 12px; }
+}
+.sheet h2 { margin: 0 0 4px; font: 600 19px var(--serif); }
+.sheet p { margin: 0 0 14px; color: var(--text2); font-size: 13.5px; }
+.sheet .word-grid { margin-bottom: 12px; }

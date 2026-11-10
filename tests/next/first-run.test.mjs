@@ -8,6 +8,7 @@ import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { setup } from './helpers.mjs';
+import { asked, newKey as phoneKey, readWords } from './phone.mjs';
 
 /** @type {Awaited<ReturnType<typeof setup>>} */
 let env;
@@ -16,35 +17,8 @@ after(() => env.close());
 
 /** @typedef {import('playwright').Page} Page */
 
-/** The 24 words as the screen shows them, in order. @param {Page} p */
-async function readWords(p) {
-  const cells = await p.getByRole('list', { name: 'Ваши 24 слова' }).getByRole('listitem').allInnerTexts();
-  return cells.map((c) => c.replace(/^\d+\s*/, '').trim());
-}
-
-/** The places of the words asked back, from the fields' names. @param {Page} p */
-async function asked(p) {
-  await p.getByRole('heading', { name: 'Проверим запись' }).waitFor();
-  const names = await p.getByRole('textbox').evaluateAll((els) => els.map((e) => e.getAttribute('aria-label') ?? ''));
-  return names.map((n) => Number(n.replace(/\D+/g, '')));
-}
-
 /** A new phone, through the first run with a new key; its words and the name given. @param {string} nick */
-async function newKey(nick) {
-  const p = await env.page();
-  await p.getByRole('button', { name: 'Создать ключ' }).click();
-  await p.getByRole('heading', { name: 'Ваши 24 слова' }).waitFor();
-  const words = await readWords(p);
-  await p.getByRole('button', { name: 'Я записал(а) — проверить' }).click();
-  for (const n of await asked(p)) await p.getByLabel(`Слово № ${n}`, { exact: true }).fill(words[n - 1].slice(0, 4));
-  await p.getByRole('button', { name: 'Дальше', exact: true }).click();
-  await p.getByRole('heading', { name: 'Ключ на месте' }).waitFor();
-  await p.getByRole('button', { name: 'Дальше: как вас подписывать' }).click();
-  await p.getByLabel('Как вас подписывать?').fill(nick);
-  await p.getByRole('button', { name: 'Готово' }).click();
-  await p.getByRole('heading', { name: 'Профиль' }).waitFor();
-  return { p, words };
-}
+const newKey = (nick) => phoneKey(env, nick);
 
 test('a new key: 24 words shown once, three asked back, kept hidden; the name given, and all there after a reload', async () => {
   const { p, words } = await newKey('kitsu');

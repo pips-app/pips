@@ -12,6 +12,7 @@ import { say } from '../errors.js';
 import { identicon } from './identicon.js';
 import { wordsEntry } from './words-entry.js';
 import { onboarding } from './onboarding.js';
+import { sheet } from './sheet.js';
 
 /** The largest backup the core opens (pips-store's MAX_FILE): a larger file is refused before it is read. */
 const BACKUP_MAX = 64 * 1024 * 1024;
@@ -47,6 +48,7 @@ export function home({ root, core, app, said = '' }) {
       h('div', { class: 'row-btns home-btns' },
         h('button', { type: 'button', class: 'btn', onclick: () => verify() }, t('home.verify')),
         h('button', { type: 'button', class: 'btn', onclick: () => switchKey() }, t('home.switch')))),
+    cardList(app),
     h('section', { class: 'group', 'aria-labelledby': 'home-backup' }, h('h2', { id: 'home-backup' }, t('home.backup')),
       backupLine,
       h('div', { class: 'row-btns home-btns' },
@@ -130,17 +132,19 @@ export function home({ root, core, app, said = '' }) {
   }
 
   /** Checking the written words against the key, in a sheet over the page. */
+  /** Whether the words sheet is opening or open: a second tap opens no second one. */
+  let verifying = false;
+
+  /** Checking the written words against the key, in a sheet over the page. */
   async function verify() {
-    // One sheet: a second tap while the word list comes does not open another.
-    if (page.inert) return;
-    page.inert = true;
-    const opener = /** @type {HTMLElement | null} */ (document.activeElement);
+    if (verifying) return;
+    verifying = true;
     /** @type {string[]} */
     let list;
     try {
       list = await core.call('recoveryWords');
     } catch (e) {
-      page.inert = false;
+      verifying = false;
       tell(say(e), true);
       return;
     }
@@ -165,17 +169,29 @@ export function home({ root, core, app, said = '' }) {
         verdict.textContent = /** @type {any} */ (e)?.code === 'bad_words' ? t('onb.restore.sum') : say(e);
       }
     }
-    // The page under the sheet takes no focus and no taps while it is open.
-    const close = () => { sheet.remove(); page.inert = false; document.removeEventListener('keydown', onKey); opener?.focus(); };
-    /** Escape closes the sheet, as its button does. @param {KeyboardEvent} e */
-    const onKey = (e) => { if (e.key === 'Escape') close(); };
-    const sheet = h('div', { class: 'home-sheet' },
-      h('div', { role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'home-verify' },
-        h('h2', { id: 'home-verify' }, t('home.verify')), h('p', {}, t('home.verify.lead')),
-        entry.el, verdict,
-        h('button', { type: 'button', class: 'btn key wide', onclick: close }, t('home.verify.done'))));
-    document.addEventListener('keydown', onKey);
-    document.body.append(sheet);
+    const s = sheet({ title: t('home.verify'), onClose: () => { verifying = false; } },
+      h('p', {}, t('home.verify.lead')), entry.el, verdict,
+      h('button', { type: 'button', class: 'btn key wide', onclick: () => s.close() }, t('home.verify.done')));
     entry.focus();
   }
+}
+
+/**
+ * The cards on the device, as a plain list: until the collection comes
+ * (stage 5, docs/REWRITE.md), where a card that arrived can be seen. Its
+ * name, its artist, and who passed it on; a numbered copy, its number.
+ * @param {State} app
+ */
+function cardList(app) {
+  const entries = [...app.cards.values()].filter((e) => e.rec.state !== 'trash').sort((a, b) => b.rec.received - a.rec.received);
+  return h('section', { class: 'group', 'aria-labelledby': 'home-cards' }, h('h2', { id: 'home-cards' }, t('home.cards')),
+    entries.length
+      ? h('ul', { class: 'home-cards', 'aria-labelledby': 'home-cards' }, entries.map((e) => h('li', {},
+        h('b', {}, e.card.title || t('card.untitled')),
+        h('small', {}, [
+          e.rec.mine ? t('home.cards.mine') : e.card.author ? `@${e.card.author}` : '',
+          e.rec.edition ? t('edition.copy.of', e.rec.edition.edition, e.rec.edition.of) : '',
+          e.rec.from && e.rec.from.key !== e.author?.hex ? t('home.cards.from', e.rec.from.nick) : '',
+        ].filter(Boolean).join(' · ')))))
+      : h('p', { class: 'hint' }, t('home.cards.none')));
 }

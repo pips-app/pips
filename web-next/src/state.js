@@ -10,6 +10,7 @@ import { arrive, expired, isMine, moved, noted, tagged } from './rules/cards.js'
 import { EMPTY_LOG, issued, nextIssue } from './rules/editions.js';
 import { mergeCards, mergeProfile } from './rules/backup.js';
 import { NOTHING, touched } from './rules/pending.js';
+import { clash, knownNames } from './rules/names.js';
 import { CLIENT_CODES } from './core/client.js';
 
 /** @typedef {import('./rules/cards.js').CardRecord} CardRecord */
@@ -146,6 +147,19 @@ export function createState(core, { now = Date.now } = {}) {
     return run;
   }
 
+  /** A card from an envelope, opened by the core. @param {any} opened */
+  function receive(opened) {
+    const c = opened.certificate;
+    return add({
+      payload: opened.payload,
+      cert: c?.bytes ?? null,
+      edition: c ? { edition: c.edition, of: c.of, holder: c.holder.hex, day: c.issued_day } : null,
+      state: 'collection', received: now(), trashedAt: null,
+      from: opened.sender ? { nick: opened.sender.nick, key: opened.sender.key.hex } : null,
+      note: '', tags: [],
+    });
+  }
+
   /** @param {Profile} p */
   async function setProfile(p) {
     profile = p;
@@ -217,18 +231,60 @@ export function createState(core, { now = Date.now } = {}) {
 
     setProfile,
 
-    /** A card from an envelope, opened by the core. @param {any} opened */
-    receive(opened) {
-      const c = opened.certificate;
-      return add({
-        payload: opened.payload,
-        cert: c?.bytes ?? null,
-        edition: c ? { edition: c.edition, of: c.of, holder: c.holder.hex, day: c.issued_day } : null,
-        state: 'collection', received: now(), trashedAt: null,
-        from: opened.sender ? { nick: opened.sender.nick, key: opened.sender.key.hex } : null,
-        note: '', tags: [],
-      });
+    receive,
+
+    /**
+     * An envelope, opened by the core — which checks every signature in it
+     * and refuses it otherwise — and the card in it kept.
+     * @param {Uint8Array} envelope
+     */
+    takeEnvelope: async (envelope) => receive(await core.call('openEnvelope', envelope)),
+
+    /**
+     * Several envelopes at once (a file of many cards, several files): each
+     * checked and kept as one alone would be, none refused for another's
+     * fault. A full device ends it: going on could only fail the same way.
+     * @param {Uint8Array[]} envelopes
+     * @returns {Promise<('added' | 'numbered' | 'duplicate' | 'refused')[]>}
+     */
+    async takeMany(envelopes) {
+      /** @type {('added' | 'numbered' | 'duplicate' | 'refused')[]} */
+      const out = [];
+      for (const env of envelopes) {
+        try {
+          out.push((await receive(await core.call('openEnvelope', env))).status);
+        } catch (e) {
+          if (/** @type {any} */ (e)?.code === 'storage_full') throw e;
+          out.push('refused');
+        }
+      }
+      return out;
     },
+
+    /**
+     * What an envelope holds, without keeping it: for the question a link
+     * asks before its card is kept. Null if it does not open — then keeping
+     * it would be refused, in its own words.
+     * @param {Uint8Array} envelope
+     * @returns {Promise<{ card: any, author: KeyData | null, from: { nick: string, key: string } | null } | null>}
+     */
+    async peek(envelope) {
+      try {
+        const o = await core.call('openEnvelope', envelope);
+        const i = await core.call('inspectCard', o.payload);
+        return { card: i.card, author: i.author ?? null, from: o.sender ? { nick: o.sender.nick, key: o.sender.key.hex } : null };
+      } catch {
+        return null;
+      }
+    },
+
+    /**
+     * Whether a name signed with a key is known here with another
+     * (rules/names.js): the person's own name with a key not theirs, or a
+     * name in the collection seen with another key too.
+     * @param {string} name @param {string} hex
+     */
+    clashOf: (name, hex) => clash({ name, hex }, knownNames(cards.values()), { name: profile.nick, hex: me() ?? '' }),
 
     /** A card from a file or the editor: no envelope, so no sender or certificate. @param {Uint8Array} payload */
     addPayload(payload) {
