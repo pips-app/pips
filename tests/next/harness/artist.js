@@ -28,6 +28,16 @@ w.artist = async (nick) => {
   await core.call('keyNew');
   await core.call('keyKeep');
 };
+/**
+ * The person's own key on another device, from its words: their cards, as
+ * the editor would sign them (until the editor comes, stage 5).
+ * @param {string} words @param {string} nick
+ */
+w.asKey = async (words, nick) => {
+  w.nick = nick;
+  await core.call('keyRestore', { words });
+  await core.call('keyKeep', { switching: true });
+};
 /** An envelope of a new card, as its author sends it. @param {string} title @param {number} [side] @param {number} [seed] */
 w.envelope = async (title, side, seed) => core.call('sealOwn', await core.call('signCard', card(title, side, seed)), undefined);
 /** The same card passed on by someone else (`nick` as its sender). @param {Uint8Array} envelope @param {string} nick */

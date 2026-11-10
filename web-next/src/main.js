@@ -14,6 +14,7 @@ import { onboarding } from './ui/onboarding.js';
 import { home } from './ui/home.js';
 import { shell } from './ui/shell.js';
 import { linkArrival, receive } from './ui/receive.js';
+import { give } from './ui/give.js';
 import { cardInAddress } from './formats/links.js';
 import { t } from './i18n.js';
 
@@ -59,6 +60,7 @@ try {
     // What there is to say on arriving, said once: not again on every visit to the profile.
     let first = said;
     frame = shell(root, {
+      give: (f) => give({ ...f, core, app }),
       receive: (f) => receive({ ...f, core, app }),
       home: (f) => { home({ root: f.root, core, app, said: first }); first = ''; },
     });

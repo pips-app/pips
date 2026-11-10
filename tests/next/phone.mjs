@@ -40,13 +40,15 @@ export async function newKey(env, nick, path = '') {
 }
 
 /**
- * Another person, with a key of their own, whose cards arrive.
- * @param {Env} env @param {string} nick
+ * Another person, with a key of their own, whose cards arrive — or, with
+ * `words`, the person's own key on another device (their own cards).
+ * @param {Env} env @param {string} nick @param {string[] | string} [words]
  */
-export async function artist(env, nick) {
+export async function artist(env, nick, words = '') {
   const p = await env.page('__test__/artist.html');
   await p.waitForFunction(() => /** @type {any} */ (window).harness);
-  await p.evaluate((n) => /** @type {any} */ (window).artist(n), nick);
+  if (words.length) await p.evaluate(([w, n]) => /** @type {any} */ (window).asKey(w, n), [Array.isArray(words) ? words.join(' ') : words, nick]);
+  else await p.evaluate((n) => /** @type {any} */ (window).artist(n), nick);
   /** @template T @param {string} f @param {...any} args @returns {Promise<T>} */
   const call = (f, ...args) => p.evaluate(([f, args]) => /** @type {any} */ (window)[f](...args.map((a) => (Array.isArray(a) && a.every((x) => typeof x === 'number') ? Uint8Array.from(a) : a))), /** @type {const} */ ([f, args]));
   return {

@@ -1,0 +1,18 @@
+/* Give (src/ui/give.js): the chosen card's code, its ways, the cards to choose from. */
+.give { max-width: 480px; margin: 0 auto; padding: calc(18px + var(--safe-t)) 16px 0; }
+.give h1 { margin: 0; font: 600 23px/1.15 var(--serif); }
+.give-sub { margin: 2px 0 14px; color: var(--text3); font-size: 13px; }
+.give-card { background: var(--raise); border-radius: 18px; padding: 16px; box-shadow: inset 0 0 0 1px var(--line); }
+.give-title { margin: 0 0 12px; font: 600 19px var(--serif); overflow-wrap: anywhere; }
+/* The code's square: as large as a phone's width leaves, never so large that its ways drop out of view. */
+.give .qr-box { width: min(100%, 300px); aspect-ratio: 1; margin: 0 auto; display: grid; place-items: center; background: #fff; border-radius: 14px; }
+.give .qr-box canvas { width: 100%; height: 100%; image-rendering: pixelated; }
+.give-note { margin: 12px 2px 0; color: var(--text2); font-size: 13.5px; }
+.give-note.small { margin-top: 4px; color: var(--text3); font-size: 12.5px; }
+.give-ways { margin-top: 14px; }
+.give-yours { margin: 22px 2px 8px; font-size: 12px; font-weight: 500; color: var(--text3); letter-spacing: .02em; }
+.give-choice { display: flex; flex-wrap: wrap; gap: 6px; }
+.give-pick { border: 0; border-radius: 12px; min-height: 44px; padding: 8px 14px; background: var(--raise2); color: var(--text2); max-width: 100%; overflow-wrap: anywhere; }
+.give-pick[aria-pressed="true"] { background: var(--cobalt); color: #f2efe7; }
+.give-empty { padding: 28px 4px; color: var(--text2); }
+.give-empty b { display: block; color: var(--text); font: 600 18px var(--serif); margin-bottom: 6px; }

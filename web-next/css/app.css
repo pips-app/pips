@@ -7,6 +7,7 @@
 @import url(shell.css);
 @import url(sheet.css);
 @import url(receive.css);
+@import url(give.css);
 
 @font-face { font-family: "Literata"; font-style: normal; font-weight: 200 900; font-display: swap;
   src: url(../fonts/literata-cyrillic-opsz-normal.woff2) format("woff2");

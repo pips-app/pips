@@ -17,6 +17,8 @@ tried on a phone; it takes `web/`'s place at stage 6. The rules of `web/README.m
 | `src/ui/shell.js` | The frame once there is a key: the tab bar, one line of messages over it. |
 | `src/ui/sheet.js` | A sheet over the page: the page under it inert, Escape closes the top one. |
 | `src/ui/receive.js` | Receive: camera, picture, `.pips` file, pasted link, carousel, a link's question, the recipient code. |
+| `src/ui/give.js` | Give: own cards, the chosen one's code (or carousel), as a link or a file. |
+| `src/ui/send.js` | Out of the app the device's way: its share sheet, else the clipboard or a download (from `web/`). |
 | `src/ui/scanner.js` | The camera and "from a picture" (from `web/`). |
 | `src/ui/words-entry.js` | Typing the 24 words (from `web/`). |
 | `src/ui/identicon.js`, `src/ui/qr.js` | A key's mark; a QR code from the core's matrix. |

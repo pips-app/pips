@@ -24,3 +24,70 @@ export function qrCanvas(m, label) {
   g.putImageData(img, 0, 0);
   return cv;
 }
+
+/** How long each code of a carousel stays: a camera reads several in that time. From web/src/ui/qr.js. */
+const FRAME_MS = 220;
+
+/**
+ * Bytes shown as codes: one, or a carousel that cycles until stopped.
+ * The white square keeps its size whatever the code, so nothing around it
+ * moves when one code gives way to another.
+ * @param {{ call(op: string, ...args: unknown[]): Promise<any> }} core
+ * @param {Uint8Array} bytes @param {string} label
+ * @returns {Promise<{ el: HTMLElement, plan: { kind: 'single', text: string } | { kind: 'carousel', fragments: number }, stop: () => void }>}
+ */
+export async function codeShow(core, bytes, label) {
+  const plan = await core.call('qrPlan', bytes);
+  const box = h('div', { class: 'qr-box' });
+  /** @param {string} text */
+  const draw = async (text) => { box.replaceChildren(qrCanvas(await core.call('qrMatrix', text), label)); };
+  if (plan.kind === 'single') {
+    await draw(plan.text);
+    return { el: box, plan, stop: () => {} };
+  }
+  let seq = 0;
+  let stopped = false;
+  // A frame still being drawn when the next is due: that one is skipped, not queued behind it.
+  let busy = false;
+  await draw(await core.call('carouselFrame', bytes, seq++));
+  const timer = window.setInterval(async () => {
+    if (busy) return;
+    busy = true;
+    try {
+      const text = await core.call('carouselFrame', bytes, seq++);
+      if (!stopped) await draw(text);
+    } catch { /* the core restarting: the next frame is drawn by the next tick */ }
+    busy = false;
+  }, FRAME_MS);
+  return { el: box, plan, stop: () => { stopped = true; clearInterval(timer); } };
+}
+
+/**
+ * Keeps the screen on while a code is shown, where the browser allows it.
+ * The browser lets go of the lock whenever the page is hidden; coming back
+ * to the code takes it again. Returns the function that lets go for good —
+ * callable at once, even before the lock was granted. From web/src/ui/qr.js.
+ * @returns {() => void}
+ */
+export function keepAwake() {
+  const wl = /** @type {any} */ (navigator).wakeLock;
+  if (!wl) return () => {};
+  /** @type {any} */
+  let lock = null;
+  let done = false;
+  const take = async () => {
+    try {
+      const l = await wl.request('screen');
+      if (done) l.release(); else lock = l;
+    } catch { /* refused (battery saver, hidden page): the screen may dim */ }
+  };
+  const again = () => { if (document.visibilityState === 'visible' && !done && (!lock || lock.released)) void take(); };
+  document.addEventListener('visibilitychange', again);
+  void take();
+  return () => {
+    done = true;
+    document.removeEventListener('visibilitychange', again);
+    lock?.release();
+    lock = null;
+  };
+}
