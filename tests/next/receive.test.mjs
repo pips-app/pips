@@ -116,7 +116,7 @@ test('a card from a link opened before the first run is asked about once the app
   const a = await artist(env, 'pixelfox');
   const link = await a.link(await a.envelope('По ссылке'));
   const { p } = await newKey(env, 'mossfern', `/${link.slice(link.indexOf('#'))}`);
-  const dialog = p.getByRole('dialog', { name: 'Взять' });
+  const dialog = p.getByRole('dialog', { name: 'Карточка по ссылке' });
   await dialog.getByText('По ссылке пришла карточка «По ссылке» от @pixelfox. Взять её в коллекцию?').waitFor();
   assert.doesNotMatch(p.url(), /#/, 'out of the address at once: a reload does not bring it in again');
   assert.equal(await toldAfter(p, () => dialog.getByRole('button', { name: 'Взять' }).click()), 'Карточка в коллекции');
@@ -132,7 +132,7 @@ test('a page that opened Pips cannot fill the collection: each link is a questio
   const second = await a.link(await a.envelope('Вторая', 8, 2));
   // The address changed from outside, twice, while the first question is open.
   await p.evaluate((h) => { location.hash = h; }, first.slice(first.indexOf('#') + 1));
-  const dialog = p.getByRole('dialog', { name: 'Взять' });
+  const dialog = p.getByRole('dialog', { name: 'Карточка по ссылке' });
   await dialog.getByText(/«Первая»/).waitFor();
   assert.equal(await toldAfter(p, () => p.evaluate((h) => { location.hash = h; }, second.slice(second.indexOf('#') + 1))), 'Пока вы решали, пришла ещё одна ссылка на карточку. Если она нужна, откройте её снова');
   await dialog.getByRole('button', { name: 'Не брать' }).click();
@@ -181,7 +181,7 @@ test('the recipient code is shown for an artist to scan; a recipient code or a p
     g.drawImage(/** @type {HTMLCanvasElement} */ (cv), 0, 0, big.width, big.height);
     return [...new Uint8Array(await (await big.convertToBlob({ type: 'image/png' })).arrayBuffer())];
   });
-  await p.keyboard.press('Escape');
+  await dialog.getByRole('button', { name: 'Закрыть' }).click();
   await dialog.waitFor({ state: 'detached' });
   assert.equal(await toldAfter(p, () => choose(p, 'Из картинки', [asFile('recipient.png', [...shot], 'image/png')])), 'Это код получателя — его сканирует автор при выдаче экземпляра');
   assert.match(await toldAfter(p, () => choose(p, 'Из картинки', [paper])), /^Это чей-то секретный ключ/);

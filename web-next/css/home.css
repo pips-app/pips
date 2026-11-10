@@ -5,9 +5,6 @@
 /* What came of the last action, under the card: room kept so nothing below jumps. */
 .home-status { min-height: 1.5em; margin: 10px 2px 0; font-size: 13.5px; color: var(--text2); }
 .home-status .text-btn { padding: 6px 4px; min-height: 0; }
-/* Two buttons side by side fit their words from 360 px; narrower, they
-   go one under the other rather than break a word onto a second line. */
-@media (max-width: 359px) { .home-btns { flex-direction: column; } }
 /* When the last backup was made: over its buttons, spaced as the key's note is over its own. */
 .home-backup-line { margin: 0 2px 12px; font-size: 13.5px; color: var(--text2); }
 .home-verdict { min-height: 1.5em; margin: 0 2px 14px; font-size: 14px; }

@@ -93,7 +93,7 @@ export async function linkArrival({ app, tell }, envelope) {
     let said = false;
     /** @param {boolean} v */
     const pick = (v) => { said = true; answer(v); s.close(); };
-    const s = sheet({ title: t('link.keep'), onClose: () => { if (!said) answer(false); } },
+    const s = sheet({ title: t('link.title'), onClose: () => { if (!said) answer(false); } },
       h('p', {}, question),
       h('div', { class: 'row-btns' },
         h('button', { type: 'button', class: 'btn', onclick: () => pick(false) }, t('link.skip')),
@@ -129,7 +129,7 @@ export function receive({ root, tell, core, app }) {
     h('h1', {}, t('receive.title')),
     scan.frame,
     h('div', { class: 'recv-progress-wrap' }, progress, progressText),
-    h('div', { class: 'row-btns recv-btns' }, scan.imageButton, h('button', { type: 'button', class: 'btn', onclick: () => fileInput.click() }, icon('file'), t('receive.file'))),
+    h('div', { class: 'row-btns stack recv-btns' }, scan.imageButton, h('button', { type: 'button', class: 'btn', onclick: () => fileInput.click() }, icon('file'), t('receive.file'))),
     h('div', { class: 'row-btns recv-btns' }, h('button', { type: 'button', class: 'btn', onclick: () => void showRecipientCode() }, icon('key'), t('edition.my-code'))),
     h('div', { class: 'field recv-paste' }, linkInput,
       h('button', { type: 'button', class: 'recv-paste-btn', 'aria-label': t('receive.paste'), title: t('receive.paste'), onclick: () => void pasteLink() }, icon('link'))),
@@ -165,7 +165,8 @@ export function receive({ root, tell, core, app }) {
     try {
       const code = await core.call('recipientCode', app.profile.nick);
       const matrix = await core.call('qrMatrix', code);
-      sheet({ title: t('edition.my-code') }, h('p', {}, t('edition.my-code.hint', app.profile.nick)), h('div', { class: 'recv-code' }, qrCanvas(matrix, t('edition.my-code'))));
+      const s = sheet({ title: t('edition.my-code') }, h('p', {}, t('edition.my-code.hint', app.profile.nick)), h('div', { class: 'recv-code' }, qrCanvas(matrix, t('edition.my-code'))),
+        h('button', { type: 'button', class: 'btn wide', onclick: () => s.close() }, t('sheet.close')));
     } catch (e) {
       tell(sayError(e), { wrong: true });
     }

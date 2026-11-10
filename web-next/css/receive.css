@@ -29,4 +29,5 @@
 .recv-paste-btn { border: 0; background: none; color: var(--cobalt-hi); width: 40px; height: 40px; margin-right: -8px; border-radius: 12px;
   display: grid; place-items: center; }
 .recv-code { display: grid; place-items: center; padding: 8px 0 4px; }
-.recv-code canvas { width: min(100%, 280px); height: auto; border-radius: 12px; image-rendering: pixelated; }
+/* As large as still leaves the sheet whole on a 568 px high screen, with its words and its button. */
+.recv-code canvas { width: min(100%, 240px); height: auto; border-radius: 12px; image-rendering: pixelated; }
