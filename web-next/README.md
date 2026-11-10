@@ -34,6 +34,8 @@ tried on a phone; it takes `web/`'s place at stage 6. The rules of `web/README.m
 | `src/rules/cards.js` | What happens to a card — arriving, moved, binned, noted, tagged — as plain functions over records. |
 | `src/rules/editions.js` | Numbered copies: the log joined, the next number, the run. |
 | `src/rules/names.js` | A name seen with another key, said (from `web/`). |
+| `src/rules/incoming.js` | What came in: what a file holds, why a card was not taken, the camera's same look, several counted. |
+| `src/formats/links.js`, `src/formats/bundle.js`, `src/formats/png-card.js` | Card links, files of several cards, a card inside its picture (from `web/`, unchanged: their bytes are pinned). |
 | `src/rules/pending.js` | What changed since the last backup. |
 | `src/rules/backup.js` | A backup restored onto the device: nothing kept is lost or overwritten. |
 | `src/errors.js` | One model of errors: every code has words; a mistake of the app is said as one. |
